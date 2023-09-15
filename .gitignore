@@ -76,7 +76,6 @@ tags
 *.pdb
 *.res
 *.dep
-*.zip
 *.lnk
 *.chm
 *~
