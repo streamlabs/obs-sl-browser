@@ -215,7 +215,7 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 				int height = dock->height();
 
 				bool floating = dock->isFloating();
-				bool visible = dock->isFloating();
+				bool visible = dock->isVisible();
 
 				std::string dockName = dock->objectName().toStdString();
 
