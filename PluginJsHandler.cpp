@@ -181,6 +181,14 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		JS_TOGGLE_DOCK_VISIBILITY(jsonParams, jsonReturnStr);
 		break;
 	}
+	case JavascriptApi::JS_DOCK_SETTITLE: {
+		JS_DOCK_SETTITLE(jsonParams, jsonReturnStr);
+		break;
+	}
+	case JavascriptApi::JS_DOCK_RENAME: {
+		JS_DOCK_RENAME(jsonParams, jsonReturnStr);
+		break;
+	}
 	}
 
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
@@ -213,11 +221,10 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 				int y = globalGeometry.y() - mainWindowGeometry.y();
 				int width = dock->width();
 				int height = dock->height();
-
 				bool floating = dock->isFloating();
 				bool visible = dock->isVisible();
-
 				std::string dockName = dock->objectName().toStdString();
+				std::wstring dockTitle = dock->windowTitle().toStdWString();
 
 				if (dock->property("isSlabs").isValid())
 				{
@@ -229,7 +236,8 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 				}
 
 				// Create a Json object for this dock widget and add it to the panelInfo vector
-				dockInfo.push_back(Json::object{{"name", name}, {"x", x}, {"y", y}, {"width", width}, {"height", height}, {"floating", floating}, {"isSlabs", isSlabs}, {"url", url}, {"visible", visible}});
+				dockInfo.push_back(Json::object{{"name", name}, {"x", x}, {"y", y}, {"width", width}, {"height", height}, {"floating", floating},
+					{"isSlabs", isSlabs}, {"url", url}, {"visible", visible}, {"visible", visible}});
 			}
 
 			// Convert the panelInfo vector to a Json object and dump string
@@ -496,6 +504,79 @@ void PluginJsHandler::JS_TOGGLE_DOCK_VISIBILITY(const Json &params, std::string 
 					dock->setVisible(visible);
 					out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 					break;
+				}
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_DOCK_SETTITLE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string objectName = param2Value.string_value();
+	std::string newTitle = param3Value.string_value();
+
+	// An error for now, if we succeed this is overwritten
+	out_jsonReturn = Json(Json::object({{"error", "Did not find dock with objectName: " + objectName}})).dump();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, newTitle, objectName, &out_jsonReturn]() {
+			QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
+			foreach(QDockWidget * dock, docks)
+			{
+				if (dock->objectName().toStdString() == objectName)
+				{
+					dock->setWindowTitle(newTitle.c_str());
+					out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+					break;
+				}
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_DOCK_RENAME(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string objectName = param2Value.string_value();
+	std::string newName = param3Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// An error for now, if we succeed this is overwritten
+	out_jsonReturn = Json(Json::object({{"error", "Did not find dock with objectName: " + objectName}})).dump();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, newName, objectName, &out_jsonReturn]() {
+			QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
+
+			// Check for match against the new name
+			foreach(QDockWidget * dock, docks)
+			{
+				if (dock->objectName().toStdString() == newName)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Dock with that already exists: " + objectName}})).dump();
+					return;
+				}
+			}
+
+			foreach(QDockWidget * dock, docks)
+			{
+				if (dock->objectName().toStdString() == objectName)
+				{
+					dock->setObjectName(newName);
+					out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+					return;
 				}
 			}
 		},

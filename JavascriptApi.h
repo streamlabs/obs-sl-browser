@@ -27,6 +27,8 @@ public:
 		JS_TOGGLE_USER_INPUT,
 		JS_TOGGLE_DOCK_VISIBILITY,
 		JS_DESTROY_DOCK,
+		JS_DOCK_RENAME,
+		JS_DOCK_SETTITLE
 	};
 
 public:
@@ -39,7 +41,7 @@ public:
 			*/
 
 			// .(@function(arg1))
-			//	Example arg1 = [{ "objectName": ".", "x": 0, "y": 0, "width": 0, "height": 0, "isSlabs": bool, "floating": bool, "url": ".", "visible": "." }]
+			//	Example arg1 = [{ "objectName": ".", "x": 0, "y": 0, "width": 0, "height": 0, "isSlabs": bool, "floating": bool, "url": ".", "visible": ".", "title": "." }]
 			{"dock_queryAll", JS_QUERY_DOCKS},
 
 			// .(@objectName, @url)
@@ -80,6 +82,14 @@ public:
 			// .(@objectName1, @objectName2)
 			//	Swaps the the positions of dock1 with dock2
 			{"dock_swap", JS_DOCK_SWAP},
+
+			// .(@objectName, @newName)
+			//	Renames a dock's objectName, which must be unique and not match any other existing
+			{"dock_rename", JS_DOCK_RENAME},
+
+			// .(@objectName, @newTitle)
+			//	Renames a dock's objectName, which must be unique and not match any other existing
+			{"dock_setTitle", JS_DOCK_SETTITLE},
 
 			/***
 			* Qt Information

@@ -47,6 +47,8 @@ private:
 	void JS_TOGGLE_USER_INPUT(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_TOGGLE_DOCK_VISIBILITY(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DESTROY_DOCK(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DOCK_RENAME(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DOCK_SETTITLE(const json11::Json &params, std::string &out_jsonReturn);
 
 	std::wstring getDownloadsDir() const;
 
