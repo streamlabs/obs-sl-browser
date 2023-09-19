@@ -48,7 +48,7 @@ private:
 	void JS_TOGGLE_DOCK_VISIBILITY(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DESTROY_DOCK(const json11::Json &params, std::string &out_jsonReturn);
 
-	std::string getDownloadsDir() const;
+	std::wstring getDownloadsDir() const;
 
 	std::mutex m_queueMtx;
 	std::atomic<bool> m_running = false;

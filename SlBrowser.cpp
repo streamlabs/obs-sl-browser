@@ -46,7 +46,7 @@ void SlBrowser::run(int argc, char *argv[])
 	freopen("conout$", "w", stdout);
 	freopen("conout$", "w", stderr);
 
-	if (argc < 3)
+	if (argc < 4)
 	{
 		// todo: logging
 		printf("Not enough args.\n");
@@ -54,8 +54,9 @@ void SlBrowser::run(int argc, char *argv[])
 		return;
 	}
 
-	int32_t parentListenPort = atoi(argv[1]);
-	int32_t myListenPort = atoi(argv[2]);
+	m_obs64_PIDt = atoi(argv[1]);
+	int32_t parentListenPort = atoi(argv[2]);
+	int32_t myListenPort = atoi(argv[3]);
 
 	if (!GrpcBrowser::instance().startServer(myListenPort))
 	{
@@ -76,10 +77,14 @@ void SlBrowser::run(int argc, char *argv[])
 
 	// Create Qt Widget
 	m_widget = new SlBrowserWidget{};
-	m_widget->setFixedSize(1600, 900);
+	m_widget->setWindowTitle("Streamlabs OBS");
+	m_widget->setMinimumSize(320, 240);
+	m_widget->resize(1280, 720);
 	m_widget->show();
 
 	CefPostTask(TID_UI, base::BindOnce(&CreateCefBrowser, 5));
+
+	std::thread(CheckForObsThread).detach();
 
 	// todo: remove this
 	std::thread(DebugInputThread).detach();
@@ -97,18 +102,22 @@ void SlBrowser::CreateCefBrowser(int arg)
 	app.browserClient = new BrowserClient(false);
 
 	// TODO
-	CefString url = "google.com";
+	CefString url = "streamlabs.com";
 
 	// Now set the parent of the CEF browser to the QWidget
 	window_info.SetAsChild((HWND)app.m_widget->winId(), CefRect(0, 0, app.m_widget->width(), app.m_widget->height()));
 	app.m_browser = CefBrowserHost::CreateBrowserSync(window_info, app.browserClient.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), nullptr);
 
-	// For the next 3 seconds keep the window on top
-	for (int i = 0; i < 30; ++i)
-	{
-		SetForegroundWindow((HWND)app.m_widget->winId());
-		::Sleep(1);
-	}
+	auto bringToTop = [] {
+		// For the next 10 seconds keep the window on top
+		for (int i = 0; i < 100; ++i)
+		{
+			::SetForegroundWindow((HWND)SlBrowser::instance().m_widget->winId());
+			::Sleep(10);
+		}
+	};
+
+	std::thread(bringToTop).detach();
 }
 
 void SlBrowser::browserInit()
@@ -174,6 +183,41 @@ void SlBrowser::browserManagerThread()
 	browserInit();
 	CefRunMessageLoop();
 	browserShutdown();
+}
+
+/*static*/
+void SlBrowser::CheckForObsThread()
+{
+	while (true)
+	{
+		HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, SlBrowser::instance().m_obs64_PIDt);
+		if (hProcess == NULL)
+		{
+			// If OpenProcess fails, it might mean the process does not exist
+			DWORD error = GetLastError();
+			if (error == ERROR_INVALID_PARAMETER)
+			{
+				abort();
+			}
+		}
+		else
+		{
+			DWORD exitCode;
+			if (GetExitCodeProcess(hProcess, &exitCode))
+			{
+				if (exitCode != STILL_ACTIVE)
+				{
+					// The process exists but is no longer active
+					CloseHandle(hProcess);
+					abort();
+				}
+			}
+			CloseHandle(hProcess);
+		}
+
+		// Sleep for 10ms before checking again
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
 }
 
 // todo: remove this

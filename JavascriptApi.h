@@ -77,7 +77,6 @@ public:
 			//	Calls Qt 'resize' on the dock in question with w/h
 			{"dock_resize", JS_DOCK_RESIZE},
 
-			
 			// .(@objectName1, @objectName2)
 			//	Swaps the the positions of dock1 with dock2
 			{"dock_swap", JS_DOCK_SWAP},

@@ -13,6 +13,7 @@
 #include <chrono>
 #include <fstream>
 #include <functional>
+#include <codecvt>
 
 // Obs
 #include <obs.hpp>
@@ -37,14 +38,14 @@ PluginJsHandler::~PluginJsHandler()
 	stop();
 }
 
-std::string PluginJsHandler::getDownloadsDir() const
+std::wstring PluginJsHandler::getDownloadsDir() const
 {
-	char path[MAX_PATH];
+	wchar_t path[MAX_PATH];
 
-	if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, path)))
-		return std::string(path) + "\\StreamlabsOBS";
+	if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, path)))
+		return std::wstring(path) + L"\\StreamlabsOBS";
 
-	return "";
+	return L"";
 }
 
 void PluginJsHandler::start()
@@ -171,7 +172,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	case JavascriptApi::JS_DOCK_RESIZE: {
 		JS_DOCK_RESIZE(jsonParams, jsonReturnStr);
 		break;
-	}		
+	}
 	case JavascriptApi::JS_TOGGLE_USER_INPUT: {
 		JS_TOGGLE_USER_INPUT(jsonParams, jsonReturnStr);
 		break;
@@ -192,19 +193,19 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonReturn)
 {
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-	
+
 	QMetaObject::invokeMethod(
 		mainWindow,
 		[mainWindow, &out_jsonReturn]() {
 			std::vector<Json> dockInfo;
-	
+
 			QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
 			foreach(QDockWidget * dock, docks)
 			{
 				bool isSlabs = false;
 				std::string name = dock->objectName().toStdString();
 				std::string url;
-	
+
 				// Translate the global coordinates to coordinates relative to the main window
 				QRect globalGeometry = dock->geometry();
 				QRect mainWindowGeometry = mainWindow->geometry();
@@ -215,22 +216,22 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 
 				bool floating = dock->isFloating();
 				bool visible = dock->isFloating();
-	
+
 				std::string dockName = dock->objectName().toStdString();
-	
+
 				if (dock->property("isSlabs").isValid())
 				{
 					isSlabs = true;
 					QCefWidgetInternal *widget = (QCefWidgetInternal *)dock->widget();
-	
+
 					if (widget->cefBrowser != nullptr)
 						url = widget->cefBrowser->GetMainFrame()->GetURL();
 				}
-	
+
 				// Create a Json object for this dock widget and add it to the panelInfo vector
 				dockInfo.push_back(Json::object{{"name", name}, {"x", x}, {"y", y}, {"width", width}, {"height", height}, {"floating", floating}, {"isSlabs", isSlabs}, {"url", url}, {"visible", visible}});
 			}
-	
+
 			// Convert the panelInfo vector to a Json object and dump string
 			Json ret = dockInfo;
 			out_jsonReturn = ret.dump();
@@ -380,7 +381,6 @@ void PluginJsHandler::JS_DOCK_NEW_BROWSER_DOCK(const json11::Json &params, std::
 	QMetaObject::invokeMethod(
 		mainWindow,
 		[mainWindow, objectName, title, url, &out_jsonReturn]() {
-
 			// Check duplication
 			QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
 			foreach(QDockWidget * dock, docks)
@@ -400,15 +400,15 @@ void PluginJsHandler::JS_DOCK_NEW_BROWSER_DOCK(const json11::Json &params, std::
 			dock->setWindowTitle(title.c_str());
 			dock->setObjectName(objectName.c_str());
 			dock->setProperty("isSlabs", true);
-			
+
 			obs_frontend_add_dock(dock);
-			
+
 			dock->resize(460, 600);
 			dock->setMinimumSize(80, 80);
 			dock->setWindowTitle(title.c_str());
 			dock->setAllowedAreas(Qt::AllDockWidgetAreas);
 			dock->setWidget(browser);
-			
+
 			mainWindow->addDockWidget(Qt::LeftDockWidgetArea, dock);
 
 			// Can't use yet
@@ -510,9 +510,11 @@ void PluginJsHandler::JS_DESTROY_DOCK(const Json &params, std::string &out_jsonR
 
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
-		mainWindow, [mainWindow, objectName, &out_jsonReturn]() {
+		mainWindow,
+		[mainWindow, objectName, &out_jsonReturn]() {
 			//obs_frontend_remove_dock(objectName.c_str());
-		}, Qt::BlockingQueuedConnection);
+		},
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonReturn)
@@ -677,7 +679,7 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 
 	const auto &param2Value = params["param2"];
 	std::string url = param2Value.string_value();
-	std::string folderPath = getDownloadsDir();
+	std::wstring folderPath = getDownloadsDir();
 
 	if (!folderPath.empty())
 	{
@@ -687,19 +689,24 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 		system_clock::time_point now = system_clock::now();
 		auto duration = now.time_since_epoch();
 		auto millis = duration_cast<milliseconds>(duration).count();
-		std::string millis_str = std::to_string(millis);
+		std::wstring millis_str = std::to_wstring(millis);
 
 		// ThreadID + MsTime should be unique, same threaID within 1ms window is a statistical improbability
-		std::string subFolderPath = folderPath + "\\" + std::to_string(GetCurrentThreadId()) + millis_str;
-		std::string zipFilepath = subFolderPath + "\\download.zip";
+		std::wstring subFolderPath = folderPath + L"\\" + std::to_wstring(GetCurrentThreadId()) + millis_str;
+		std::wstring zipFilepath = subFolderPath + L"\\download.zip";
 
-		CreateDirectoryA(folderPath.c_str(), NULL);
-		CreateDirectoryA(subFolderPath.c_str(), NULL);
+		CreateDirectoryW(folderPath.c_str(), NULL);
+		CreateDirectoryW(subFolderPath.c_str(), NULL);
 
-		if (downloadFile(url, zipFilepath))
+		auto wstring_to_utf8 = [](const std::wstring &str) {
+			std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
+			return myconv.to_bytes(str);
+		};
+
+		if (downloadFile(url, wstring_to_utf8(zipFilepath)))
 		{
 			std::vector<std::string> filepaths;
-			unzip(zipFilepath, filepaths);
+			unzip(wstring_to_utf8(zipFilepath), filepaths);
 
 			// Build json string now
 			Json::array json_array;
@@ -719,7 +726,7 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 		}
 
 		// zip file itself not needed
-		std::remove(zipFilepath.c_str());
+		::_wremove(zipFilepath.c_str());
 	}
 	else
 	{
@@ -742,7 +749,6 @@ void PluginJsHandler::JS_READ_FILE(const Json &params, std::string &out_jsonRetu
 	{
 		try
 		{
-
 			// Get the file size
 			std::streamsize fileSize = file.tellg();
 			file.seekg(0, std::ios::beg);
@@ -860,7 +866,7 @@ void PluginJsHandler::JS_DROP_FOLDER(const Json &params, std::string &out_jsonRe
 
 void PluginJsHandler::JS_QUERY_DOWNLOADS_FOLDER(const Json &params, std::string &out_jsonReturn)
 {
-	std::string downloadsFolderFullPath = getDownloadsDir();
+	std::wstring downloadsFolderFullPath = getDownloadsDir();
 	std::vector<Json> pathsList;
 
 	try
@@ -1058,7 +1064,7 @@ void PluginJsHandler::loadSlabsBrowserDocks()
 		std::string objectName = item["objectName"].string_value();
 
 		static QCef *qcef = obs_browser_init_panel();
-		
+
 		QDockWidget *dock = new QDockWidget(mainWindow);
 		QCefWidget *browser = qcef->create_widget(dock, url, nullptr);
 		dock->setWidget(browser);
@@ -1066,9 +1072,9 @@ void PluginJsHandler::loadSlabsBrowserDocks()
 		dock->setObjectName(objectName.c_str());
 		dock->setProperty("isSlabs", true);
 		dock->setObjectName(objectName.c_str());
-		
+
 		obs_frontend_add_dock(dock);
-		
+
 		dock->resize(460, 600);
 		dock->setMinimumSize(80, 80);
 		dock->setWindowTitle(title.c_str());

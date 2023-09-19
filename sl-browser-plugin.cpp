@@ -74,7 +74,6 @@ void obs_module_post_load(void)
 
 	if (GrpcPlugin::instance().startServer(myListenPort))
 	{
-
 		try
 		{
 			const char *module_path = obs_get_module_binary_path(obs_current_module());
@@ -83,10 +82,7 @@ void obs_module_post_load(void)
 				return;
 
 			std::wstring process_path = std::filesystem::u8path(module_path).remove_filename().wstring() + L"/sl-browser.exe";
-
-			std::wstring startparams = L"sl-browser " + std::to_wstring(myListenPort) + L" " + std::to_wstring(targetListenPort);
-
-			wprintf(L"start params = %s\n", startparams.c_str());
+			std::wstring startparams = L"sl-browser " + std::to_wstring(GetCurrentProcessId()) + L" " + std::to_wstring(myListenPort) + L" " + std::to_wstring(targetListenPort);
 			browserGood = CreateProcessW(process_path.c_str(), (LPWSTR)startparams.c_str(), NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &g_browserProcessInfo);
 		}
 		catch (...)

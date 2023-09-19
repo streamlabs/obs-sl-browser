@@ -102,6 +102,13 @@ target_link_options(sl-browser PRIVATE
 target_compile_options(sl-browser PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
 target_compile_definitions(sl-browser PRIVATE NOMINMAX)
 
+add_custom_command(
+  TARGET sl-browser POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy
+          ${CMAKE_CURRENT_SOURCE_DIR}/streamlabs-app-icon.png
+          $<TARGET_FILE_DIR:sl-browser>/streamlabs-app-icon.png
+)
+
 ## -- Plugin loaded by obs
 
 add_library(sl-browser-plugin MODULE)

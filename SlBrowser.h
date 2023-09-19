@@ -17,6 +17,7 @@ public:
 	CefRefPtr<BrowserApp> m_app = nullptr;
 	CefRefPtr<CefBrowser> m_browser = nullptr;
 	CefRefPtr<BrowserClient> browserClient = nullptr;
+	int32_t m_obs64_PIDt = 0;
 
 public:
 	static SlBrowser &instance()
@@ -34,6 +35,7 @@ private:
 	void browserManagerThread();
 
 	static void DebugInputThread();
+	static void CheckForObsThread();
 
 public:
 	// Disallow copying
