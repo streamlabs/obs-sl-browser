@@ -237,7 +237,7 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 
 				// Create a Json object for this dock widget and add it to the panelInfo vector
 				dockInfo.push_back(Json::object{{"name", name}, {"x", x}, {"y", y}, {"width", width}, {"height", height}, {"floating", floating},
-					{"isSlabs", isSlabs}, {"url", url}, {"visible", visible}, {"visible", visible}});
+					{"isSlabs", isSlabs}, {"url", url}, {"visible", visible}, {"title", dockTitle}});
 			}
 
 			// Convert the panelInfo vector to a Json object and dump string
