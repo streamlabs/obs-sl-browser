@@ -114,8 +114,6 @@ void obs_module_post_load(void)
 
 void obs_module_unload(void)
 {
-	printf("obs_module_unload\n");
-
 	// Tell process to shut down and wait?
 	// Might be fine to just kill it, tbd
 	// ;

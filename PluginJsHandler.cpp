@@ -494,6 +494,7 @@ void PluginJsHandler::JS_TOGGLE_DOCK_VISIBILITY(const Json &params, std::string 
 				if (dock->objectName().toStdString() == objectName)
 				{
 					dock->setVisible(visible);
+					out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 					break;
 				}
 			}
