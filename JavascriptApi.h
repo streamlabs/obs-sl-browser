@@ -20,6 +20,7 @@ public:
 		JS_OBS_SOURCE_CREATE,
 		JS_OBS_SOURCE_DESTROY,
 		JS_DOCK_SETAREA,
+		JS_DOCK_RESIZE,
 		JS_DOCK_SWAP,
 		JS_DOCK_NEW_BROWSER_DOCK,
 		JS_GET_MAIN_WINDOW_GEOMETRY,
@@ -38,7 +39,7 @@ public:
 			*/
 
 			// .(@function(arg1))
-			//	Example arg1 = [{ "objectName": ".", "x": 0, "y": 0, "width": 0, "height": 0, "isSlabs": bool, "floating": bool, "url": "." },]
+			//	Example arg1 = [{ "objectName": ".", "x": 0, "y": 0, "width": 0, "height": 0, "isSlabs": bool, "floating": bool, "url": ".", "visible": "." }]
 			{"dock_queryAll", JS_QUERY_DOCKS},
 
 			// .(@objectName, @url)
@@ -50,7 +51,7 @@ public:
 			{"dock_executeJavascript", JS_DOCK_EXECUTEJAVASCRIPT},
 
 			// .(@objectName, @bool_visible)
-			{"dock_toggleBrowserDockVisibility", JS_TOGGLE_DOCK_VISIBILITY},
+			{"dock_toggleDockVisibility", JS_TOGGLE_DOCK_VISIBILITY},
 
 			// Current release, OBS 29.1, does not have api support for destroying docks. Futurue releases will.
 			// .(@objectName)
@@ -62,15 +63,21 @@ public:
 			//		objectName is the unique identifer of the dock
 			{"dock_newBrowserDock", JS_DOCK_NEW_BROWSER_DOCK},
 
-			// .(@objectName, @int_areaMask, @int_newXSize_optional, @int_newYSize_optional)
+			// .(@objectName, @int_areaMask)
 			//	areaMask can be a combination of Left Right Top Bottom, ie (LeftDockWidgetArea | RightDockWidgetArea) or (TopDockWidgetArea | BottomDockWidgetArea)
 			//	These are the current values from Qt
 			//		LeftDockWidgetArea = 0x1,
 			//		RightDockWidgetArea = 0x2,
 			//		TopDockWidgetArea = 0x4,
 			//		BottomDockWidgetArea = 0x8,
+			//	If the dock is floating then this will set that to false and place it somewhere
 			{"dock_setArea", JS_DOCK_SETAREA},
 
+			// .(@objectName, @int_width, @int_height)
+			//	Calls Qt 'resize' on the dock in question with w/h
+			{"dock_resize", JS_DOCK_RESIZE},
+
+			
 			// .(@objectName1, @objectName2)
 			//	Swaps the the positions of dock1 with dock2
 			{"dock_swap", JS_DOCK_SWAP},

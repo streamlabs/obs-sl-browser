@@ -168,8 +168,16 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		JS_DOCK_SETAREA(jsonParams, jsonReturnStr);
 		break;
 	}
+	case JavascriptApi::JS_DOCK_RESIZE: {
+		JS_DOCK_RESIZE(jsonParams, jsonReturnStr);
+		break;
+	}		
 	case JavascriptApi::JS_TOGGLE_USER_INPUT: {
 		JS_TOGGLE_USER_INPUT(jsonParams, jsonReturnStr);
+		break;
+	}
+	case JavascriptApi::JS_TOGGLE_DOCK_VISIBILITY: {
+		JS_TOGGLE_DOCK_VISIBILITY(jsonParams, jsonReturnStr);
 		break;
 	}
 	}
@@ -204,8 +212,9 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 				int y = globalGeometry.y() - mainWindowGeometry.y();
 				int width = dock->width();
 				int height = dock->height();
-	
+
 				bool floating = dock->isFloating();
+				bool visible = dock->isFloating();
 	
 				std::string dockName = dock->objectName().toStdString();
 	
@@ -215,13 +224,11 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 					QCefWidgetInternal *widget = (QCefWidgetInternal *)dock->widget();
 	
 					if (widget->cefBrowser != nullptr)
-					{
-						//url = widget->cefBrowser->GetMainFrame()->GetURL();
-					}
+						url = widget->cefBrowser->GetMainFrame()->GetURL();
 				}
 	
 				// Create a Json object for this dock widget and add it to the panelInfo vector
-				dockInfo.push_back(Json::object{{"name", name}, {"x", x}, {"y", y}, {"width", width}, {"height", height}, {"floating", floating}, {"isSlabs", isSlabs}, {"url", url}});
+				dockInfo.push_back(Json::object{{"name", name}, {"x", x}, {"y", y}, {"width", width}, {"height", height}, {"floating", floating}, {"isSlabs", isSlabs}, {"url", url}, {"visible", visible}});
 			}
 	
 			// Convert the panelInfo vector to a Json object and dump string
@@ -231,17 +238,15 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 		Qt::BlockingQueuedConnection);
 }
 
-void PluginJsHandler::JS_DOCK_SETAREA(const Json &params, std::string &out_jsonReturn)
+void PluginJsHandler::JS_DOCK_RESIZE(const Json &params, std::string &out_jsonReturn)
 {
 	const auto &param2Value = params["param2"];
 	const auto &param3Value = params["param3"];
-	const auto &param4Value = params["param4"];
-	const auto &param5Value = params["param5"];
+	const auto &param4Value = params["param3"];
 
 	std::string objectName = param2Value.string_value();
-	int areaMask = param3Value.int_value();
-	int resizeX = param4Value.int_value();
-	int resizeY = param5Value.int_value();
+	int width = param3Value.int_value();
+	int height = param3Value.int_value();
 
 	// An error for now, if we succeed this is overwritten
 	out_jsonReturn = Json(Json::object({{"error", "Did not find dock with objectName: " + objectName}})).dump();
@@ -250,21 +255,50 @@ void PluginJsHandler::JS_DOCK_SETAREA(const Json &params, std::string &out_jsonR
 
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[mainWindow, objectName, areaMask, resizeX, resizeY, &params, &out_jsonReturn]() {
+		[mainWindow, objectName, width, height, &out_jsonReturn]() {
 			// Find the panel by name (assuming the name is stored as a property)
 			QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
 			foreach(QDockWidget * dock, docks)
 			{
 				if (dock->objectName().toStdString() == objectName)
 				{
+					dock->resize(width, height);
+					out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+					break;
+				}
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_DOCK_SETAREA(const Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string objectName = param2Value.string_value();
+	int areaMask = param3Value.int_value();
+
+	// An error for now, if we succeed this is overwritten
+	out_jsonReturn = Json(Json::object({{"error", "Did not find dock with objectName: " + objectName}})).dump();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, objectName, areaMask, &out_jsonReturn]() {
+			// Find the panel by name (assuming the name is stored as a property)
+			QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
+			foreach(QDockWidget * dock, docks)
+			{
+				if (dock->objectName().toStdString() == objectName)
+				{
+					if (dock->isFloating())
+						dock->setFloating(false);
 
 					// Map the input area mask to the corresponding Qt::DockWidgetArea
 					Qt::DockWidgetArea dockArea = static_cast<Qt::DockWidgetArea>(areaMask & Qt::DockWidgetArea_Mask);
 					mainWindow->addDockWidget(dockArea, dock);
-
-					if (resizeX > 0 && resizeY > 0)
-						dock->resize(resizeX, resizeY);
-
 					out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 					break;
 				}

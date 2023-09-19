@@ -41,6 +41,7 @@ private:
 	void JS_OBS_SOURCE_CREATE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_SOURCE_DESTROY(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DOCK_SETAREA(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DOCK_RESIZE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DOCK_NEW_BROWSER_DOCK(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_MAIN_WINDOW_GEOMETRY(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_TOGGLE_USER_INPUT(const json11::Json &params, std::string &out_jsonReturn);
