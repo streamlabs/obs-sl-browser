@@ -224,7 +224,7 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 				bool floating = dock->isFloating();
 				bool visible = dock->isVisible();
 				std::string dockName = dock->objectName().toStdString();
-				std::wstring dockTitle = dock->windowTitle().toStdWString();
+				std::string dockTitle = dock->windowTitle().toStdString();
 
 				if (dock->property("isSlabs").isValid())
 				{
@@ -243,6 +243,8 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 			// Convert the panelInfo vector to a Json object and dump string
 			Json ret = dockInfo;
 			out_jsonReturn = ret.dump();
+
+			printf("%s\n", out_jsonReturn.c_str());
 		},
 		Qt::BlockingQueuedConnection);
 }
@@ -409,7 +411,8 @@ void PluginJsHandler::JS_DOCK_NEW_BROWSER_DOCK(const json11::Json &params, std::
 			dock->setObjectName(objectName.c_str());
 			dock->setProperty("isSlabs", true);
 
-			obs_frontend_add_dock(dock);
+			// obs_frontend_add_dock and keep the pointer to it
+			dock->setProperty("actionptr", (uint64_t)obs_frontend_add_dock(dock));
 
 			dock->resize(460, 600);
 			dock->setMinimumSize(80, 80);
@@ -532,8 +535,10 @@ void PluginJsHandler::JS_DOCK_SETTITLE(const json11::Json &params, std::string &
 			{
 				if (dock->objectName().toStdString() == objectName)
 				{
+					QAction *action = reinterpret_cast<QAction *>(dock->property("actionptr").toULongLong());
+					action->setText(newTitle.c_str());
 					dock->setWindowTitle(newTitle.c_str());
-					out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+					out_jsonReturn = Json(Json::object({{"error", "success"}})).dump();
 					break;
 				}
 			}
@@ -1155,7 +1160,8 @@ void PluginJsHandler::loadSlabsBrowserDocks()
 		dock->setProperty("isSlabs", true);
 		dock->setObjectName(objectName.c_str());
 
-		obs_frontend_add_dock(dock);
+		// obs_frontend_add_dock and keep the pointer to it
+		dock->setProperty("actionptr", (uint64_t)obs_frontend_add_dock(dock));
 
 		dock->resize(460, 600);
 		dock->setMinimumSize(80, 80);
