@@ -189,6 +189,14 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		JS_DOCK_RENAME(jsonParams, jsonReturnStr);
 		break;
 	}
+	case JavascriptApi::JS_SET_STREAMSETTINGS: {
+		JS_SET_STREAMSETTINGS(jsonParams, jsonReturnStr);
+		break;
+	}
+	case JavascriptApi::JS_GET_STREAMSETTINGS: {
+		JS_GET_STREAMSETTINGS(jsonParams, jsonReturnStr);
+		break;
+	}	
 	}
 
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
@@ -196,6 +204,86 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	// We're done, send callback
 	if (param1Value.int_value() > 0)
 		GrpcPlugin::instance().getClient()->send_executeCallback(param1Value.int_value(), jsonReturnStr);
+}
+
+void PluginJsHandler::JS_GET_STREAMSETTINGS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, &out_jsonReturn]() {
+			obs_service_t *service_t = obs_frontend_get_streaming_service();
+
+			if (service_t)
+			{
+				obs_data_t *settings = obs_service_get_settings(service_t);
+
+				std::string service = obs_data_get_string(settings, "service");
+				std::string protocol = obs_data_get_string(settings, "protocol");
+				std::string server = obs_data_get_string(settings, "server");
+				bool use_auth = obs_data_get_bool(settings, "use_auth");
+				std::string username = obs_data_get_string(settings, "username");
+				std::string password = obs_data_get_string(settings, "password");
+				std::string key = obs_data_get_string(settings, "key");
+
+				out_jsonReturn = Json(Json::object{{"service", service}, {"protocol", protocol}, {"server", server}, {"use_auth", use_auth}, {"username", username}, {"password", password}, {"key", key}}).dump();
+			}
+			else
+			{
+				out_jsonReturn = Json(Json::object({{"error", "No service exists"}})).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SET_STREAMSETTINGS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
+	const auto &param5Value = params["param5"];
+	const auto &param6Value = params["param6"];
+	const auto &param7Value = params["param7"];
+	const auto &param8Value = params["param8"];
+
+	// "rtmp_custom" : "rtmp_common"
+	std::string service = param2Value.string_value();
+	std::string protocol = param3Value.string_value();
+	std::string server = param4Value.string_value();
+	bool use_auth = param5Value.bool_value();
+	std::string username = param6Value.string_value();
+	std::string password = param7Value.string_value();
+	std::string key = param8Value.string_value();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, &service, &protocol, &server, use_auth, &username, &password, &key, &out_jsonReturn]() {
+
+			obs_service_t *oldService = obs_frontend_get_streaming_service();
+			OBSDataAutoRelease hotkeyData = obs_hotkeys_save_service(oldService);
+
+			OBSDataAutoRelease settings = obs_data_create();
+
+			obs_data_set_string(settings, "service", service.c_str());
+			obs_data_set_string(settings, "protocol", protocol.c_str());
+			obs_data_set_string(settings, "server", server.c_str());
+			obs_data_set_bool(settings, "use_auth", use_auth);
+			obs_data_set_string(settings, "username", username.c_str());
+			obs_data_set_string(settings, "password", password.c_str());
+			obs_data_set_string(settings, "key", key.c_str());
+
+			OBSServiceAutoRelease newService = obs_service_create(service.c_str(), "default_service", settings, hotkeyData);
+
+			if (!newService)
+				return;
+
+			obs_frontend_set_streaming_service(newService);
+			obs_frontend_save_streaming_service();
+		},
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonReturn)
@@ -243,8 +331,6 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 			// Convert the panelInfo vector to a Json object and dump string
 			Json ret = dockInfo;
 			out_jsonReturn = ret.dump();
-
-			printf("%s\n", out_jsonReturn.c_str());
 		},
 		Qt::BlockingQueuedConnection);
 }
@@ -253,7 +339,7 @@ void PluginJsHandler::JS_DOCK_RESIZE(const Json &params, std::string &out_jsonRe
 {
 	const auto &param2Value = params["param2"];
 	const auto &param3Value = params["param3"];
-	const auto &param4Value = params["param3"];
+	const auto &param4Value = params["param4"];
 
 	std::string objectName = param2Value.string_value();
 	int width = param3Value.int_value();

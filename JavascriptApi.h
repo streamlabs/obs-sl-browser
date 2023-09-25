@@ -28,7 +28,9 @@ public:
 		JS_TOGGLE_DOCK_VISIBILITY,
 		JS_DESTROY_DOCK,
 		JS_DOCK_RENAME,
-		JS_DOCK_SETTITLE
+		JS_DOCK_SETTITLE,
+		JS_SET_STREAMSETTINGS,
+		JS_GET_STREAMSETTINGS
 	};
 
 public:
@@ -136,7 +138,7 @@ public:
 			{"fs_queryDownloadsFolder", JS_QUERY_DOWNLOADS_FOLDER},
 
 			/***
-			* obs_source
+			* obs
 			*/
 
 			// .(@function(arg1), id, name, settings_jsonStr, hotkey_data_jsonStr)
@@ -149,6 +151,14 @@ public:
 			//	Destroys an obs source with the name provided if it exists
 			{"obs_source_destroy", JS_OBS_SOURCE_DESTROY},
 
+			// .(@function(arg1), service, protocol, server, bool_use_auth, username, password, key)
+			//	Revises stream settings with the provided params
+			//		'service' can be "rtmp_custom" : "rtmp_common"
+			{"obs_set_stream_settings", JS_SET_STREAMSETTINGS},
+
+			// .(@function(arg1))
+			//	Returns json of service, protocol, server, bool_use_auth, username, password, key
+			{"obs_get_stream_settings", JS_GET_STREAMSETTINGS},
 		};
 
 		return names;

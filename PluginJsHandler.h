@@ -49,6 +49,8 @@ private:
 	void JS_DESTROY_DOCK(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DOCK_RENAME(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DOCK_SETTITLE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SET_STREAMSETTINGS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_STREAMSETTINGS(const json11::Json &params, std::string &out_jsonReturn);
 
 	std::wstring getDownloadsDir() const;
 
