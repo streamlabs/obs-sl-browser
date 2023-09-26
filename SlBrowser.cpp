@@ -109,8 +109,8 @@ void SlBrowser::CreateCefBrowser(int arg)
 	app.m_browser = CefBrowserHost::CreateBrowserSync(window_info, app.browserClient.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), nullptr);
 
 	auto bringToTop = [] {
-		// For the next 3 seconds keep the window on top
-		for (int i = 0; i < 30; ++i)
+		// For the next second keep the window on top
+		for (int i = 0; i < 10; ++i)
 		{
 			::SetForegroundWindow((HWND)SlBrowser::instance().m_widget->winId());
 			::Sleep(100);

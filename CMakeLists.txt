@@ -118,6 +118,7 @@ target_sources(
   PRIVATE sl-browser-plugin.cpp
     GrpcPlugin.cpp
     PluginJsHandler.cpp
+    WebServer.cpp
     deps/json11/json11.cpp
     deps/minizip/ioapi.c
     deps/minizip/iowin32.c

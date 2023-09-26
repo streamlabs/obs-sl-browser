@@ -10,6 +10,7 @@
 
 #include "GrpcPlugin.h"
 #include "PluginJsHandler.h"
+#include "WebServer.h"
 
 PROCESS_INFORMATION g_browserProcessInfo;
 
@@ -17,7 +18,7 @@ OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("sl-browser-plugin", "en-US")
 MODULE_EXPORT const char *obs_module_description(void)
 {
-	return "Streamlabs OBS";
+	return "Streamlabs";
 }
 
 bool obs_module_load(void)
@@ -66,7 +67,7 @@ void obs_module_post_load(void)
 	int32_t myListenPort = chooseProxyPort();
 	int32_t targetListenPort = chooseProxyPort();
 
-	blog(LOG_INFO, "%s: Sending %d and %d to proxy\n", obs_module_description(), myListenPort, targetListenPort);
+	blog(LOG_INFO, "%s: Sending %d and %d to proxy", obs_module_description(), myListenPort, targetListenPort);
 
 	STARTUPINFOW si;
 	memset(&si, NULL, sizeof(si));
@@ -120,6 +121,7 @@ void obs_module_unload(void)
 
 	PluginJsHandler::instance().stop();
 	GrpcPlugin::instance().stop();
+	WebServer::instance().stop();
 
 	// Terminates the process (it shouldn't exist)
 	TerminateProcess(g_browserProcessInfo.hProcess, EXIT_SUCCESS);

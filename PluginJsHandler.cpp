@@ -3,11 +3,13 @@
 // Local
 #include "JavascriptApi.h"
 #include "GrpcPlugin.h"
+#include "WebServer.h"
 #include "deps/minizip/unzip.h"
 
 // Windows
 #include <wininet.h>
 #include <ShlObj.h>
+#include <shellapi.h>
 
 // Stl
 #include <chrono>
@@ -117,86 +119,29 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 
 	switch (JavascriptApi::getFunctionId(funcName))
 	{
-	case JavascriptApi::JS_DOCK_EXECUTEJAVASCRIPT: {
-		JS_DOCK_EXECUTEJAVASCRIPT(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_DOCK_SETURL: {
-		JS_DOCK_SETURL(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_QUERY_DOCKS: {
-		JS_QUERY_DOCKS(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_DOWNLOAD_ZIP: {
-		JS_DOWNLOAD_ZIP(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_READ_FILE: {
-		JS_READ_FILE(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_DELETE_FILES: {
-		JS_DELETE_FILES(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_DROP_FOLDER: {
-		JS_DROP_FOLDER(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_QUERY_DOWNLOADS_FOLDER: {
-		JS_QUERY_DOWNLOADS_FOLDER(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_OBS_SOURCE_CREATE: {
-		JS_OBS_SOURCE_CREATE(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_OBS_SOURCE_DESTROY: {
-		JS_OBS_SOURCE_DESTROY(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_DOCK_NEW_BROWSER_DOCK: {
-		JS_DOCK_NEW_BROWSER_DOCK(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_GET_MAIN_WINDOW_GEOMETRY: {
-		JS_GET_MAIN_WINDOW_GEOMETRY(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_DOCK_SETAREA: {
-		JS_DOCK_SETAREA(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_DOCK_RESIZE: {
-		JS_DOCK_RESIZE(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_TOGGLE_USER_INPUT: {
-		JS_TOGGLE_USER_INPUT(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_TOGGLE_DOCK_VISIBILITY: {
-		JS_TOGGLE_DOCK_VISIBILITY(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_DOCK_SETTITLE: {
-		JS_DOCK_SETTITLE(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_DOCK_RENAME: {
-		JS_DOCK_RENAME(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_SET_STREAMSETTINGS: {
-		JS_SET_STREAMSETTINGS(jsonParams, jsonReturnStr);
-		break;
-	}
-	case JavascriptApi::JS_GET_STREAMSETTINGS: {
-		JS_GET_STREAMSETTINGS(jsonParams, jsonReturnStr);
-		break;
-	}	
+	case JavascriptApi::JS_DOCK_EXECUTEJAVASCRIPT: JS_DOCK_EXECUTEJAVASCRIPT(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_DOCK_SETURL: JS_DOCK_SETURL(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_QUERY_DOCKS: JS_QUERY_DOCKS(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_DOWNLOAD_ZIP: JS_DOWNLOAD_ZIP(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_READ_FILE: JS_READ_FILE(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_DELETE_FILES: JS_DELETE_FILES(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_DROP_FOLDER: JS_DROP_FOLDER(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_QUERY_DOWNLOADS_FOLDER: JS_QUERY_DOWNLOADS_FOLDER(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_OBS_SOURCE_CREATE: JS_OBS_SOURCE_CREATE(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_OBS_SOURCE_DESTROY: JS_OBS_SOURCE_DESTROY(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_DOCK_NEW_BROWSER_DOCK: JS_DOCK_NEW_BROWSER_DOCK(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_GET_MAIN_WINDOW_GEOMETRY: JS_GET_MAIN_WINDOW_GEOMETRY(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_DOCK_SETAREA: JS_DOCK_SETAREA(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_DOCK_RESIZE: JS_DOCK_RESIZE(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_TOGGLE_USER_INPUT: JS_TOGGLE_USER_INPUT(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_TOGGLE_DOCK_VISIBILITY: JS_TOGGLE_DOCK_VISIBILITY(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_DOCK_SETTITLE: JS_DOCK_SETTITLE(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_DOCK_RENAME: JS_DOCK_RENAME(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_SET_STREAMSETTINGS: JS_SET_STREAMSETTINGS(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_GET_STREAMSETTINGS: JS_GET_STREAMSETTINGS(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_START_WEBSERVER: JS_START_WEBSERVER(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_STOP_WEBSERVER: JS_STOP_WEBSERVER(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_LAUNCH_OS_BROWSER_URL: JS_LAUNCH_OS_BROWSER_URL(jsonParams, jsonReturnStr); break;
 	}
 
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
@@ -204,6 +149,69 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	// We're done, send callback
 	if (param1Value.int_value() > 0)
 		GrpcPlugin::instance().getClient()->send_executeCallback(param1Value.int_value(), jsonReturnStr);
+}
+
+void PluginJsHandler::JS_START_WEBSERVER(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	WebServer::instance().setExpectedReferer(param3Value.string_value());
+
+	if (!WebServer::instance().start(param2Value.int_value()))
+	{
+		out_jsonReturn = Json(Json::object{{"error", WebServer::instance().getErr()}}).dump();
+		return;
+	}
+
+	out_jsonReturn = Json(Json::object{{"port", WebServer::instance().getPort()}}).dump();
+}
+
+void PluginJsHandler::JS_STOP_WEBSERVER(const json11::Json &params, std::string &out_jsonReturn)
+{
+	WebServer::instance().stop();
+}
+
+void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::string &out_jsonReturn)
+{	
+	std::map<INT_PTR, std::string> shellExecuteErrors = {
+		{0, "The operating system is out of memory or resources."},
+		{ERROR_FILE_NOT_FOUND, "The specified file was not found."},
+		{ERROR_PATH_NOT_FOUND, "The specified path was not found."},
+		{ERROR_BAD_FORMAT, "The .exe file is invalid (non-Win32 .exe or error in .exe image)."},
+		{SE_ERR_ACCESSDENIED, "The operating system denied access to the specified file."},
+		{SE_ERR_ASSOCINCOMPLETE, "The file name association is incomplete or invalid."},
+		{SE_ERR_DDEBUSY, "The DDE transaction could not be completed because other DDE transactions were being processed."},
+		{SE_ERR_DDEFAIL, "The DDE transaction failed."},
+		{SE_ERR_DDETIMEOUT, "The DDE transaction could not be completed because the request timed out."},
+		{SE_ERR_DLLNOTFOUND, "The specified DLL was not found."},
+		{SE_ERR_FNF, "The specified file was not found."},
+		{SE_ERR_NOASSOC, "There is no application associated with the given file name extension. This error will also be returned if you attempt to print a file that is not printable."},
+		{SE_ERR_OOM, "There was not enough memory to complete the operation."},
+		{SE_ERR_PNF, "The specified path was not found."},
+		{SE_ERR_SHARE, "A sharing violation occurred."},
+	};
+
+	const auto &param2Value = params["param2"];
+	std::string url = param2Value.string_value();
+	INT_PTR result = (INT_PTR)::ShellExecuteA(NULL, "open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+
+	// ShellExecuteA
+	// "If the function succeeds, it returns a value greater than 32."
+	if (result <= 32)
+	{
+		std::string err = "An unknown error occured. GetLastError() = " + GetLastError();
+		auto itr = shellExecuteErrors.find(result);
+
+		if (itr != shellExecuteErrors.end())
+			err = itr->second;
+
+		out_jsonReturn = Json(Json::object{{"error", err}}).dump();
+	}
+	else
+	{
+		out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+	}
 }
 
 void PluginJsHandler::JS_GET_STREAMSETTINGS(const json11::Json &params, std::string &out_jsonReturn)

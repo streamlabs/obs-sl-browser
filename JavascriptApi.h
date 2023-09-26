@@ -30,14 +30,18 @@ public:
 		JS_DOCK_RENAME,
 		JS_DOCK_SETTITLE,
 		JS_SET_STREAMSETTINGS,
-		JS_GET_STREAMSETTINGS
+		JS_GET_STREAMSETTINGS,
+		JS_START_WEBSERVER,
+		JS_STOP_WEBSERVER,
+		JS_LAUNCH_OS_BROWSER_URL,
 	};
 
 public:
 	static std::map<std::string, JSFuncs> &getGlobalFunctionNames()
 	{
 		// None of the api function belows are blocking, they return immediatelly, but can accept a function as arg1 thats invoked when work is complete, which should allow await/promise structure
-		static std::map<std::string, JSFuncs> names = {
+		static std::map<std::string, JSFuncs> names =
+		{
 			/***
 			* Docks
 			*/
@@ -159,6 +163,26 @@ public:
 			// .(@function(arg1))
 			//	Returns json of service, protocol, server, bool_use_auth, username, password, key
 			{"obs_get_stream_settings", JS_GET_STREAMSETTINGS},
+
+			/***
+			* Web
+			*/
+
+			// .(@function(arg1), port, expectedReferer)
+			//	Only one can exist at a time (do we need multiple? lmk)
+			//	'expectedReferer' is for example, 'http://localhost:25341/?secret_token=', aka the referring uri that the webserver is will pluck the token from
+			//		Example arg1 = { "port": 12345 }
+			//		If you assign port 0 then the Operating System will choose one, and I will return back the port that the webserver ends up using, even if you assign a specific one
+			{"web_startServer", JS_START_WEBSERVER},
+
+			// .(@function(arg1))
+			//	Stops the webserver
+			{"web_stopServer", JS_STOP_WEBSERVER},
+
+			// .(@function(arg1), url)
+			//	Launches their default browser with the URL supplied using ShellExecuteA, any errors returned are according to ShellExecuteA winapi doc
+			{"web_launchOSBrowserUrl", JS_LAUNCH_OS_BROWSER_URL},
+
 		};
 
 		return names;

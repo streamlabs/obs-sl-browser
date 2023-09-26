@@ -51,7 +51,10 @@ private:
 	void JS_DOCK_SETTITLE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SET_STREAMSETTINGS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_STREAMSETTINGS(const json11::Json &params, std::string &out_jsonReturn);
-
+	void JS_START_WEBSERVER(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_STOP_WEBSERVER(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::string &out_jsonReturn);
+	
 	std::wstring getDownloadsDir() const;
 
 	std::mutex m_queueMtx;
