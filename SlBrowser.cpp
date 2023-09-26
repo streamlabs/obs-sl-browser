@@ -77,7 +77,7 @@ void SlBrowser::run(int argc, char *argv[])
 
 	// Create Qt Widget
 	m_widget = new SlBrowserWidget{};
-	m_widget->setWindowTitle("Streamlabs OBS");
+	m_widget->setWindowTitle("Streamlabs");
 	m_widget->setMinimumSize(320, 240);
 	m_widget->resize(1280, 720);
 	m_widget->show();

@@ -34,6 +34,7 @@ public:
 		JS_START_WEBSERVER,
 		JS_STOP_WEBSERVER,
 		JS_LAUNCH_OS_BROWSER_URL,
+		JS_GET_AUTH_TOKEN
 	};
 
 public:
@@ -168,11 +169,12 @@ public:
 			* Web
 			*/
 
-			// .(@function(arg1), port, expectedReferer)
+			// .(@function(arg1), port, expectedReferer, redirectUrl)
 			//	Only one can exist at a time (do we need multiple? lmk)
-			//	'expectedReferer' is for example, 'http://localhost:25341/?secret_token=', aka the referring uri that the webserver is will pluck the token from
+			//	'port', ie http://localhost:port, if you assign port 0 then the OS will choose one (value is returned in function arg1)
+			//	'expectedReferer' is for example, '/?secret_token=', equates to 'http://localhost:port/?secret_token=', aka the referring uri that the webserver is will pluck the token from
+			//	'redirectUrl' is where you want them to be redirected to whenever accessing 'http://localhost:port'
 			//		Example arg1 = { "port": 12345 }
-			//		If you assign port 0 then the Operating System will choose one, and I will return back the port that the webserver ends up using, even if you assign a specific one
 			{"web_startServer", JS_START_WEBSERVER},
 
 			// .(@function(arg1))
@@ -183,6 +185,9 @@ public:
 			//	Launches their default browser with the URL supplied using ShellExecuteA, any errors returned are according to ShellExecuteA winapi doc
 			{"web_launchOSBrowserUrl", JS_LAUNCH_OS_BROWSER_URL},
 
+			// .(@function(arg1))
+			//		Example arg1 = { "token": "." }
+			{"web_getAuthToken", JS_GET_AUTH_TOKEN},
 		};
 
 		return names;

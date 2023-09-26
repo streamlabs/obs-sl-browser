@@ -141,9 +141,12 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	case JavascriptApi::JS_GET_STREAMSETTINGS: JS_GET_STREAMSETTINGS(jsonParams, jsonReturnStr); break;
 	case JavascriptApi::JS_START_WEBSERVER: JS_START_WEBSERVER(jsonParams, jsonReturnStr); break;
 	case JavascriptApi::JS_STOP_WEBSERVER: JS_STOP_WEBSERVER(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_GET_AUTH_TOKEN: JS_GET_AUTH_TOKEN(jsonParams, jsonReturnStr); break;
 	case JavascriptApi::JS_LAUNCH_OS_BROWSER_URL: JS_LAUNCH_OS_BROWSER_URL(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_DOCK_SWAP: JS_DOCK_SWAP(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_DESTROY_DOCK: JS_DESTROY_DOCK(jsonParams, jsonReturnStr); break;
 	}
-
+	
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
 
 	// We're done, send callback
@@ -155,8 +158,10 @@ void PluginJsHandler::JS_START_WEBSERVER(const json11::Json &params, std::string
 {
 	const auto &param2Value = params["param2"];
 	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
 
 	WebServer::instance().setExpectedReferer(param3Value.string_value());
+	WebServer::instance().setRedirectUrl(param4Value.string_value());
 
 	if (!WebServer::instance().start(param2Value.int_value()))
 	{
@@ -212,6 +217,11 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 	{
 		out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 	}
+}
+
+void PluginJsHandler::JS_GET_AUTH_TOKEN(const json11::Json& params, std::string& out_jsonReturn)
+{
+	out_jsonReturn = Json(Json::object{{"token", WebServer::instance().getToken()}}).dump();
 }
 
 void PluginJsHandler::JS_GET_STREAMSETTINGS(const json11::Json &params, std::string &out_jsonReturn)
@@ -339,6 +349,52 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 			// Convert the panelInfo vector to a Json object and dump string
 			Json ret = dockInfo;
 			out_jsonReturn = ret.dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_DOCK_SWAP(const Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string objectName1 = param2Value.string_value();
+	std::string objectName2 = param3Value.string_value();
+
+	// Assume failure until we find the docks and swap them
+	out_jsonReturn = Json(Json::object({{"error", "Did not find docks with objectNames: " + objectName1 + " and " + objectName2}})).dump();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, objectName1, objectName2, &out_jsonReturn]() {
+			QDockWidget *dock1 = nullptr;
+			QDockWidget *dock2 = nullptr;
+
+			QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
+			foreach(QDockWidget * dock, docks)
+			{
+				if (dock->objectName().toStdString() == objectName1)
+					dock1 = dock;
+				else if (dock->objectName().toStdString() == objectName2)
+					dock2 = dock;
+
+				if (dock1 && dock2)
+					break;
+			}
+
+			if (dock1 && dock2)
+			{
+				QRect geo1 = dock1->geometry();
+				QRect geo2 = dock2->geometry();
+
+				// Swap the geometries
+				dock1->setGeometry(geo2);
+				dock2->setGeometry(geo1);
+
+				out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+			}
 		},
 		Qt::BlockingQueuedConnection);
 }

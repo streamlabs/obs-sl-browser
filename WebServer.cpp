@@ -13,11 +13,17 @@ WebServer::WebServer() {
 
 WebServer::~WebServer()
 {
-
+	stop();
 }
 
 bool WebServer::start(const int32_t port)
 {
+	if (m_launching || m_running)
+	{
+		m_err = "Already running";
+		return false;
+	}
+
 	m_launching = true;
 	m_workerThread = std::thread(&WebServer::workerThread, this);
 
@@ -33,6 +39,12 @@ void WebServer::stop()
 
 	if (m_workerThread.joinable())
 		m_workerThread.join();
+}
+
+std::string WebServer::getToken()
+{
+	std::lock_guard<std::mutex> grd(m_tokenMtx);
+	return m_token;
 }
 
 void WebServer::workerThread()
@@ -117,31 +129,58 @@ void WebServer::workerThread()
 		return;
 	}
 
+	printf("WebServer Listening on port %d\n", m_port);
+
 	m_running = true;
 	m_launching = false;
 
 	while (m_running)
 	{
-		// Accept a client socket
-		clientSocket = accept(listenSocket, NULL, NULL);
-		if (clientSocket == INVALID_SOCKET)
+		timeval timeout;
+		fd_set readSet;
+		FD_ZERO(&readSet);
+		FD_SET(listenSocket, &readSet);
+
+		// 1 second listen timeout
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0;
+		int selectResult = select(0, &readSet, NULL, NULL, &timeout);
+
+		if (selectResult > 0 && FD_ISSET(listenSocket, &readSet))
 		{
-			blog(LOG_ERROR, "accept failed with error: %d\n", WSAGetLastError());
+			// Accept a client socket
+			clientSocket = accept(listenSocket, NULL, NULL);
+			if (clientSocket == INVALID_SOCKET)
+			{
+				blog(LOG_ERROR, "accept failed with error: %d\n", WSAGetLastError());
+				closesocket(listenSocket);
+				WSACleanup();
+				m_running = false;
+				return;
+			}
+		}
+		else if (selectResult == 0)
+		{
+			// Timeout, no incoming connections, continue to the next iteration
+			continue;
+		}
+		else
+		{
+			blog(LOG_ERROR, "select failed with error: %d\n", WSAGetLastError());
 			closesocket(listenSocket);
 			WSACleanup();
+			m_running = false;
 			return;
 		}
 
-		fd_set readSet;
 		FD_ZERO(&readSet);
 		FD_SET(clientSocket, &readSet);
 
-		// 5 seconds timeout
-		timeval timeout;
-		timeout.tv_sec = 5;
+		// 2 seconds timeout
+		timeout.tv_sec = 2;
 		timeout.tv_usec = 0;
+		selectResult = select(0, &readSet, NULL, NULL, &timeout);
 
-		int selectResult = select(0, &readSet, NULL, NULL, &timeout);
 		if (selectResult > 0 && FD_ISSET(clientSocket, &readSet))
 		{
 			char recvbuf[8192];
@@ -150,23 +189,46 @@ void WebServer::workerThread()
 			if (iResult > 0)
 			{
 				recvbuf[iResult] = 0;
-				printf("Received: %s\n", recvbuf);
+				printf("WebServer received...\n\n%s\n\n", recvbuf);
+				blog(LOG_INFO, "Received: %s\n", recvbuf);
 
 				auto extractToken = [&](const std::string &request) {
-					std::string key = "Referer: " + m_expectedReferer;
+					std::string key = "GET " + m_expectedReferer;
 					size_t pos = request.find(key);
 					if (pos == std::string::npos)
+					{
+						blog(LOG_INFO, "Did not find key %s\n", key.c_str());
 						return std::string();
+					}
+
+					blog(LOG_INFO, "Found key, looking for HTTP followup\n");
 
 					size_t start = pos + key.length();
-					size_t end = request.find("\r\n", start);
-					if (end == std::string::npos)
-						return std::string();
+					size_t end = request.find(" HTTP", start);
 
+					if (end == std::string::npos)
+					{
+						printf("Did not find followup\n");
+						return std::string();
+					}
+
+					blog(LOG_INFO, "Extracting token");
 					return request.substr(start, end - start);
 				};
 
-				m_token = extractToken(recvbuf);
+				std::string token = extractToken(recvbuf);
+
+				if (token.size() > 0)
+				{
+					blog(LOG_INFO, "extractToken success");
+					std::lock_guard<std::mutex> grd(m_tokenMtx);
+					m_token = token;
+				}
+				else
+				{
+
+					blog(LOG_INFO, "extractToken failed");
+				}
 			}
 			else
 			{
@@ -182,8 +244,18 @@ void WebServer::workerThread()
 			blog(LOG_ERROR, "select failed with error: %d\n", WSAGetLastError());
 		}
 
-		const char *sendbuf = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 2\r\n\r\nOK";
-		int iSendResult = send(clientSocket, sendbuf, (int)strlen(sendbuf), 0);
+		// 2 seconds timeout
+		struct timeval tv;
+		tv.tv_sec = 2; 
+		tv.tv_usec = 0;
+
+		if (setsockopt(clientSocket, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tv, sizeof(tv)) < 0)
+			blog(LOG_ERROR, "Failed to set send timeout: %d\n", WSAGetLastError());
+		
+		std::string response = "HTTP/1.1 302 Found\r\n";
+		response += "Location: " + m_redirectUrl + "\r\n\r\n";
+
+		int iSendResult = send(clientSocket, response.c_str(), (int)response.length(), 0);
 		if (iSendResult == SOCKET_ERROR)
 			blog(LOG_ERROR, "send failed with error: %d\n", WSAGetLastError());
 
