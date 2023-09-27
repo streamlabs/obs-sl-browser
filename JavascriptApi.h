@@ -51,15 +51,15 @@ public:
 			//	Example arg1 = [{ "objectName": ".", "x": 0, "y": 0, "width": 0, "height": 0, "isSlabs": bool, "floating": bool, "url": ".", "visible": ".", "title": "." }]
 			{"dock_queryAll", JS_QUERY_DOCKS},
 
-			// .(@objectName, @url)
+			// .(@function(arg1), @objectName, @url)
 			//	Only works on docks we've created
 			{"dock_setURL", JS_DOCK_SETURL},
 
-			// .(@objectName, @jsString)
+			// .(@function(arg1), @objectName, @jsString)
 			//	Only works on docks we've created
 			{"dock_executeJavascript", JS_DOCK_EXECUTEJAVASCRIPT},
 
-			// .(@objectName, @bool_visible)
+			// .(@function(arg1), @objectName, @bool_visible)
 			{"dock_toggleDockVisibility", JS_TOGGLE_DOCK_VISIBILITY},
 
 			// Current release, OBS 29.1, does not have api support for destroying docks. Futurue releases will.
@@ -67,12 +67,12 @@ public:
 			//	Only works on docks we've created
 			{"dock_destroyBrowserDock", JS_DESTROY_DOCK},
 
-			// .(@title, @url, @objectName)
+			// .(@function(arg1), @title, @url, @objectName)
 			//	Creates a new browser dock, its guid is the 'objectName', title is what the user sees. Will appear in their list of docks but not as a "Browser Dock", even though it works identically as one
 			//		objectName is the unique identifer of the dock
 			{"dock_newBrowserDock", JS_DOCK_NEW_BROWSER_DOCK},
 
-			// .(@objectName, @int_areaMask)
+			// .(@function(arg1), @objectName, @int_areaMask)
 			//	areaMask can be a combination of Left Right Top Bottom, ie (LeftDockWidgetArea | RightDockWidgetArea) or (TopDockWidgetArea | BottomDockWidgetArea)
 			//	These are the current values from Qt
 			//		LeftDockWidgetArea = 0x1,
@@ -82,19 +82,19 @@ public:
 			//	If the dock is floating then this will set that to false and place it somewhere
 			{"dock_setArea", JS_DOCK_SETAREA},
 
-			// .(@objectName, @int_width, @int_height)
+			// .(@function(arg1), @objectName, @int_width, @int_height)
 			//	Calls Qt 'resize' on the dock in question with w/h
 			{"dock_resize", JS_DOCK_RESIZE},
 
-			// .(@objectName1, @objectName2)
+			// .(@function(arg1), @objectName1, @objectName2)
 			//	Swaps the the positions of dock1 with dock2
 			{"dock_swap", JS_DOCK_SWAP},
 
-			// .(@objectName, @newName)
+			// .(@function(arg1), @objectName, @newName)
 			//	Renames a dock's objectName, which must be unique and not match any other existing
 			{"dock_rename", JS_DOCK_RENAME},
 
-			// .(@objectName, @newTitle)
+			// .(@function(arg1), @objectName, @newTitle)
 			//	Renames a dock's objectName, which must be unique and not match any other existing
 			{"dock_setTitle", JS_DOCK_SETTITLE},
 
@@ -111,7 +111,7 @@ public:
 			* Windows
 			*/
 
-			// .(bool_enable)
+			// .(@function(arg1), @bool_enable)
 			//	Disable/Enable user input to the window
 			{"win_toggleUserInput", JS_TOGGLE_USER_INPUT},
 
@@ -129,11 +129,11 @@ public:
 			//		Example arg1 = { "contents": "..." }
 			{"fs_readFile", JS_READ_FILE},
 
-			// .(@filepaths_jsonStr)
+			// .(@function(arg1), @filepaths_jsonStr)
 			//	Json string, array, [{ path: "..." },] paths must be relative to the streamlabs download folder, ie "/download1234/file.png"
 			{"fs_deleteFiles", JS_DELETE_FILES},
 
-			// .(@path)
+			// .(@function(arg1), @path)
 			//	Path must be relative to the streamlabs download folder, ie "/download1234/"
 			{"fs_dropFolder", JS_DROP_FOLDER},
 
@@ -146,7 +146,7 @@ public:
 			* obs
 			*/
 
-			// .(@function(arg1), id, name, settings_jsonStr, hotkey_data_jsonStr)
+			// .(@function(arg1), @id, @name, @settings_jsonStr, @hotkey_data_jsonStr)
 			//	Creates an obs source, also returns back some information about the source you just created if you want it
 			//	Note that 'name' is also the guid of it, duplicates can't exist
 			//		Example arg1 = { "settings_jsonStr": "obs_data_get_full_json()", "audio_mixers": "obs_source_get_audio_mixers()", "deinterlace_mode": "obs_source_get_deinterlace_mode()", "deinterlace_field_order": "obs_source_get_deinterlace_field_order()" }
@@ -156,7 +156,7 @@ public:
 			//	Destroys an obs source with the name provided if it exists
 			{"obs_source_destroy", JS_OBS_SOURCE_DESTROY},
 
-			// .(@function(arg1), service, protocol, server, bool_use_auth, username, password, key)
+			// .(@function(arg1), @service, @protocol, @server, @bool_use_auth, @username, @password, @key)
 			//	Revises stream settings with the provided params
 			//		'service' can be "rtmp_custom" : "rtmp_common"
 			{"obs_set_stream_settings", JS_SET_STREAMSETTINGS},
@@ -181,7 +181,7 @@ public:
 			//	Stops the webserver
 			{"web_stopServer", JS_STOP_WEBSERVER},
 
-			// .(@function(arg1), url)
+			// .(@function(arg1), @url)
 			//	Launches their default browser with the URL supplied using ShellExecuteA, any errors returned are according to ShellExecuteA winapi doc
 			{"web_launchOSBrowserUrl", JS_LAUNCH_OS_BROWSER_URL},
 
