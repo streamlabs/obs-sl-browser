@@ -34,7 +34,13 @@ public:
 		JS_START_WEBSERVER,
 		JS_STOP_WEBSERVER,
 		JS_LAUNCH_OS_BROWSER_URL,
-		JS_GET_AUTH_TOKEN
+		JS_GET_AUTH_TOKEN,
+		JS_SET_CURRENT_SCENE,
+		JS_CREATE_SCENE,
+		JS_SCENE_ADD,
+		JS_SOURCE_GET_PROPERTIES,
+		JS_SOURCE_GET_SETTINGS,
+		JS_SOURCE_SET_SETTINGS,
 	};
 
 public:
@@ -164,6 +170,31 @@ public:
 			// .(@function(arg1))
 			//	Returns json of service, protocol, server, bool_use_auth, username, password, key
 			{"obs_get_stream_settings", JS_GET_STREAMSETTINGS},
+
+			// .(@function(arg1), @sceneName)
+			//	Performs 'obs_frontend_set_current_scene' on the scene in question
+			{"obs_set_current_scene", JS_SET_CURRENT_SCENE},
+
+			// .(@function(arg1), @sceneName)
+			//	Peforms literally obs_scene_create(sceneName) 
+			{"obs_create_scene", JS_CREATE_SCENE},
+
+			// .(@function(arg1), @sceneName, @sourceName)
+			//	Peforms literally obs_scene_add(sceneName, sourceName)
+			{"obs_scene_add", JS_SCENE_ADD},
+
+			// .(@function(arg1)
+			//	Not yet implemented
+			{"obs_source_get_properties_json", JS_SOURCE_GET_PROPERTIES},
+
+			// .(@function(arg1), @sourceName)
+			//	Iterates the settings of a source and returns them as a json strong
+			//		Example arg1 = <settings>
+			{"obs_source_get_settings_json", JS_SOURCE_GET_SETTINGS},
+
+			// .(@function(arg1), @json_settings, @sourceName)
+			//	Applies the json data into the source settings
+			{"obs_source_set_settings_json", JS_SOURCE_GET_SETTINGS},
 
 			/***
 			* Web

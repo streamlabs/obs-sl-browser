@@ -145,6 +145,12 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	case JavascriptApi::JS_LAUNCH_OS_BROWSER_URL: JS_LAUNCH_OS_BROWSER_URL(jsonParams, jsonReturnStr); break;
 	case JavascriptApi::JS_DOCK_SWAP: JS_DOCK_SWAP(jsonParams, jsonReturnStr); break;
 	case JavascriptApi::JS_DESTROY_DOCK: JS_DESTROY_DOCK(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_SET_CURRENT_SCENE: JS_SET_CURRENT_SCENE(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_CREATE_SCENE: JS_CREATE_SCENE(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_SCENE_ADD: JS_SCENE_ADD(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_SOURCE_GET_PROPERTIES: JS_SOURCE_GET_PROPERTIES(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_SOURCE_GET_SETTINGS: JS_SOURCE_GET_SETTINGS(jsonParams, jsonReturnStr); break;
+	case JavascriptApi::JS_SOURCE_SET_SETTINGS: JS_SOURCE_SET_SETTINGS(jsonParams, jsonReturnStr); break;
 	}
 	
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
@@ -750,6 +756,170 @@ void PluginJsHandler::JS_DESTROY_DOCK(const Json &params, std::string &out_jsonR
 		mainWindow,
 		[mainWindow, objectName, &out_jsonReturn]() {
 			//obs_frontend_remove_dock(objectName.c_str());
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SOURCE_GET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string sourceName = param2Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, sourceName, &out_jsonReturn]() {
+			OBSSourceAutoRelease existingSource = obs_get_source_by_name(sourceName.c_str());
+			if (existingSource == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + sourceName}})).dump();
+				return;
+			}
+
+			obs_data_t *settingsSource = obs_source_get_settings(existingSource);
+			if (settingsSource == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Error getting settings from " + sourceName}})).dump();
+				return;
+			}
+
+			out_jsonReturn = Json(obs_data_get_json(settingsSource)).dump();
+			obs_data_release(settingsSource);
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SOURCE_SET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	std::string sourceName = param2Value.string_value();
+	std::string settingsJson = param3Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, sourceName, settingsJson, &out_jsonReturn]() {
+			OBSSourceAutoRelease existingSource = obs_get_source_by_name(sourceName.c_str());
+			if (existingSource == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + sourceName}})).dump();
+				return;
+			}
+
+			obs_data_t *newSettings = obs_data_create_from_json(settingsJson.c_str());
+			if (newSettings == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Error parsing settings JSON"}})).dump();
+				return;
+			}
+
+			obs_source_update(existingSource, newSettings);
+			obs_data_release(newSettings);
+
+			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+
+void PluginJsHandler::JS_SET_CURRENT_SCENE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string scene_name = param2Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, scene_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease source = obs_get_source_by_name(scene_name.c_str());
+			if (!source)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();			
+			else if (!obs_source_is_scene(source))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();			
+			else
+				obs_frontend_set_current_scene(source);
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SCENE_ADD(const json11::Json& params, std::string& out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			OBSSourceAutoRelease source = obs_get_source_by_name(source_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!source)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + source_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+
+				if (obs_scene_find_source(scene_obj, source_name.c_str()))
+				{
+					out_jsonReturn = Json(Json::object({{"error", "The source is already in the scene"}})).dump();
+					return;
+				}
+
+				obs_sceneitem_t *scene_item = obs_scene_add(scene_obj, source);
+				if (!scene_item)
+					out_jsonReturn = Json(Json::object({{"error", "Failed to add source to scene"}})).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SOURCE_GET_PROPERTIES(const json11::Json& params, std::string& out_jsonReturn)
+{
+	// oof
+}
+
+void PluginJsHandler::JS_CREATE_SCENE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string scene_name = param2Value.string_value();
+
+	if (scene_name.empty() || scene_name.size() > 1024)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid scene name " + scene_name}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, scene_name, &out_jsonReturn]() {
+			obs_scene_t *scene = obs_scene_create(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Failed to create scene."}})).dump();
 		},
 		Qt::BlockingQueuedConnection);
 }

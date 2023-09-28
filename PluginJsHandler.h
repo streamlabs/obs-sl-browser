@@ -56,6 +56,12 @@ private:
 	void JS_STOP_WEBSERVER(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SET_CURRENT_SCENE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_CREATE_SCENE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SCENE_ADD(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SOURCE_GET_PROPERTIES(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SOURCE_GET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SOURCE_SET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
 	
 	std::wstring getDownloadsDir() const;
 
