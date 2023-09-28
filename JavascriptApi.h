@@ -194,7 +194,7 @@ public:
 
 			// .(@function(arg1), @json_settings, @sourceName)
 			//	Applies the json data into the source settings
-			{"obs_source_set_settings_json", JS_SOURCE_GET_SETTINGS},
+			{"obs_source_set_settings_json", JS_SOURCE_SET_SETTINGS},
 
 			/***
 			* Web
