@@ -12,6 +12,12 @@
 #include "PluginJsHandler.h"
 #include "WebServer.h"
 
+#include <QMainWindow>
+#include <QMenuBar>
+#include <QMenu>
+#include <QAction>
+#include <QToolbar>
+
 PROCESS_INFORMATION g_browserProcessInfo;
 
 OBS_DECLARE_MODULE()
@@ -111,6 +117,12 @@ void obs_module_post_load(void)
 		blog(LOG_ERROR, "Streamlabs: obs_module_post_load can't start proxy process, GetLastError = %d", GetLastError());
 		return;
 	}
+
+	// Streamlabs button to toggle visibility
+	QMainWindow * window = (QMainWindow *)obs_frontend_get_main_window();
+	QAction *action = new QAction("Streamlabs", window);
+	QObject::connect(action, &QAction::triggered, [=]() { GrpcPlugin::instance().getClient()->send_windowToggleVisibility(); });
+	window->menuBar()->addAction(action);
 }
 
 void obs_module_unload(void)

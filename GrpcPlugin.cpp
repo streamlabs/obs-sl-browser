@@ -6,7 +6,7 @@
 
 /***
 * Server
-* Receiving messages from the proxy
+* Receiving messages from the browser
 */
 
 class grpc_plugin_objImpl final : public grpc_plugin_obj::Service
@@ -20,7 +20,7 @@ class grpc_plugin_objImpl final : public grpc_plugin_obj::Service
 
 /***
 * Client
-* Sending messages to the proxy
+* Sending messages to the browser
 */
 
 grpc_plugin_objClient::grpc_plugin_objClient(std::shared_ptr<grpc::Channel> channel) : stub_(grpc_proxy_obj::NewStub(channel))
@@ -37,6 +37,20 @@ bool grpc_plugin_objClient::send_executeCallback(const int functionId, const std
 	grpc_js_api_Reply reply;
 	grpc::ClientContext context;
 	grpc::Status status = stub_->com_grpc_js_executeCallback(&context, request, &reply);
+
+	if (!status.ok())
+		return m_connected = false;
+
+	return true;
+}
+
+bool grpc_plugin_objClient::send_windowToggleVisibility()
+{
+	grpc_window_toggleVisibility request;
+
+	grpc_empty_Reply reply;
+	grpc::ClientContext context;
+	grpc::Status status = stub_->com_grpc_window_toggleVisibility(&context, request, &reply);
 
 	if (!status.ok())
 		return m_connected = false;

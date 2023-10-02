@@ -28,6 +28,12 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 
 		return grpc::Status::OK;
 	}
+
+	grpc::Status com_grpc_window_toggleVisibility(grpc::ServerContext *context, const grpc_window_toggleVisibility *request, grpc_empty_Reply *response) override
+	{
+		SlBrowser::instance().m_widget->setHidden(!SlBrowser::instance().m_widget->isHidden());
+		return grpc::Status::OK;
+	}
 };
 
 /***

@@ -159,7 +159,8 @@ public:
 			{"obs_source_create", JS_OBS_SOURCE_CREATE},
 
 			// .(@function(arg1), name)
-			//	Destroys an obs source with the name provided if it exists
+			//	Destroys an obs source with the name provided if it exists via obs_source_remove(name)
+			//	NOTE: Can be used to destroy scenes/transition, as they are types of sources. In the case of scenes, obs_sceneitem_remove/obs_sceneitem_release on sources belonging to it akin to OSN scene remove
 			{"obs_source_destroy", JS_OBS_SOURCE_DESTROY},
 
 			// .(@function(arg1), @service, @protocol, @server, @bool_use_auth, @username, @password, @key)

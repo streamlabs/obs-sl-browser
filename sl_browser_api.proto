@@ -3,11 +3,13 @@ syntax = "proto3";
 service grpc_plugin_obj {
   rpc com_grpc_js_api (grpc_js_api_Request) returns (grpc_js_api_Reply) {}
   rpc com_grpc_js_executeCallback (grpc_js_api_ExecuteCallback) returns (grpc_js_api_Reply) {}
+  rpc com_grpc_window_toggleVisibility (grpc_window_toggleVisibility) returns (grpc_empty_Reply) {}
 }
 
 service grpc_proxy_obj {
   rpc com_grpc_js_api (grpc_js_api_Request) returns (grpc_js_api_Reply) {}
   rpc com_grpc_js_executeCallback (grpc_js_api_ExecuteCallback) returns (grpc_js_api_Reply) {}
+  rpc com_grpc_window_toggleVisibility (grpc_window_toggleVisibility) returns (grpc_empty_Reply) {}
 }
 
 // Client->
@@ -22,7 +24,17 @@ message grpc_js_api_ExecuteCallback {
 	string jsonstr = 2;
 }
 
+// Client->
+message grpc_window_toggleVisibility {
+	string empty = 1;
+}
+
 // Server->
 message grpc_js_api_Reply {
+	string empty = 1;
+}
+
+// Server->
+message grpc_empty_Reply {
 	string empty = 1;
 }
