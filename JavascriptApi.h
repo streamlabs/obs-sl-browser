@@ -46,7 +46,13 @@ public:
 		JS_GET_SCENE_COLLECTIONS,
 		JS_GET_CURRENT_SCENE_COLLECTION,
 		JS_SET_CURRENT_SCENE_COLLECTION,
-		JS_ADD_SCENE_COLLECTION,
+		JS_ADD_SCENE_COLLECTION,		
+		JS_SET_SCENEITEM_POS,
+		JS_SET_SCENEITEM_ROT,
+		JS_SET_SCENEITEM_CROP,
+		JS_SET_SCENEITEM_SCALE_FILTER,
+		JS_SET_SCENEITEM_BLENDING_MODE,
+		JS_SET_SCENEITEM_BLENDING_METHOD,
 	};
 
 public:
@@ -225,6 +231,39 @@ public:
 
 			// .(@function(arg1), @sceneName)
 			{"obs_add_scene_collection", JS_ADD_SCENE_COLLECTION},
+
+			// .(@function(arg1), @sceneName, @sourceName, @decimal_x, @decimal_y)
+			{"obs_sceneitem_set_pos", JS_SET_SCENEITEM_POS},
+
+			// .(@function(arg1), @sceneName, @sourceName, @decimal_rot)
+			{"obs_sceneitem_set_rot", JS_SET_SCENEITEM_ROT},
+
+			// .(@function(arg1), @sceneName, @sourceName, @int_left, @int_top, @int_right, @int_bottom)
+			{"obs_sceneitem_set_crop", JS_SET_SCENEITEM_CROP},
+
+			// .(@function(arg1), @sceneName, @sourceName, @int_scaleType)
+			//	OBS_SCALE_DISABLE = 1
+			//	OBS_SCALE_POINT = 2
+			//	OBS_SCALE_BICUBIC = 3
+			//	OBS_SCALE_BILINEAR = 4
+			//	OBS_SCALE_LANCZOS = 5
+			//	OBS_SCALE_AREA = 6
+			{"obs_sceneitem_set_scale_filter", JS_SET_SCENEITEM_SCALE_FILTER},
+
+			// .(@function(arg1), @sceneName, @sourceName, @int_blendingType)
+			//	OBS_BLEND_NORMAL = 1
+			//	OBS_BLEND_ADDITIVE = 2
+			//	OBS_BLEND_SUBTRACT = 3
+			//	OBS_BLEND_SCREEN = 4
+			//	OBS_BLEND_MULTIPLY = 5
+			//	OBS_BLEND_LIGHTEN = 6
+			//	OBS_BLEND_DARKEN = 7
+			{"obs_sceneitem_set_blending_mode", JS_SET_SCENEITEM_BLENDING_MODE},
+
+			// .(@function(arg1), @sceneName, @sourceName, @int_blendingMethod)
+			//	OBS_BLEND_METHOD_DEFAULT = 1
+			//	OBS_BLEND_METHOD_SRGB_OFF = 2
+			{"obs_sceneitem_set_blending_method", JS_SET_SCENEITEM_BLENDING_METHOD},
 
 			/***
 			* Web

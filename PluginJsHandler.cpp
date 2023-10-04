@@ -113,41 +113,54 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 
 	std::string jsonReturnStr;
 
-	switch (JavascriptApi::getFunctionId(funcName))
-	{
-	case JavascriptApi::JS_DOCK_EXECUTEJAVASCRIPT: JS_DOCK_EXECUTEJAVASCRIPT(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_DOCK_SETURL: JS_DOCK_SETURL(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_QUERY_DOCKS: JS_QUERY_DOCKS(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_DOWNLOAD_ZIP: JS_DOWNLOAD_ZIP(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_READ_FILE: JS_READ_FILE(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_DELETE_FILES: JS_DELETE_FILES(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_DROP_FOLDER: JS_DROP_FOLDER(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_QUERY_DOWNLOADS_FOLDER: JS_QUERY_DOWNLOADS_FOLDER(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_OBS_SOURCE_CREATE: JS_OBS_SOURCE_CREATE(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_OBS_SOURCE_DESTROY: JS_OBS_SOURCE_DESTROY(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_DOCK_NEW_BROWSER_DOCK: JS_DOCK_NEW_BROWSER_DOCK(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_GET_MAIN_WINDOW_GEOMETRY: JS_GET_MAIN_WINDOW_GEOMETRY(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_DOCK_SETAREA: JS_DOCK_SETAREA(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_DOCK_RESIZE: JS_DOCK_RESIZE(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_TOGGLE_USER_INPUT: JS_TOGGLE_USER_INPUT(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_TOGGLE_DOCK_VISIBILITY: JS_TOGGLE_DOCK_VISIBILITY(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_DOCK_SETTITLE: JS_DOCK_SETTITLE(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_DOCK_RENAME: JS_DOCK_RENAME(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_SET_STREAMSETTINGS: JS_SET_STREAMSETTINGS(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_GET_STREAMSETTINGS: JS_GET_STREAMSETTINGS(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_START_WEBSERVER: JS_START_WEBSERVER(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_STOP_WEBSERVER: JS_STOP_WEBSERVER(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_GET_AUTH_TOKEN: JS_GET_AUTH_TOKEN(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_LAUNCH_OS_BROWSER_URL: JS_LAUNCH_OS_BROWSER_URL(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_DOCK_SWAP: JS_DOCK_SWAP(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_DESTROY_DOCK: JS_DESTROY_DOCK(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_SET_CURRENT_SCENE: JS_SET_CURRENT_SCENE(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_CREATE_SCENE: JS_CREATE_SCENE(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_SCENE_ADD: JS_SCENE_ADD(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_SOURCE_GET_PROPERTIES: JS_SOURCE_GET_PROPERTIES(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_SOURCE_GET_SETTINGS: JS_SOURCE_GET_SETTINGS(jsonParams, jsonReturnStr); break;
-	case JavascriptApi::JS_SOURCE_SET_SETTINGS: JS_SOURCE_SET_SETTINGS(jsonParams, jsonReturnStr); break;
+	switch (JavascriptApi::getFunctionId(funcName)) {
+		case JavascriptApi::JS_QUERY_DOCKS: JS_QUERY_DOCKS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DOCK_EXECUTEJAVASCRIPT: JS_DOCK_EXECUTEJAVASCRIPT(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DOCK_SETURL: JS_DOCK_SETURL(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DOWNLOAD_ZIP: JS_DOWNLOAD_ZIP(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DOWNLOAD_FILE: JS_DOWNLOAD_FILE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_READ_FILE: JS_READ_FILE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DELETE_FILES: JS_DELETE_FILES(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DROP_FOLDER: JS_DROP_FOLDER(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_QUERY_DOWNLOADS_FOLDER: JS_QUERY_DOWNLOADS_FOLDER(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_SOURCE_CREATE: JS_OBS_SOURCE_CREATE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_SOURCE_DESTROY: JS_OBS_SOURCE_DESTROY(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DOCK_SETAREA: JS_DOCK_SETAREA(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DOCK_RESIZE: JS_DOCK_RESIZE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DOCK_NEW_BROWSER_DOCK: JS_DOCK_NEW_BROWSER_DOCK(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_MAIN_WINDOW_GEOMETRY: JS_GET_MAIN_WINDOW_GEOMETRY(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_TOGGLE_USER_INPUT: JS_TOGGLE_USER_INPUT(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_TOGGLE_DOCK_VISIBILITY: JS_TOGGLE_DOCK_VISIBILITY(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DOCK_SWAP: JS_DOCK_SWAP(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DESTROY_DOCK: JS_DESTROY_DOCK(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DOCK_RENAME: JS_DOCK_RENAME(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DOCK_SETTITLE: JS_DOCK_SETTITLE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_STREAMSETTINGS: JS_SET_STREAMSETTINGS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_STREAMSETTINGS: JS_GET_STREAMSETTINGS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_START_WEBSERVER: JS_START_WEBSERVER(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_STOP_WEBSERVER: JS_STOP_WEBSERVER(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_LAUNCH_OS_BROWSER_URL: JS_LAUNCH_OS_BROWSER_URL(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_AUTH_TOKEN: JS_GET_AUTH_TOKEN(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_CURRENT_SCENE: JS_SET_CURRENT_SCENE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_CREATE_SCENE: JS_CREATE_SCENE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SCENE_ADD: JS_SCENE_ADD(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SOURCE_GET_PROPERTIES: JS_SOURCE_GET_PROPERTIES(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SOURCE_GET_SETTINGS: JS_SOURCE_GET_SETTINGS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SOURCE_SET_SETTINGS: JS_SOURCE_SET_SETTINGS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_INSTALL_FONT: JS_INSTALL_FONT(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_SCENE_COLLECTIONS: JS_GET_SCENE_COLLECTIONS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_CURRENT_SCENE_COLLECTION: JS_GET_CURRENT_SCENE_COLLECTION(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_CURRENT_SCENE_COLLECTION: JS_SET_CURRENT_SCENE_COLLECTION(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_ADD_SCENE_COLLECTION: JS_ADD_SCENE_COLLECTION(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_SCENEITEM_POS: JS_SET_SCENEITEM_POS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_SCENEITEM_ROT: JS_SET_SCENEITEM_ROT(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_SCENEITEM_CROP: JS_SET_SCENEITEM_CROP(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_SCENEITEM_SCALE_FILTER: JS_SET_SCENEITEM_SCALE_FILTER(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_SCENEITEM_BLENDING_MODE: JS_SET_SCENEITEM_BLENDING_MODE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_SCENEITEM_BLENDING_METHOD: JS_SET_SCENEITEM_BLENDING_METHOD(jsonParams, jsonReturnStr); break;
+		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
+
 	
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
 
@@ -1455,4 +1468,281 @@ void PluginJsHandler::JS_ADD_SCENE_COLLECTION(const json11::Json &params, std::s
 		out_jsonReturn = Json(Json::object({{"error", "Obs function failed"}})).dump();
 	else
 		out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+}
+
+void PluginJsHandler::JS_SET_SCENEITEM_POS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
+	const auto &param5Value = params["param5"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+	float x = (float)param4Value.number_value();
+	float y = (float)param5Value.number_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, scene_name, source_name, x, y, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed find the source in that scene"}})).dump();
+					return;
+				}
+
+				vec2 pos;
+				pos.x = x;
+				pos.y = y;
+				obs_sceneitem_set_pos(scene_item, &pos);
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SET_SCENEITEM_ROT(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+	float rotation = (float)param4Value.number_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, rotation, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed find the source in that scene"}})).dump();
+					return;
+				}
+
+				obs_sceneitem_set_rot(scene_item, rotation);
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SET_SCENEITEM_CROP(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
+	const auto &param5Value = params["param5"];
+	const auto &param6Value = params["param6"];
+	const auto &param7Value = params["param7"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+	int left = param4Value.int_value();
+	int top = param5Value.int_value();
+	int right = param6Value.int_value();
+	int bottom = param7Value.int_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, left, top, right, bottom, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed find the source in that scene"}})).dump();
+					return;
+				}
+
+				struct obs_sceneitem_crop crop = {left, top, right, bottom};
+				obs_sceneitem_set_crop(scene_item, &crop);
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SET_SCENEITEM_SCALE_FILTER(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+	int scale_type = param4Value.int_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, scale_type, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed to find the source in that scene"}})).dump();
+					return;
+				}
+
+				obs_sceneitem_set_scale_filter(scene_item, (obs_scale_type)scale_type);
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SET_SCENEITEM_BLENDING_MODE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+	int blending_type = param4Value.int_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, blending_type, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed to find the source in that scene"}})).dump();
+					return;
+				}
+
+				obs_sceneitem_set_blending_mode(scene_item, (obs_blending_type)blending_type);
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SET_SCENEITEM_BLENDING_METHOD(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+	int blending_method = param4Value.int_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, blending_method, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed to find the source in that scene"}})).dump();
+					return;
+				}
+
+				// Assuming obs_sceneitem_set_blending_method exists and accepts an enum type for blending method.
+				obs_sceneitem_set_blending_method(scene_item, (obs_blending_method)blending_method);
+			}
+		},
+		Qt::BlockingQueuedConnection);
 }
