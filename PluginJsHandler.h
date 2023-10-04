@@ -74,13 +74,21 @@ private:
 	void JS_SET_SCENEITEM_SCALE_FILTER(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SET_SCENEITEM_BLENDING_MODE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SET_SCENEITEM_BLENDING_METHOD(const json11::Json &params, std::string &out_jsonReturn);
-
+	void JS_SET_SCALE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_SCENEITEM_POS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_SCENEITEM_ROT(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_SCENEITEM_CROP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_SCALE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_SCENEITEM_SCALE_FILTER(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_SCENEITEM_BLENDING_MODE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_SCENEITEM_BLENDING_METHOD(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SCENE_GET_SOURCES(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_QUERY_ALL_SOURCES(const json11::Json &params, std::string &out_jsonReturn);
+	
 	std::wstring getDownloadsDir() const;
 
 	std::mutex m_queueMtx;
 	std::atomic<bool> m_running = false;
 	std::vector<std::pair<std::string, std::string>> m_queudRequests;
 	std::thread m_workerThread;
-
-	std::map<std::string, obs_source_t *> m_sources;
 };

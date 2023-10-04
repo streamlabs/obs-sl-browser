@@ -40,6 +40,8 @@ public:
 		JS_SET_CURRENT_SCENE,
 		JS_CREATE_SCENE,
 		JS_SCENE_ADD,
+		JS_SCENE_GET_SOURCES,
+		JS_QUERY_ALL_SOURCES,
 		JS_SOURCE_GET_PROPERTIES,
 		JS_SOURCE_GET_SETTINGS,
 		JS_SOURCE_SET_SETTINGS,
@@ -53,6 +55,14 @@ public:
 		JS_SET_SCENEITEM_SCALE_FILTER,
 		JS_SET_SCENEITEM_BLENDING_MODE,
 		JS_SET_SCENEITEM_BLENDING_METHOD,
+		JS_SET_SCALE,				
+		JS_GET_SCENEITEM_POS,
+		JS_GET_SCENEITEM_ROT,
+		JS_GET_SCENEITEM_CROP,
+		JS_GET_SCENEITEM_SCALE_FILTER,
+		JS_GET_SCENEITEM_BLENDING_MODE,
+		JS_GET_SCENEITEM_BLENDING_METHOD,
+		JS_GET_SCALE,
 	};
 
 public:
@@ -205,6 +215,18 @@ public:
 			//	Peforms literally obs_scene_add(sceneName, sourceName)
 			{"obs_scene_add", JS_SCENE_ADD},
 
+			// .(@function(arg1), @sceneName)
+			//		Example arg1 = { "source_names": [] }
+			{"obs_scene_get_sources", JS_SCENE_GET_SOURCES},
+
+			// .(@function(arg1), @sceneName)
+			//	OBS_SOURCE_TYPE_INPUT = 0
+			//	OBS_SOURCE_TYPE_FILTER = 1
+			//	OBS_SOURCE_TYPE_TRANSITION = 2
+			//	OBS_SOURCE_TYPE_SCENE = 3
+			//		Example arg1 = [ { "name": ".", "type": 0 }, ... ]
+			{"obs_query_all_sources", JS_QUERY_ALL_SOURCES},
+				
 			// .(@function(arg1)
 			//	Not yet implemented
 			{"obs_source_get_properties_json", JS_SOURCE_GET_PROPERTIES},
@@ -217,7 +239,7 @@ public:
 			// .(@function(arg1), @json_settings, @sourceName)
 			//	Applies the json data into the source settings
 			{"obs_source_set_settings_json", JS_SOURCE_SET_SETTINGS},
-
+			
 			// .(@function(arg1))
 			//		Example arg1 = [{ "name": "..." },]
 			{"obs_get_scene_collections", JS_GET_SCENE_COLLECTIONS},
@@ -240,6 +262,9 @@ public:
 
 			// .(@function(arg1), @sceneName, @sourceName, @int_left, @int_top, @int_right, @int_bottom)
 			{"obs_sceneitem_set_crop", JS_SET_SCENEITEM_CROP},
+
+			// .(@function(arg1), @sceneName, @sourceName, @decimal_x, @decimal_y)
+			{"obs_sceneitem_set_scale", JS_SET_SCALE},
 
 			// .(@function(arg1), @sceneName, @sourceName, @int_scaleType)
 			//	OBS_SCALE_DISABLE = 1
@@ -264,6 +289,34 @@ public:
 			//	OBS_BLEND_METHOD_DEFAULT = 1
 			//	OBS_BLEND_METHOD_SRGB_OFF = 2
 			{"obs_sceneitem_set_blending_method", JS_SET_SCENEITEM_BLENDING_METHOD},
+
+			// .(@function(arg1), @sceneName, @sourceName)
+			//		Example arg1 = { "x": 0.0, "y": 0.0 }
+			{"obs_sceneitem_get_pos", JS_GET_SCENEITEM_POS},
+
+			// .(@function(arg1), @sceneName, @sourceName)
+			//		Example arg1 = { "rotation": 0.0 }
+			{"obs_sceneitem_get_rot", JS_GET_SCENEITEM_ROT},
+
+			// .(@function(arg1), @sceneName, @sourceName)
+			//		Example arg1 = { "left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0 }
+			{"obs_sceneitem_get_crop", JS_GET_SCENEITEM_CROP},
+
+			// .(@function(arg1), @sceneName, @sourceName)
+			//		Example arg1 = { "x": 0.0, "y": 0.0 }
+			{"obs_sceneitem_get_scale", JS_GET_SCALE},
+
+			// .(@function(arg1), @sceneName, @sourceName)
+			//		Example arg1 = { "scale_filter": 0 }
+			{"obs_sceneitem_get_scale_filter", JS_GET_SCENEITEM_SCALE_FILTER},
+
+			// .(@function(arg1), @sceneName, @sourceName)
+			//		Example arg1 = { "blending_mode": 0 }
+			{"obs_sceneitem_get_blending_mode", JS_GET_SCENEITEM_BLENDING_MODE},
+
+			// .(@function(arg1), @sceneName, @sourceName)
+			//		Example arg1 = { "blending_method": 0 }
+			{"obs_sceneitem_get_blending_method", JS_GET_SCENEITEM_BLENDING_METHOD},
 
 			/***
 			* Web

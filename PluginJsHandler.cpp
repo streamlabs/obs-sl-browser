@@ -158,10 +158,19 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_SET_SCENEITEM_SCALE_FILTER: JS_SET_SCENEITEM_SCALE_FILTER(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_BLENDING_MODE: JS_SET_SCENEITEM_BLENDING_MODE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_BLENDING_METHOD: JS_SET_SCENEITEM_BLENDING_METHOD(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_SCALE: JS_SET_SCALE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_SCENEITEM_POS: JS_GET_SCENEITEM_POS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_SCENEITEM_ROT: JS_GET_SCENEITEM_ROT(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_SCENEITEM_CROP: JS_GET_SCENEITEM_CROP(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_SCENEITEM_SCALE_FILTER: JS_GET_SCENEITEM_SCALE_FILTER(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_SCENEITEM_BLENDING_MODE: JS_GET_SCENEITEM_BLENDING_MODE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_SCENEITEM_BLENDING_METHOD: JS_GET_SCENEITEM_BLENDING_METHOD(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_SCALE: JS_GET_SCALE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SCENE_GET_SOURCES: JS_SCENE_GET_SOURCES(jsonParams, jsonReturnStr); break;	
+		case JavascriptApi::JS_QUERY_ALL_SOURCES: JS_QUERY_ALL_SOURCES(jsonParams, jsonReturnStr); break;			
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
-	
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
 
 	// We're done, send callback
@@ -835,7 +844,6 @@ void PluginJsHandler::JS_SOURCE_SET_SETTINGS(const json11::Json &params, std::st
 		Qt::BlockingQueuedConnection);
 }
 
-
 void PluginJsHandler::JS_SET_CURRENT_SCENE(const json11::Json &params, std::string &out_jsonReturn)
 {
 	const auto &param2Value = params["param2"];
@@ -1280,11 +1288,6 @@ void PluginJsHandler::JS_OBS_SOURCE_DESTROY(const Json &params, std::string &out
 			const auto &name = params["param2"].string_value();
 
 			OBSSourceAutoRelease src = obs_get_source_by_name(name.c_str());
-
-			auto itr = m_sources.find(name);
-
-			if (itr != m_sources.end())
-				m_sources.erase(itr);
 
 			if (src == nullptr)
 			{
@@ -1743,6 +1746,436 @@ void PluginJsHandler::JS_SET_SCENEITEM_BLENDING_METHOD(const json11::Json &param
 				// Assuming obs_sceneitem_set_blending_method exists and accepts an enum type for blending method.
 				obs_sceneitem_set_blending_method(scene_item, (obs_blending_method)blending_method);
 			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SET_SCALE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
+	const auto &param5Value = params["param5"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+	float x_scale = (float)param4Value.number_value();
+	float y_scale = (float)param5Value.number_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, x_scale, y_scale, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed to find the source in that scene"}})).dump();
+					return;
+				}
+
+				// Assuming obs_sceneitem_set_scale exists and can set x and y scale values.
+				vec2 scale = {x_scale, y_scale};
+				obs_sceneitem_set_scale(scene_item, &scale);
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_GET_SCENEITEM_POS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed to find the source in that scene"}})).dump();
+					return;
+				}
+
+				// Assuming obs_sceneitem_get_pos exists and retrieves x and y position values.
+				vec2 position;
+				obs_sceneitem_get_pos(scene_item, &position);
+				out_jsonReturn = Json(Json::object({{"x", position.x}, {"y", position.y}})).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_GET_SCENEITEM_ROT(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed to find the source in that scene"}})).dump();
+					return;
+				}
+
+				// Assuming obs_sceneitem_get_rot exists and retrieves the rotation value.
+				float rotation = obs_sceneitem_get_rot(scene_item);
+				out_jsonReturn = Json(Json::object({{"rotation", rotation}})).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_GET_SCENEITEM_CROP(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed to find the source in that scene"}})).dump();
+					return;
+				}
+
+				// Assuming obs_sceneitem_get_crop exists and retrieves the crop values.
+				obs_sceneitem_crop crop_values;
+				obs_sceneitem_get_crop(scene_item, &crop_values);
+
+				out_jsonReturn = Json(Json::object({{"left", crop_values.left}, {"right", crop_values.right}, {"top", crop_values.top}, {"bottom", crop_values.bottom}})).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_GET_SCALE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed to find the source in that scene"}})).dump();
+					return;
+				}
+
+				// Assuming obs_sceneitem_get_scale exists and retrieves the scale values.
+				vec2 scale_values;
+				obs_sceneitem_get_scale(scene_item, &scale_values);
+
+				out_jsonReturn = Json(Json::object({{"x", scale_values.x}, {"y", scale_values.y}})).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_GET_SCENEITEM_SCALE_FILTER(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed to find the source in that scene"}})).dump();
+					return;
+				}
+
+				// Assuming obs_sceneitem_get_scale_filter exists and retrieves the scale filter value.
+				int scale_filter = static_cast<int>(obs_sceneitem_get_scale_filter(scene_item));
+				out_jsonReturn = Json(Json::object({{"scale_filter", scale_filter}})).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_GET_SCENEITEM_BLENDING_MODE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed to find the source in that scene"}})).dump();
+					return;
+				}
+
+				// Assuming obs_sceneitem_get_blending_mode exists and retrieves the blending mode value.
+				int blending_mode = static_cast<int>(obs_sceneitem_get_blending_mode(scene_item));
+				out_jsonReturn = Json(Json::object({{"blending_mode", blending_mode}})).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_GET_SCENEITEM_BLENDING_METHOD(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed to find the source in that scene"}})).dump();
+					return;
+				}
+
+				// Assuming obs_sceneitem_get_blending_method exists and retrieves the blending method value.
+				int blending_method = static_cast<int>(obs_sceneitem_get_blending_method(scene_item));
+				out_jsonReturn = Json(Json::object({{"blending_method", blending_method}})).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SCENE_GET_SOURCES(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string scene_name = param2Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+				return;
+			}
+			else if (!obs_source_is_scene(scene))
+			{
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+				return;
+			}
+
+			obs_scene_t *scene_obj = obs_scene_from_source(scene);
+
+			std::vector<std::string> source_names;
+
+			obs_scene_enum_items(
+				scene_obj,
+				[](obs_scene_t *, obs_sceneitem_t *item, void *param) {
+					OBSSourceAutoRelease source = obs_sceneitem_get_source(item);
+					if (source)
+					{
+						std::vector<std::string> *names = reinterpret_cast<std::vector<std::string> *>(param);
+						names->push_back(obs_source_get_name(source));
+					}
+					return true; 
+				},
+				&source_names);
+
+			out_jsonReturn = Json(Json::object({{"source_names", source_names}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_QUERY_ALL_SOURCES(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[&out_jsonReturn]() {
+			std::vector<json11::Json> sourcesList;
+
+			obs_enum_sources(
+				[](void *param, obs_source_t *source) -> bool {
+					std::vector<json11::Json> *sourcesList = reinterpret_cast<std::vector<json11::Json> *>(param);
+
+					json11::Json sourceInfo = json11::Json::object({{"name", obs_source_get_name(source)}, {"type", static_cast<int>(obs_source_get_type(source))}});
+
+					sourcesList->push_back(sourceInfo);
+					return true; // Continue enumeration
+				},
+				&sourcesList);
+
+			out_jsonReturn = json11::Json(sourcesList).dump();
 		},
 		Qt::BlockingQueuedConnection);
 }
