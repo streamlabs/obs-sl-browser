@@ -4,16 +4,14 @@
 #include "JavascriptApi.h"
 #include "GrpcPlugin.h"
 #include "WebServer.h"
-#include "deps/minizip/unzip.h"
+#include "Util.h"
 
 // Windows
-#include <wininet.h>
 #include <ShlObj.h>
 #include <shellapi.h>
 
 // Stl
 #include <chrono>
-#include <fstream>
 #include <functional>
 #include <codecvt>
 
@@ -28,8 +26,6 @@
 #include <QDockWidget>
 #include <QCheckBox>
 #include <QMessageBox>
-
-#pragma comment(lib, "wininet.lib")
 
 using namespace json11;
 
@@ -926,164 +922,6 @@ void PluginJsHandler::JS_CREATE_SCENE(const json11::Json &params, std::string &o
 
 void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonReturn)
 {
-	auto downloadFile = [](const std::string &url, const std::string &filename) {
-		HINTERNET connect = InternetOpenA("Streamlabs", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
-
-		if (!connect)
-			return false;
-
-		HINTERNET hOpenAddress = InternetOpenUrlA(connect, url.c_str(), NULL, 0, INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_KEEP_CONNECTION, 0);
-
-		if (!hOpenAddress)
-		{
-			InternetCloseHandle(connect);
-			return false;
-		}
-
-		DWORD contentLength;
-		DWORD contentLengthSize = sizeof(contentLength);
-		if (!HttpQueryInfo(hOpenAddress, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &contentLength, &contentLengthSize, NULL))
-		{
-			blog(LOG_ERROR, "JS_DOWNLOAD_ZIP: HttpQueryInfo failed, last error = %d\n", GetLastError());
-			InternetCloseHandle(hOpenAddress);
-			InternetCloseHandle(connect);
-			return false;
-		}
-
-		char dataReceived[4096];
-		DWORD numberOfBytesRead = 0;
-
-		std::ofstream outFile(filename, std::ios::binary);
-		if (!outFile.is_open())
-		{
-			blog(LOG_ERROR, "JS_DOWNLOAD_ZIP: Could not open std::ofstream outFile, last error = %d\n", GetLastError());
-			InternetCloseHandle(hOpenAddress);
-			InternetCloseHandle(connect);
-			return false;
-		}
-
-		DWORD totalBytesRead = 0;
-		while (InternetReadFile(hOpenAddress, dataReceived, 4096, &numberOfBytesRead) && numberOfBytesRead > 0)
-		{
-			outFile.write(dataReceived, numberOfBytesRead);
-			totalBytesRead += numberOfBytesRead;
-		}
-
-		outFile.close();
-		InternetCloseHandle(hOpenAddress);
-		InternetCloseHandle(connect);
-
-		if (totalBytesRead != contentLength)
-		{
-			blog(LOG_ERROR, "JS_DOWNLOAD_ZIP: Incomplete download, last error = %d\n", GetLastError());
-			std::remove(filename.c_str());
-			return false;
-		}
-
-		return true;
-	};
-
-	auto unzip = [](const std::string &filepath, std::vector<std::string> &output) {
-		unzFile zipFile = unzOpen(filepath.c_str());
-		if (!zipFile)
-		{
-			blog(LOG_ERROR, "Unable to open zip file: %s", filepath.c_str());
-			return;
-		}
-
-		std::filesystem::path outputDir = std::filesystem::path(filepath).parent_path();
-		char buffer[4096];
-
-		unz_global_info globalInfo;
-		if (unzGetGlobalInfo(zipFile, &globalInfo) != UNZ_OK)
-		{
-			blog(LOG_ERROR, "Could not read file global info: %s", filepath.c_str());
-			unzClose(zipFile);
-			return;
-		}
-
-		for (uLong i = 0; i < globalInfo.number_entry; ++i)
-		{
-			unz_file_info fileInfo;
-			char filename[256];
-			if (unzGetCurrentFileInfo(zipFile, &fileInfo, filename, 256, NULL, 0, NULL, 0) != UNZ_OK)
-			{
-				blog(LOG_ERROR, "Could not read file info: %s", filepath.c_str());
-				unzClose(zipFile);
-				return;
-			}
-
-			const std::string fullOutputPath = outputDir.string() + '/' + filename;
-
-			// If the file in the zip archive is a directory, continue to next file
-			if (filename[strlen(filename) - 1] == '/')
-			{
-				if ((i + 1) < globalInfo.number_entry)
-				{
-					if (unzGoToNextFile(zipFile) != UNZ_OK)
-					{
-						blog(LOG_ERROR, "Could not read next file: %s", filepath.c_str());
-						unzClose(zipFile);
-						return;
-					}
-				}
-				continue;
-			}
-
-			if (unzOpenCurrentFile(zipFile) != UNZ_OK)
-			{
-				blog(LOG_ERROR, "Could not open current file: %s", filepath.c_str());
-				unzClose(zipFile);
-				return;
-			}
-
-			// Create necessary directories
-			std::filesystem::path pathToFile(fullOutputPath);
-			if (fileInfo.uncompressed_size > 0)
-			{
-				std::filesystem::create_directories(pathToFile.parent_path());
-			}
-
-			std::ofstream outFile(fullOutputPath, std::ios::binary);
-			int error = UNZ_OK;
-			do
-			{
-				error = unzReadCurrentFile(zipFile, buffer, sizeof(buffer));
-				if (error < 0)
-				{
-					blog(LOG_ERROR, "Error %d with zipfile in unzReadCurrentFile: %s", error, filepath.c_str());
-					break;
-				}
-				if (error > 0)
-				{
-					outFile.write(buffer, error);
-				}
-			} while (error > 0);
-
-			outFile.close();
-
-			// Adding the file path to the output vector
-			output.push_back(fullOutputPath);
-
-			if (unzCloseCurrentFile(zipFile) != UNZ_OK)
-			{
-				blog(LOG_ERROR, "Could not close file: %s", filepath.c_str());
-			}
-
-			if ((i + 1) < globalInfo.number_entry)
-			{
-				if (unzGoToNextFile(zipFile) != UNZ_OK)
-				{
-					blog(LOG_ERROR, "Could not read next file: %s", filepath.c_str());
-					unzClose(zipFile);
-					return;
-				}
-			}
-		}
-
-		unzClose(zipFile);
-	};
-
 	const auto &param2Value = params["param2"];
 	std::string url = param2Value.string_value();
 	std::wstring folderPath = getDownloadsDir();
@@ -1110,22 +948,28 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 			return myconv.to_bytes(str);
 		};
 
-		if (downloadFile(url, wstring_to_utf8(zipFilepath)))
+		if (Util::DownloadFile(url, wstring_to_utf8(zipFilepath)))
 		{
 			std::vector<std::string> filepaths;
-			unzip(wstring_to_utf8(zipFilepath), filepaths);
 
-			// Build json string now
-			Json::array json_array;
-
-			for (const auto &filepath : filepaths)
+			if (Util::Unzip(wstring_to_utf8(zipFilepath), filepaths))
 			{
-				Json::object obj;
-				obj["path"] = filepath;
-				json_array.push_back(obj);
-			}
+				// Build json string now
+				Json::array json_array;
 
-			out_jsonReturn = Json(json_array).dump();
+				for (const auto &filepath : filepaths)
+				{
+					Json::object obj;
+					obj["path"] = filepath;
+					json_array.push_back(obj);
+				}
+
+				out_jsonReturn = Json(json_array).dump();
+			}
+			else
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Unzip file failed"}})).dump();
+			}
 		}
 		else
 		{
@@ -1139,6 +983,79 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 	{
 		out_jsonReturn = Json(Json::object({{"error", "File system can't access Local AppData folder"}})).dump();
 	}
+}
+
+void PluginJsHandler::JS_DOWNLOAD_FILE(const Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string url = param2Value.string_value();
+	std::string filename = param3Value.string_value();
+	std::wstring folderPath = getDownloadsDir();
+
+	if (filename.empty() || url.empty())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid params"}})).dump();
+		return;
+	}
+
+	auto wstring_to_utf8 = [](const std::wstring &str) {
+		std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
+		return myconv.to_bytes(str);
+	};
+
+	auto utf8_to_wstring = [](const std::string &str) {
+		std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
+		return myconv.from_bytes(str);
+	};
+
+	if (!folderPath.empty())
+	{
+		using namespace std::chrono;
+
+		// Current time in miliseconds
+		system_clock::time_point now = system_clock::now();
+		auto duration = now.time_since_epoch();
+		auto millis = duration_cast<milliseconds>(duration).count();
+		std::wstring millis_str = std::to_wstring(millis);
+
+		// ThreadID + MsTime should be unique, same threaID within 1ms window is a statistical improbability
+		std::wstring subFolderPath = folderPath + L"\\" + std::to_wstring(GetCurrentThreadId()) + millis_str;
+		std::wstring downloadPath = subFolderPath + L"\\" + utf8_to_wstring(filename);
+
+		CreateDirectoryW(folderPath.c_str(), NULL);
+		CreateDirectoryW(subFolderPath.c_str(), NULL);
+
+		if (Util::DownloadFile(url, wstring_to_utf8(downloadPath)))
+			out_jsonReturn = Json(Json::object({{"path", downloadPath}})).dump();
+		else
+			out_jsonReturn = Json(Json::object({{"error", "Http download file failed"}})).dump();
+
+		// zip file itself not needed
+		::_wremove(downloadPath.c_str());
+	}
+	else
+	{
+		out_jsonReturn = Json(Json::object({{"error", "File system can't access Local AppData folder"}})).dump();
+	}
+}
+
+void PluginJsHandler::JS_INSTALL_FONT(const json11::Json& params, std::string& out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string filepath = param2Value.string_value();
+
+	if (filepath.empty())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid param"}})).dump();
+		return;
+	}
+
+	if (Util::InstallFont(filepath.c_str()))
+		out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+	else
+		out_jsonReturn = Json(Json::object({{"error", "WinApi AddFontResourceA failed"}})).dump();
 }
 
 void PluginJsHandler::JS_READ_FILE(const Json &params, std::string &out_jsonReturn)
@@ -1489,4 +1406,53 @@ void PluginJsHandler::loadSlabsBrowserDocks()
 		dock->setAllowedAreas(Qt::AllDockWidgetAreas);
 		dock->setWidget(browser);
 	}
+}
+
+void PluginJsHandler::JS_GET_SCENE_COLLECTIONS(const json11::Json& params, std::string& out_jsonReturn)
+{
+	char **scene_collections = obs_frontend_get_scene_collections();
+
+	std::vector<Json> result;
+
+	for (int i = 0; scene_collections[i] != nullptr; ++i)
+		result.push_back(Json::object{{"name", scene_collections[i]}});
+
+	// Convert the panelInfo vector to a Json object and dump string
+	Json ret = result;
+	out_jsonReturn = ret.dump();
+}
+
+void PluginJsHandler::JS_GET_CURRENT_SCENE_COLLECTION(const json11::Json &params, std::string &out_jsonReturn)
+{
+	Json ret = Json::object{{"name", obs_frontend_get_current_scene_collection()}};
+	out_jsonReturn = ret.dump();
+}
+
+void PluginJsHandler::JS_SET_CURRENT_SCENE_COLLECTION(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &name = params["param2"].string_value();
+
+	if (name.empty())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid param"}})).dump();
+		return;
+	}
+
+	obs_frontend_set_current_scene_collection(name.c_str());
+}
+
+void PluginJsHandler::JS_ADD_SCENE_COLLECTION(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &name = params["param2"].string_value();
+
+	if (name.empty())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid param"}})).dump();
+		return;
+	}
+
+	if (!obs_frontend_add_scene_collection(name.c_str()))
+		out_jsonReturn = Json(Json::object({{"error", "Obs function failed"}})).dump();
+	else
+		out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 }

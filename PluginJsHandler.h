@@ -34,6 +34,7 @@ private:
 	void JS_DOCK_EXECUTEJAVASCRIPT(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DOCK_SETURL(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DOWNLOAD_ZIP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DOWNLOAD_FILE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_READ_FILE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DELETE_FILES(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DROP_FOLDER(const json11::Json &params, std::string &out_jsonReturn);
@@ -62,7 +63,12 @@ private:
 	void JS_SOURCE_GET_PROPERTIES(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SOURCE_GET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SOURCE_SET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
-	
+	void JS_INSTALL_FONT(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_SCENE_COLLECTIONS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_CURRENT_SCENE_COLLECTION(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SET_CURRENT_SCENE_COLLECTION(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_ADD_SCENE_COLLECTION(const json11::Json &params, std::string &out_jsonReturn);
+
 	std::wstring getDownloadsDir() const;
 
 	std::mutex m_queueMtx;

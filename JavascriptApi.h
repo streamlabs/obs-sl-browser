@@ -13,6 +13,8 @@ public:
 		JS_DOCK_SETURL,
 		JS_QUERY_DOCKS,
 		JS_DOWNLOAD_ZIP,
+		JS_DOWNLOAD_FILE,
+		JS_INSTALL_FONT,
 		JS_READ_FILE,
 		JS_DELETE_FILES,
 		JS_DROP_FOLDER,
@@ -41,6 +43,10 @@ public:
 		JS_SOURCE_GET_PROPERTIES,
 		JS_SOURCE_GET_SETTINGS,
 		JS_SOURCE_SET_SETTINGS,
+		JS_GET_SCENE_COLLECTIONS,
+		JS_GET_CURRENT_SCENE_COLLECTION,
+		JS_SET_CURRENT_SCENE_COLLECTION,
+		JS_ADD_SCENE_COLLECTION,
 	};
 
 public:
@@ -130,6 +136,15 @@ public:
 			//		Example arg1 = [{ "path": "..." },]
 			{"fs_downloadZip", JS_DOWNLOAD_ZIP},
 
+			// .(@function(arg1), @url, @filename)
+			//	Downloads file, returning a filepath to it
+			//		Example arg1 = { "path": "..." }
+			{"fs_downloadFile", JS_DOWNLOAD_FILE},
+
+			// .(@function(arg1), @filepath)
+			//	Performs 'AddFontResourceA' from the WinApi to the filepath in question
+			{"fs_installFont", JS_INSTALL_FONT},
+			
 			// .(@function(arg1), @filepath)
 			//	Returns the contents of a file as a string. If the filesize is over 1mb this will return an error
 			//		Example arg1 = { "contents": "..." }
@@ -160,7 +175,7 @@ public:
 
 			// .(@function(arg1), name)
 			//	Destroys an obs source with the name provided if it exists via obs_source_remove(name)
-			//	NOTE: Can be used to destroy scenes/transition, as they are types of sources. In the case of scenes, obs_sceneitem_remove/obs_sceneitem_release on sources belonging to it akin to OSN scene remove
+			//	NOTE: Can be used to destroy scenes/transition/colletions, as they are types of sources. In the case of scenes or scene colletions, obs_sceneitem_remove/obs_sceneitem_release on sources belonging to it akin to OSN scene remove
 			{"obs_source_destroy", JS_OBS_SOURCE_DESTROY},
 
 			// .(@function(arg1), @service, @protocol, @server, @bool_use_auth, @username, @password, @key)
@@ -196,6 +211,20 @@ public:
 			// .(@function(arg1), @json_settings, @sourceName)
 			//	Applies the json data into the source settings
 			{"obs_source_set_settings_json", JS_SOURCE_SET_SETTINGS},
+
+			// .(@function(arg1))
+			//		Example arg1 = [{ "name": "..." },]
+			{"obs_get_scene_collections", JS_GET_SCENE_COLLECTIONS},
+
+			// .(@function(arg1))
+			//		Example arg1 = [{ "name": "..." }
+			{"obs_get_current_scene_collection", JS_GET_CURRENT_SCENE_COLLECTION},
+
+			// .(@function(arg1), @sceneName)
+			{"obs_set_current_scene_collection", JS_SET_CURRENT_SCENE_COLLECTION},
+
+			// .(@function(arg1), @sceneName)
+			{"obs_add_scene_collection", JS_ADD_SCENE_COLLECTION},
 
 			/***
 			* Web
