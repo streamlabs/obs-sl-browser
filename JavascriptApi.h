@@ -63,6 +63,8 @@ public:
 		JS_GET_SCENEITEM_BLENDING_MODE,
 		JS_GET_SCENEITEM_BLENDING_METHOD,
 		JS_GET_SCALE,
+		JS_GET_SOURCE_DIMENSIONS,
+		JS_GET_CANVAS_DIMENSIONS
 	};
 
 public:
@@ -219,7 +221,7 @@ public:
 			//		Example arg1 = { "source_names": [] }
 			{"obs_scene_get_sources", JS_SCENE_GET_SOURCES},
 
-			// .(@function(arg1), @sceneName)
+			// .(@function(arg1))
 			//	OBS_SOURCE_TYPE_INPUT = 0
 			//	OBS_SOURCE_TYPE_FILTER = 1
 			//	OBS_SOURCE_TYPE_TRANSITION = 2
@@ -318,6 +320,14 @@ public:
 			//		Example arg1 = { "blending_method": 0 }
 			{"obs_sceneitem_get_blending_method", JS_GET_SCENEITEM_BLENDING_METHOD},
 
+			// .(@function(arg1), @sourceName)
+			//		Example arg1 = { "width": 0, "height": 0 }
+			{"obs_source_get_dimensions", JS_GET_SOURCE_DIMENSIONS},
+
+			// .(@function(arg1))
+			//		Example arg1 = { "width": 0, "height": 0 }
+			{"obs_canvas_get_dimensions", JS_GET_CANVAS_DIMENSIONS},
+			
 			/***
 			* Web
 			*/

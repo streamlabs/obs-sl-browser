@@ -167,7 +167,9 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_GET_SCENEITEM_BLENDING_METHOD: JS_GET_SCENEITEM_BLENDING_METHOD(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_GET_SCALE: JS_GET_SCALE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SCENE_GET_SOURCES: JS_SCENE_GET_SOURCES(jsonParams, jsonReturnStr); break;	
-		case JavascriptApi::JS_QUERY_ALL_SOURCES: JS_QUERY_ALL_SOURCES(jsonParams, jsonReturnStr); break;			
+		case JavascriptApi::JS_QUERY_ALL_SOURCES: JS_QUERY_ALL_SOURCES(jsonParams, jsonReturnStr); break;		
+		case JavascriptApi::JS_GET_SOURCE_DIMENSIONS: JS_GET_SOURCE_DIMENSIONS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_CANVAS_DIMENSIONS: JS_GET_CANVAS_DIMENSIONS(jsonParams,jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -1933,6 +1935,32 @@ void PluginJsHandler::JS_GET_SCENEITEM_CROP(const json11::Json &params, std::str
 		Qt::BlockingQueuedConnection);
 }
 
+void PluginJsHandler::JS_GET_SOURCE_DIMENSIONS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string source_name = param2Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease source = obs_get_source_by_name(source_name.c_str());
+			if (!source)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find a source with name " + source_name}})).dump();
+				return;
+			}
+
+			uint32_t width = obs_source_get_width(source);
+			uint32_t height = obs_source_get_height(source);
+
+			out_jsonReturn = Json(Json::object({{"width", static_cast<int>(width)}, {"height", static_cast<int>(height)}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+
 void PluginJsHandler::JS_GET_SCALE(const json11::Json &params, std::string &out_jsonReturn)
 {
 	const auto &param2Value = params["param2"];
@@ -2176,6 +2204,28 @@ void PluginJsHandler::JS_QUERY_ALL_SOURCES(const json11::Json &params, std::stri
 				&sourcesList);
 
 			out_jsonReturn = json11::Json(sourcesList).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[&out_jsonReturn]() {
+			obs_video_info ovi;
+			if (obs_get_video_info(&ovi))
+			{
+				uint32_t canvas_width = ovi.base_width;
+				uint32_t canvas_height = ovi.base_height;
+				out_jsonReturn = Json(Json::object({{"width", static_cast<int>(canvas_width)}, {"height", static_cast<int>(canvas_height)}})).dump();
+			}
+			else
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Failed to get canvas dimensions"}})).dump();
+			}
 		},
 		Qt::BlockingQueuedConnection);
 }
