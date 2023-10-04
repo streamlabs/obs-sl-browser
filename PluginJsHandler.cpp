@@ -141,6 +141,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_STOP_WEBSERVER: JS_STOP_WEBSERVER(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_LAUNCH_OS_BROWSER_URL: JS_LAUNCH_OS_BROWSER_URL(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_GET_AUTH_TOKEN: JS_GET_AUTH_TOKEN(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_CLEAR_AUTH_TOKEN: JS_CLEAR_AUTH_TOKEN(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_CURRENT_SCENE: JS_SET_CURRENT_SCENE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_CREATE_SCENE: JS_CREATE_SCENE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SCENE_ADD: JS_SCENE_ADD(jsonParams, jsonReturnStr); break;
@@ -172,7 +173,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_GET_CANVAS_DIMENSIONS: JS_GET_CANVAS_DIMENSIONS(jsonParams,jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
-
+		
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
 
 	// We're done, send callback
@@ -245,9 +246,15 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 	}
 }
 
-void PluginJsHandler::JS_GET_AUTH_TOKEN(const json11::Json& params, std::string& out_jsonReturn)
+void PluginJsHandler::JS_GET_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn)
 {
 	out_jsonReturn = Json(Json::object{{"token", WebServer::instance().getToken()}}).dump();
+}
+
+void PluginJsHandler::JS_CLEAR_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn)
+{
+	WebServer::instance().clearToken();
+	out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 }
 
 void PluginJsHandler::JS_GET_STREAMSETTINGS(const json11::Json &params, std::string &out_jsonReturn)

@@ -47,6 +47,12 @@ std::string WebServer::getToken()
 	return m_token;
 }
 
+void WebServer::clearToken()
+{
+	std::lock_guard<std::mutex> grd(m_tokenMtx);
+	m_token.clear();
+}
+
 void WebServer::workerThread()
 {
 	WSADATA wsaData;

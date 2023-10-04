@@ -13,8 +13,8 @@ public:
 	void setRedirectUrl(const std::string &url) { m_redirectUrl = url; }
 	void setExpectedReferer(const std::string &uri) { m_expectedReferer = uri; }
 	const std::string getErr() const { return m_err; }
-
 	std::string getToken();
+	void clearToken();
 
 public:
 	static WebServer& instance()

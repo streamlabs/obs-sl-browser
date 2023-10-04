@@ -37,6 +37,7 @@ public:
 		JS_STOP_WEBSERVER,
 		JS_LAUNCH_OS_BROWSER_URL,
 		JS_GET_AUTH_TOKEN,
+		JS_CLEAR_AUTH_TOKEN,
 		JS_SET_CURRENT_SCENE,
 		JS_CREATE_SCENE,
 		JS_SCENE_ADD,
@@ -351,6 +352,9 @@ public:
 			// .(@function(arg1))
 			//		Example arg1 = { "token": "." }
 			{"web_getAuthToken", JS_GET_AUTH_TOKEN},
+
+			// .(@function(arg1))
+			{"web_clearAuthToken", JS_CLEAR_AUTH_TOKEN},
 		};
 
 		return names;

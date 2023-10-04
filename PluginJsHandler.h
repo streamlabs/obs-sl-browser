@@ -86,7 +86,8 @@ private:
 	void JS_QUERY_ALL_SOURCES(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_SOURCE_DIMENSIONS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::string &out_jsonReturn);
-	
+	void JS_CLEAR_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn);
+
 	std::wstring getDownloadsDir() const;
 
 	std::mutex m_queueMtx;
