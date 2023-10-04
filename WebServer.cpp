@@ -77,7 +77,7 @@ void WebServer::workerThread()
 	std::string portStr = m_port == 0 ? "0" : std::to_string(m_port);
 
 	// Resolve the local address and port to be used by the server
-	iResult = getaddrinfo(NULL, portStr.c_str(), &hints, &result);
+	iResult = getaddrinfo("127.0.0.1", portStr.c_str(), &hints, &result);
 	if (iResult != 0)
 	{
 		m_err = "getaddrinfo failed with error: " + std::to_string(iResult);
