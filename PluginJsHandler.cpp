@@ -1321,7 +1321,7 @@ void PluginJsHandler::JS_OBS_SOURCE_DESTROY(const Json &params, std::string &out
 
 			if (obs_source_get_type(src) == OBS_SOURCE_TYPE_TRANSITION)
 			{
-				obs_source_release(src);
+				obs_source_remove(src);
 			}
 			else if (obs_source_get_type(src) == OBS_SOURCE_TYPE_SCENE)
 			{
@@ -1346,7 +1346,7 @@ void PluginJsHandler::JS_OBS_SOURCE_DESTROY(const Json &params, std::string &out
 					obs_sceneitem_release(item);
 				}
 
-				obs_source_release(src);
+				obs_source_remove(src);
 			}
 			else
 			{
