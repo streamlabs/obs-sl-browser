@@ -5,8 +5,13 @@
 #include <QApplication>
 #include <QThread>
 #include <QToolTip>
-
 #include "GrpcBrowser.h"
+#include "JavascriptApi.h"
+#include "SlBrowser.h"
+
+#include <json11/json11.hpp>
+
+using namespace json11;
 
 inline bool BrowserClient::valid() const
 {
@@ -170,14 +175,62 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 	if (!valid())
 		return false;
 
-	RegisterCallback(input_args->GetInt(0), browser);
+	int funcid = input_args->GetInt(0);
 
-	if (!GrpcBrowser::instance().getClient()->send_js_api(name, cefListValueToJSONString(input_args)))
+	if (JavascriptApi::isBrowserFunctionName(name))
 	{
-		// todo; handle
-		abort();
-		return false;
+		std::string jsonOutput = "{}";
+
+		std::vector <CefRefPtr<CefValue>> argsWithoutFunc;
+
+		for (u_long l = 1; l < input_args->GetSize(); l++)
+			argsWithoutFunc.push_back(input_args->GetValue(l));
+
+		// Stuff done right here and now to the browser
+		// Put this into a sub function if it gets bigger
+		switch (JavascriptApi::getFunctionId(name))
+		{
+		case JavascriptApi::JS_QT_RESIZE_BROWSER:
+		{
+			if (argsWithoutFunc.size() < 2)
+			{
+				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+				break;
+			}
+
+			int w = argsWithoutFunc[0]->GetInt();
+			int h = argsWithoutFunc[1]->GetInt();
+
+			if (w < 200 || h < 200 || w > 8096 || h > 8096)
+			{
+				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+				break;
+			}
+
+			SlBrowser::instance().m_widget->resize(w, h);
+			break;
+		}
+		}
+
+		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
+		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
+		execute_args->SetInt(0, funcid);
+		execute_args->SetString(1, jsonOutput);
+
+		SendBrowserProcessMessage(browser, PID_RENDERER, msg);
 	}
+	else
+	{
+		RegisterCallback(funcid, browser);
+
+		if (!GrpcBrowser::instance().getClient()->send_js_api(name, cefListValueToJSONString(input_args)))
+		{
+			// todo; handle
+			abort();
+			return false;
+		}
+	}
+
 
 	return true;
 }

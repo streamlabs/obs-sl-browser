@@ -1,7 +1,8 @@
 #include "browser-app.hpp"
 #include "browser-version.h"
-#include <json11/json11.hpp>
 #include "JavascriptApi.h"
+
+#include <json11/json11.hpp>
 
 #include <windows.h>
 
@@ -58,8 +59,11 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 	globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
 	slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
 
-	for (auto &itr : JavascriptApi::getGlobalFunctionNames())
+	for (auto &itr : JavascriptApi::getPluginFunctionNames())
 		slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+
+	for (auto &itr : JavascriptApi::getBrowserFunctionNames())
+		slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);	
 }
 
 bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message)
@@ -72,13 +76,13 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
 
-		if (CefRefPtr<CefV8Value> callback = m_callbackMap[callbackID].first)
+		if (CefRefPtr<CefV8Value> function = m_callbackMap[callbackID].first)
 		{
 			CefRefPtr<CefV8Context> context = m_callbackMap[callbackID].second;
 
 			CefV8ValueList args;
 			args.push_back(CefV8Value::CreateString(jsonString));
-			callback->ExecuteFunctionWithContext(context, nullptr, args);
+			function->ExecuteFunctionWithContext(context, nullptr, args);
 
 			m_callbackMap.erase(callbackID);
 		}

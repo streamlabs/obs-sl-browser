@@ -39,6 +39,7 @@ public:
 		JS_GET_AUTH_TOKEN,
 		JS_CLEAR_AUTH_TOKEN,
 		JS_SET_CURRENT_SCENE,
+		JS_GET_CURRENT_SCENE,
 		JS_CREATE_SCENE,
 		JS_SCENE_ADD,
 		JS_SCENE_GET_SOURCES,
@@ -65,11 +66,14 @@ public:
 		JS_GET_SCENEITEM_BLENDING_METHOD,
 		JS_GET_SCALE,
 		JS_GET_SOURCE_DIMENSIONS,
-		JS_GET_CANVAS_DIMENSIONS
+		JS_GET_CANVAS_DIMENSIONS,
+		JS_QT_RESIZE_BROWSER
 	};
 
 public:
-	static std::map<std::string, JSFuncs> &getGlobalFunctionNames()
+
+	// Control over the plugin/OBS side
+	static std::map<std::string, JSFuncs> &getPluginFunctionNames()
 	{
 		// None of the api function belows are blocking, they return immediatelly, but can accept a function as arg1 thats invoked when work is complete, which should allow await/promise structure
 		static std::map<std::string, JSFuncs> names =
@@ -209,6 +213,10 @@ public:
 			// .(@function(arg1), @sceneName)
 			//	Performs 'obs_frontend_set_current_scene' on the scene in question
 			{"obs_set_current_scene", JS_SET_CURRENT_SCENE},
+
+			// .(@function(arg1))
+			//		Example arg1 = { "name": "." }
+			{"obs_get_current_scene", JS_GET_CURRENT_SCENE},
 
 			// .(@function(arg1), @sceneName)
 			//	Peforms literally obs_scene_create(sceneName) 
@@ -360,16 +368,50 @@ public:
 		return names;
 	}
 
+	// Control over our the browser
+	static std::map<std::string, JSFuncs> &getBrowserFunctionNames()
+	{
+		// None of the api function belows are blocking, they return immediatelly, but can accept a function as arg1 thats invoked when work is complete, which should allow await/promise structure
+		static std::map<std::string, JSFuncs> names =
+		{
+			/**
+			* Qt
+			*/
+			
+			// .(@function(arg1), x, y)
+			{"qt_resizeBrowser", JS_QT_RESIZE_BROWSER},
+		};
+
+		return names;
+	}
+
 	static bool isValidFunctionName(const std::string &str)
 	{
-		auto ref = getGlobalFunctionNames();
+		return isPluginFunctionName(str) || isBrowserFunctionName(str); 
+	}
+
+	static bool isPluginFunctionName(const std::string &str)
+	{
+		auto ref = getPluginFunctionNames();
+		return ref.find(str) != ref.end();
+	}
+
+	static bool isBrowserFunctionName(const std::string &str)
+	{
+		auto ref = getBrowserFunctionNames();
 		return ref.find(str) != ref.end();
 	}
 
 	static JSFuncs getFunctionId(const std::string &funcName)
 	{
-		auto ref = getGlobalFunctionNames();
+		auto ref = getPluginFunctionNames();
 		auto itr = ref.find(funcName);
+
+		if (itr != ref.end())
+			return itr->second;
+
+		ref = getBrowserFunctionNames();
+		itr = ref.find(funcName);
 
 		if (itr != ref.end())
 			return itr->second;

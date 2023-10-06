@@ -171,6 +171,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_QUERY_ALL_SOURCES: JS_QUERY_ALL_SOURCES(jsonParams, jsonReturnStr); break;		
 		case JavascriptApi::JS_GET_SOURCE_DIMENSIONS: JS_GET_SOURCE_DIMENSIONS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_GET_CANVAS_DIMENSIONS: JS_GET_CANVAS_DIMENSIONS(jsonParams,jsonReturnStr); break;
+		case JavascriptApi::JS_GET_CURRENT_SCENE: JS_GET_CURRENT_SCENE(jsonParams,jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 		
@@ -849,6 +850,20 @@ void PluginJsHandler::JS_SOURCE_SET_SETTINGS(const json11::Json &params, std::st
 			obs_data_release(newSettings);
 
 			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_GET_CURRENT_SCENE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, &out_jsonReturn]() {
+			OBSSourceAutoRelease current_scene_source = obs_frontend_get_current_scene();
+			out_jsonReturn = Json(Json::object({{"name", obs_source_get_name(current_scene_source)}})).dump();
 		},
 		Qt::BlockingQueuedConnection);
 }
