@@ -1325,6 +1325,30 @@ void PluginJsHandler::JS_OBS_SOURCE_DESTROY(const Json &params, std::string &out
 			}
 			else if (obs_source_get_type(src) == OBS_SOURCE_TYPE_SCENE)
 			{
+				// Function from obs ui
+				auto getSceneCount = []()
+				{
+					size_t ret;
+					auto sceneEnumProc = [](void *param, obs_source_t *scene) {
+						auto ret = static_cast<size_t *>(param);
+
+						if (obs_source_is_group(scene))
+							return true;
+
+						(*ret)++;
+						return true;
+					};
+
+					obs_enum_scenes(sceneEnumProc, &ret);
+					return ret;
+				};
+
+				if (getSceneCount() < 2)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "You cannot remove the last scene in the collection."}})).dump();
+					return;
+				}
+
 				blog(LOG_INFO, "Releasing scene %s", obs_source_get_name(src));
 				std::list<obs_sceneitem_t *> items;
 				auto cb = [](obs_scene_t *scene, obs_sceneitem_t *item, void *data) {
