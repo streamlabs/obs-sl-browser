@@ -1262,10 +1262,10 @@ void PluginJsHandler::JS_OBS_SOURCE_CREATE(const Json &params, std::string &out_
 			obs_data_t *settings = obs_data_create_from_json(settings_jsonStr.c_str());
 			obs_data_t *hotkeys = obs_data_create_from_json(hotkey_data_jsonStr.c_str());
 
+			obs_source_t *source = obs_source_create(id.c_str(), name.c_str(), settings, hotkeys);
+
 			obs_data_release(hotkeys);
 			obs_data_release(settings);
-
-			obs_source_t *source = obs_source_create(id.c_str(), name.c_str(), settings, hotkeys);
 
 			if (!source)
 			{
@@ -1282,6 +1282,21 @@ void PluginJsHandler::JS_OBS_SOURCE_CREATE(const Json &params, std::string &out_
 
 			out_jsonReturn = jsonReturnValue.dump();
 			obs_data_release(settingsSource);
+						
+			OBSSourceAutoRelease scene = obs_frontend_get_current_scene();
+			obs_scene_t *scene_obj = obs_scene_from_source(scene);
+
+			if (obs_scene_find_source(scene_obj, name.c_str()))
+			{
+				out_jsonReturn = Json(Json::object({{"error", "The source is already in the scene"}})).dump();
+				return;
+			}
+
+			obs_sceneitem_t *scene_item = obs_scene_add(scene_obj, source);
+			if (!scene_item)
+				out_jsonReturn = Json(Json::object({{"error", "Failed to add source to scene"}})).dump();
+
+			obs_source_release(source);
 		},
 		Qt::BlockingQueuedConnection);
 }
