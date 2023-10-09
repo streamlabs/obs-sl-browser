@@ -11,6 +11,7 @@
 #include "GrpcPlugin.h"
 #include "PluginJsHandler.h"
 #include "WebServer.h"
+#include "ConsoleToggle.h"
 
 #include <QMainWindow>
 #include <QMenuBar>
@@ -29,12 +30,6 @@ MODULE_EXPORT const char *obs_module_description(void)
 
 bool obs_module_load(void)
 {
-	AllocConsole();
-	freopen("conin$", "r", stdin);
-	freopen("conout$", "w", stdout);
-	freopen("conout$", "w", stderr);
-	printf("Plugin loaded\n");
-
 	PluginJsHandler::instance().loadSlabsBrowserDocks();
 	return true;
 }

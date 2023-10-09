@@ -21,6 +21,7 @@
 #include "browser-version.h"
 #include "json11/json11.hpp"
 #include "cef-headers.hpp"
+#include "ConsoleToggle.h"
 
 #include <include/base/cef_callback.h>
 #include <include/wrapper/cef_closure_task.h>
@@ -40,17 +41,12 @@ SlBrowser::~SlBrowser() {}
 
 void SlBrowser::run(int argc, char *argv[])
 {
-	// todo: remove this
-	AllocConsole();
-	freopen("conin$", "r", stdin);
-	freopen("conout$", "w", stdout);
-	freopen("conout$", "w", stderr);
+	SpawnConsoleToggle();
 
 	if (argc < 4)
 	{
 		// todo: logging
 		printf("Not enough args.\n");
-		system("pause");
 		return;
 	}
 
@@ -233,6 +229,12 @@ void SlBrowser::DebugInputThread()
 
 	while (true)
 	{
+		if (GetConsoleWindow() == NULL)
+		{
+			::Sleep(1);
+			continue;
+		}
+
 		std::cout << "Enter URL: ";
 		std::cin >> url;
 
