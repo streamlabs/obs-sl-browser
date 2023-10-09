@@ -67,7 +67,10 @@ public:
 		JS_GET_SCALE,
 		JS_GET_SOURCE_DIMENSIONS,
 		JS_GET_CANVAS_DIMENSIONS,
-		JS_QT_RESIZE_BROWSER
+		JS_QT_RESIZE_BROWSER,
+		JS_OBS_BRING_FRONT,
+		JS_QT_BRING_FRONT,
+		JS_QT_SET_WINDOW_POSITION,
 	};
 
 public:
@@ -336,6 +339,9 @@ public:
 			// .(@function(arg1))
 			//		Example arg1 = { "width": 0, "height": 0 }
 			{"obs_canvas_get_dimensions", JS_GET_CANVAS_DIMENSIONS},
+
+			// .(@function(arg1))
+			{"obs_bring_front", JS_OBS_BRING_FRONT},
 			
 			/***
 			* Web
@@ -378,8 +384,14 @@ public:
 			* Qt
 			*/
 			
-			// .(@function(arg1), x, y)
+			// .(@function(arg1), x, y)`
 			{"qt_resizeBrowser", JS_QT_RESIZE_BROWSER},
+
+			// .(@function(arg1))`
+			{"qt_bringToFront", JS_QT_BRING_FRONT},
+
+			// .(@function(arg1), x, y)`
+			{"qt_setWindowPosition", JS_QT_SET_WINDOW_POSITION},
 		};
 
 		return names;

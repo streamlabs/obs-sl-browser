@@ -172,6 +172,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_GET_SOURCE_DIMENSIONS: JS_GET_SOURCE_DIMENSIONS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_GET_CANVAS_DIMENSIONS: JS_GET_CANVAS_DIMENSIONS(jsonParams,jsonReturnStr); break;
 		case JavascriptApi::JS_GET_CURRENT_SCENE: JS_GET_CURRENT_SCENE(jsonParams,jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_BRING_FRONT: JS_OBS_BRING_FRONT(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 		
@@ -852,6 +853,26 @@ void PluginJsHandler::JS_SOURCE_SET_SETTINGS(const json11::Json &params, std::st
 			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
 		},
 		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_BRING_FRONT(const json11::Json& params, std::string& out_jsonReturn)
+{
+	DWORD currentProcessId = GetCurrentProcessId();
+
+	EnumWindows(
+		[](HWND hWnd, LPARAM lParam) -> BOOL {
+			DWORD processId;
+			GetWindowThreadProcessId(hWnd, &processId);
+
+			if (processId == lParam)
+			{
+				// Bring this window to the front
+				SetForegroundWindow(hWnd);
+			}
+
+			return TRUE;
+		},
+		(LPARAM)currentProcessId);
 }
 
 void PluginJsHandler::JS_GET_CURRENT_SCENE(const json11::Json &params, std::string &out_jsonReturn)

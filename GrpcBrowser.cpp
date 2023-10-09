@@ -32,6 +32,13 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 	grpc::Status com_grpc_window_toggleVisibility(grpc::ServerContext *context, const grpc_window_toggleVisibility *request, grpc_empty_Reply *response) override
 	{
 		SlBrowser::instance().m_widget->setHidden(!SlBrowser::instance().m_widget->isHidden());
+
+		if (!SlBrowser::instance().m_widget->isHidden())
+		{
+			SlBrowser::instance().m_widget->raise();
+			SlBrowser::instance().m_widget->activateWindow();
+		}
+
 		return grpc::Status::OK;
 	}
 };

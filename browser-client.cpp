@@ -210,6 +210,26 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			SlBrowser::instance().m_widget->resize(w, h);
 			break;
 		}
+		case JavascriptApi::JS_QT_BRING_FRONT:
+		{
+			SlBrowser::instance().m_widget->raise();
+			SlBrowser::instance().m_widget->activateWindow();
+			break;
+		}
+		case JavascriptApi::JS_QT_SET_WINDOW_POSITION:
+		{
+			if (argsWithoutFunc.size() < 2)
+			{
+				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+				break;
+			}
+
+			int x = argsWithoutFunc[0]->GetInt();
+			int y = argsWithoutFunc[1]->GetInt();
+
+			SlBrowser::instance().m_widget->move(x, y);
+			break;
+		}
 		}
 
 		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");

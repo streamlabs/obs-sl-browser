@@ -102,7 +102,7 @@ void SlBrowser::CreateCefBrowser(int arg)
 	app.browserClient = new BrowserClient(false);
 
 	// TODO
-	CefString url = "streamlabs.com";
+	CefString url = "https://obs-plugin.streamlabs.dev";
 
 	// Now set the parent of the CEF browser to the QWidget
 	window_info.SetAsChild((HWND)app.m_widget->winId(), CefRect(0, 0, app.m_widget->width(), app.m_widget->height()));
