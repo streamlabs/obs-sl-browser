@@ -212,8 +212,9 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		}
 		case JavascriptApi::JS_QT_BRING_FRONT:
 		{
-			SlBrowser::instance().m_widget->raise();
-			SlBrowser::instance().m_widget->activateWindow();
+			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
+			ShowWindow(hwnd, SW_RESTORE);
+			SetForegroundWindow(hwnd);
 			break;
 		}
 		case JavascriptApi::JS_QT_SET_WINDOW_POSITION:

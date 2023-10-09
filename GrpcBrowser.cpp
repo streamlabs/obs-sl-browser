@@ -35,8 +35,9 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 
 		if (!SlBrowser::instance().m_widget->isHidden())
 		{
-			SlBrowser::instance().m_widget->raise();
-			SlBrowser::instance().m_widget->activateWindow();
+			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
+			ShowWindow(hwnd, SW_RESTORE);
+			SetForegroundWindow(hwnd);
 		}
 
 		return grpc::Status::OK;

@@ -864,9 +864,17 @@ void PluginJsHandler::JS_OBS_BRING_FRONT(const json11::Json& params, std::string
 			DWORD processId;
 			GetWindowThreadProcessId(hWnd, &processId);
 
-			if (processId == lParam)
+			// Get the title of the window
+			const int bufferSize = 256;
+			TCHAR windowTitle[bufferSize];
+			GetWindowText(hWnd, windowTitle, bufferSize);
+
+			std::wstring title(windowTitle);
+
+			// Check if the title starts with "OBS" and it's from our process
+			if (title.find(L"OBS") == 0 && processId == (DWORD)lParam)
 			{
-				// Bring this window to the front
+				ShowWindow(hWnd, SW_RESTORE);
 				SetForegroundWindow(hWnd);
 			}
 
