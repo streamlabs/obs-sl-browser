@@ -116,7 +116,12 @@ void obs_module_post_load(void)
 	// Streamlabs button to toggle visibility
 	QMainWindow * window = (QMainWindow *)obs_frontend_get_main_window();
 	QAction *action = new QAction("Streamlabs", window);
-	QObject::connect(action, &QAction::triggered, [=]() { GrpcPlugin::instance().getClient()->send_windowToggleVisibility(); });
+	QObject::connect(action, &QAction::triggered, [=]() {
+
+		// Has to be run in a seperate thread because bringing to foreground will take over input msg and we're in the middle of using it
+		std::thread([&]() { GrpcPlugin::instance().getClient()->send_windowToggleVisibility(); }).detach();
+	});
+
 	window->menuBar()->addAction(action);
 }
 

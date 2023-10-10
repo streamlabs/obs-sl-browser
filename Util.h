@@ -11,12 +11,36 @@
 
 namespace Util
 {
+	static void ForceForegroundWindow(HWND focusOnWindowHandle)
+	{
+		int style = GetWindowLong(focusOnWindowHandle, GWL_STYLE);
+
+		// Minimize and restore to be able to make it active.
+		if ((style & WS_MINIMIZE) == WS_MINIMIZE)
+			ShowWindow(focusOnWindowHandle, SW_RESTORE);
+
+		auto currentlyFocusedWindowProcessId = GetWindowThreadProcessId(GetForegroundWindow(), LPDWORD(0));
+		auto appThread = GetCurrentThreadId();
+
+		if (currentlyFocusedWindowProcessId != appThread)
+		{
+			AttachThreadInput(currentlyFocusedWindowProcessId, appThread, true);
+			BringWindowToTop(focusOnWindowHandle);
+			AttachThreadInput(currentlyFocusedWindowProcessId, appThread, false);
+		}
+
+		else
+		{
+			BringWindowToTop(focusOnWindowHandle);
+		}
+	}
+
 	static bool Unzip(const std::string &filepath, std::vector<std::string> &output)
 	{
 		unzFile zipFile = unzOpen(filepath.c_str());
 		if (!zipFile)
 		{
-			blog(LOG_ERROR, "Unzip: Unable to open zip file: %s", filepath.c_str());
+			//blog(LOG_ERROR, "Unzip: Unable to open zip file: %s", filepath.c_str());
 			return false;
 		}
 
@@ -26,7 +50,7 @@ namespace Util
 		unz_global_info globalInfo;
 		if (unzGetGlobalInfo(zipFile, &globalInfo) != UNZ_OK)
 		{
-			blog(LOG_ERROR, "Unzip: Could not read file global info: %s", filepath.c_str());
+			//blog(LOG_ERROR, "Unzip: Could not read file global info: %s", filepath.c_str());
 			unzClose(zipFile);
 			return false;
 		}
@@ -37,7 +61,7 @@ namespace Util
 			char filename[256];
 			if (unzGetCurrentFileInfo(zipFile, &fileInfo, filename, 256, NULL, 0, NULL, 0) != UNZ_OK)
 			{
-				blog(LOG_ERROR, "Unzip: Could not read file info: %s", filepath.c_str());
+				//blog(LOG_ERROR, "Unzip: Could not read file info: %s", filepath.c_str());
 				unzClose(zipFile);
 				return false;
 			}
@@ -51,7 +75,7 @@ namespace Util
 				{
 					if (unzGoToNextFile(zipFile) != UNZ_OK)
 					{
-						blog(LOG_ERROR, "Unzip: Could not read next file: %s", filepath.c_str());
+						//blog(LOG_ERROR, "Unzip: Could not read next file: %s", filepath.c_str());
 						unzClose(zipFile);
 						return false;
 					}
@@ -62,7 +86,7 @@ namespace Util
 
 			if (unzOpenCurrentFile(zipFile) != UNZ_OK)
 			{
-				blog(LOG_ERROR, "Unzip: Could not open current file: %s", filepath.c_str());
+				//blog(LOG_ERROR, "Unzip: Could not open current file: %s", filepath.c_str());
 				unzClose(zipFile);
 				return false;
 			}
@@ -79,7 +103,7 @@ namespace Util
 				error = unzReadCurrentFile(zipFile, buffer, sizeof(buffer));
 				if (error < 0)
 				{
-					blog(LOG_ERROR, "Unzip: Error %d with zipfile in unzReadCurrentFile: %s", error, filepath.c_str());
+					//blog(LOG_ERROR, "Unzip: Error %d with zipfile in unzReadCurrentFile: %s", error, filepath.c_str());
 					break;
 				}
 
@@ -94,13 +118,13 @@ namespace Util
 			output.push_back(fullOutputPath);
 
 			if (unzCloseCurrentFile(zipFile) != UNZ_OK)
-				blog(LOG_ERROR, "Unzip: Could not close file: %s", filepath.c_str());
+				//blog(LOG_ERROR, "Unzip: Could not close file: %s", filepath.c_str());
 
 			if ((i + 1) < globalInfo.number_entry)
 			{
 				if (unzGoToNextFile(zipFile) != UNZ_OK)
 				{
-					blog(LOG_ERROR, "Unzip: Could not read next file: %s", filepath.c_str());
+					//blog(LOG_ERROR, "Unzip: Could not read next file: %s", filepath.c_str());
 					unzClose(zipFile);
 					return false;
 				}
@@ -130,7 +154,7 @@ namespace Util
 		DWORD contentLengthSize = sizeof(contentLength);
 		if (!HttpQueryInfo(hOpenAddress, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &contentLength, &contentLengthSize, NULL))
 		{
-			blog(LOG_ERROR, "DownloadFile: HttpQueryInfo failed, last error = %d\n", GetLastError());
+			//blog(LOG_ERROR, "DownloadFile: HttpQueryInfo failed, last error = %d\n", GetLastError());
 			InternetCloseHandle(hOpenAddress);
 			InternetCloseHandle(connect);
 			return false;
@@ -142,7 +166,7 @@ namespace Util
 		std::ofstream outFile(filename, std::ios::binary);
 		if (!outFile.is_open())
 		{
-			blog(LOG_ERROR, "DownloadFile: Could not open std::ofstream outFile, last error = %d\n", GetLastError());
+			//blog(LOG_ERROR, "DownloadFile: Could not open std::ofstream outFile, last error = %d\n", GetLastError());
 			InternetCloseHandle(hOpenAddress);
 			InternetCloseHandle(connect);
 			return false;
@@ -161,7 +185,7 @@ namespace Util
 
 		if (totalBytesRead != contentLength)
 		{
-			blog(LOG_ERROR, "DownloadFile: Incomplete download, last error = %d\n", GetLastError());
+			//blog(LOG_ERROR, "DownloadFile: Incomplete download, last error = %d\n", GetLastError());
 			std::remove(filename.c_str());
 			return false;
 		}
@@ -177,7 +201,7 @@ namespace Util
 			return true;
 		}
 
-		blog(LOG_ERROR, "InstallFont: Failed, last error = %d\n", GetLastError());
+		//blog(LOG_ERROR, "InstallFont: Failed, last error = %d\n", GetLastError());
 		return false;
 	}
 

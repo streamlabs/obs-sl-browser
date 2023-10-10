@@ -857,27 +857,16 @@ void PluginJsHandler::JS_SOURCE_SET_SETTINGS(const json11::Json &params, std::st
 
 void PluginJsHandler::JS_OBS_BRING_FRONT(const json11::Json& params, std::string& out_jsonReturn)
 {
-	DWORD currentProcessId = GetCurrentProcessId();
+	DWORD currentProcessId = ::GetCurrentProcessId();
 
 	EnumWindows(
 		[](HWND hWnd, LPARAM lParam) -> BOOL {
 			DWORD processId;
-			GetWindowThreadProcessId(hWnd, &processId);
+			::GetWindowThreadProcessId(hWnd, &processId);
 
-			// Get the title of the window
-			const int bufferSize = 256;
-			TCHAR windowTitle[bufferSize];
-			GetWindowText(hWnd, windowTitle, bufferSize);
-
-			std::wstring title(windowTitle);
-
-			// Check if the title starts with "OBS" and it's from our process
-			if (title.find(L"OBS") == 0 && processId == (DWORD)lParam)
-			{
-				ShowWindow(hWnd, SW_RESTORE);
-				SetForegroundWindow(hWnd);
-			}
-
+			if (processId == (DWORD)lParam)
+				Util::ForceForegroundWindow(hWnd);
+			
 			return TRUE;
 		},
 		(LPARAM)currentProcessId);

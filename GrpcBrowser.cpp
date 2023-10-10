@@ -1,5 +1,6 @@
 #include "GrpcBrowser.h"
 #include "SlBrowser.h"
+#include "Util.h"
 
 #include <filesystem>
 
@@ -36,9 +37,8 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 		if (!SlBrowser::instance().m_widget->isHidden())
 		{
 			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
-			ShowWindow(hwnd, SW_RESTORE);
-			SetForegroundWindow(hwnd);
-		}
+			Util::ForceForegroundWindow(hwnd);
+		}								  	
 
 		return grpc::Status::OK;
 	}

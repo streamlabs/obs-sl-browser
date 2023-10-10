@@ -8,6 +8,7 @@
 #include "GrpcBrowser.h"
 #include "JavascriptApi.h"
 #include "SlBrowser.h"
+#include "Util.h"
 
 #include <json11/json11.hpp>
 
@@ -213,8 +214,11 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		case JavascriptApi::JS_QT_BRING_FRONT:
 		{
 			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
-			ShowWindow(hwnd, SW_RESTORE);
-			SetForegroundWindow(hwnd);
+
+			if (::IsIconic(hwnd))
+				::ShowWindow(hwnd, SW_RESTORE);
+
+			Util::ForceForegroundWindow(hwnd);
 			break;
 		}
 		case JavascriptApi::JS_QT_SET_WINDOW_POSITION:
