@@ -2274,8 +2274,12 @@ void PluginJsHandler::JS_QUERY_ALL_SOURCES(const json11::Json &params, std::stri
 			obs_enum_sources(
 				[](void *param, obs_source_t *source) -> bool {
 					std::vector<json11::Json> *sourcesList = reinterpret_cast<std::vector<json11::Json> *>(param);
-
-					json11::Json sourceInfo = json11::Json::object({{"name", obs_source_get_name(source)}, {"type", static_cast<int>(obs_source_get_type(source))}});
+					
+					json11::Json sourceInfo = json11::Json::object({
+						{"name", obs_source_get_name(source)},
+						{"type", static_cast<int>(obs_source_get_type(source))},
+						{"id", obs_source_get_id(source)},
+						});
 
 					sourcesList->push_back(sourceInfo);
 					return true; // Continue enumeration

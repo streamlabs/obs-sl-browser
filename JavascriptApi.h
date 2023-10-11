@@ -238,7 +238,7 @@ public:
 			//	OBS_SOURCE_TYPE_FILTER = 1
 			//	OBS_SOURCE_TYPE_TRANSITION = 2
 			//	OBS_SOURCE_TYPE_SCENE = 3
-			//		Example arg1 = [ { "name": ".", "type": 0 }, ... ]
+			//		Example arg1 = [ { "name": ".", "type": 0, "id": "." }, ... ]
 			{"obs_query_all_sources", JS_QUERY_ALL_SOURCES},
 				
 			// .(@function(arg1)
