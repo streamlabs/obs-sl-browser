@@ -976,9 +976,10 @@ void PluginJsHandler::JS_CREATE_SCENE(const json11::Json &params, std::string &o
 	QMetaObject::invokeMethod(
 		mainWindow,
 		[mainWindow, scene_name, &out_jsonReturn]() {
-			obs_scene_t *scene = obs_scene_create(scene_name.c_str());
+			OBSSceneAutoRelease scene = obs_scene_create(scene_name.c_str());
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Failed to create scene."}})).dump();
+						
 		},
 		Qt::BlockingQueuedConnection);
 }
