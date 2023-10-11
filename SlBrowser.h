@@ -18,6 +18,7 @@ public:
 	CefRefPtr<CefBrowser> m_browser = nullptr;
 	CefRefPtr<BrowserClient> browserClient = nullptr;
 	int32_t m_obs64_PIDt = 0;
+	bool m_allowHideBrowser = true;
 
 public:
 	static SlBrowser &instance()

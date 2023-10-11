@@ -235,6 +235,17 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			SlBrowser::instance().m_widget->move(x, y);
 			break;
 		}
+		case JavascriptApi::JS_QT_SET_ALLOW_HIDE_BROWSER:
+		{
+			if (argsWithoutFunc.size() < 1)
+			{
+				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+				break;
+			}
+
+			SlBrowser::instance().m_allowHideBrowser = argsWithoutFunc[0]->GetBool();
+			break;
+		}
 		}
 
 		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");

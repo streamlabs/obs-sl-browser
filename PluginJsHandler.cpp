@@ -173,6 +173,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_GET_CANVAS_DIMENSIONS: JS_GET_CANVAS_DIMENSIONS(jsonParams,jsonReturnStr); break;
 		case JavascriptApi::JS_GET_CURRENT_SCENE: JS_GET_CURRENT_SCENE(jsonParams,jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_BRING_FRONT: JS_OBS_BRING_FRONT(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_TOGGLE_HIDE_SELF: JS_OBS_TOGGLE_HIDE_SELF(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 		
@@ -853,6 +854,13 @@ void PluginJsHandler::JS_SOURCE_SET_SETTINGS(const json11::Json &params, std::st
 			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
 		},
 		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_TOGGLE_HIDE_SELF(const json11::Json& params, std::string& out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+	mainWindow->setHidden(param2Value.bool_value());
 }
 
 void PluginJsHandler::JS_OBS_BRING_FRONT(const json11::Json& params, std::string& out_jsonReturn)

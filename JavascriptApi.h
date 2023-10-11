@@ -71,6 +71,8 @@ public:
 		JS_OBS_BRING_FRONT,
 		JS_QT_BRING_FRONT,
 		JS_QT_SET_WINDOW_POSITION,
+		JS_OBS_TOGGLE_HIDE_SELF,
+		JS_QT_SET_ALLOW_HIDE_BROWSER,
 	};
 
 public:
@@ -342,7 +344,10 @@ public:
 
 			// .(@function(arg1))
 			{"obs_bring_front", JS_OBS_BRING_FRONT},
-			
+
+			// .(@function(arg1), @bool_hide)
+			{"obs_toggle_hide_self", JS_OBS_TOGGLE_HIDE_SELF},
+
 			/***
 			* Web
 			*/
@@ -392,6 +397,9 @@ public:
 
 			// .(@function(arg1), x, y)`
 			{"qt_setWindowPosition", JS_QT_SET_WINDOW_POSITION},
+
+			// .(@function(arg1), x, y)`
+			{"qt_setAllowHideBrowser", JS_QT_SET_ALLOW_HIDE_BROWSER},
 		};
 
 		return names;

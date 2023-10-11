@@ -26,7 +26,9 @@ SlBrowserWidget::SlBrowserWidget()
 void SlBrowserWidget::closeEvent(QCloseEvent *event) /*override*/
 {
 	event->ignore();
-	setHidden(true);
+
+	if (SlBrowser::instance().m_allowHideBrowser)
+		setHidden(true);
 }
 
 void SlBrowserWidget::resizeEvent(QResizeEvent *event) /*override*/
