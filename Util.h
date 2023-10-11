@@ -40,91 +40,78 @@ namespace Util
 		unzFile zipFile = unzOpen(filepath.c_str());
 		if (!zipFile)
 		{
-			//blog(LOG_ERROR, "Unzip: Unable to open zip file: %s", filepath.c_str());
+			// Failed to open the zip file
 			return false;
 		}
-
-		std::filesystem::path outputDir = std::filesystem::path(filepath).parent_path();
-		char buffer[4096];
 
 		unz_global_info globalInfo;
 		if (unzGetGlobalInfo(zipFile, &globalInfo) != UNZ_OK)
 		{
-			//blog(LOG_ERROR, "Unzip: Could not read file global info: %s", filepath.c_str());
 			unzClose(zipFile);
 			return false;
 		}
 
+		char buffer[4096]; // Adjust buffer size as needed
+
 		for (uLong i = 0; i < globalInfo.number_entry; ++i)
 		{
-			unz_file_info fileInfo;
 			char filename[256];
-			if (unzGetCurrentFileInfo(zipFile, &fileInfo, filename, 256, NULL, 0, NULL, 0) != UNZ_OK)
+			unz_file_info fileInfo;
+
+			if (unzGetCurrentFileInfo(zipFile, &fileInfo, filename, sizeof(filename), NULL, 0, NULL, 0) != UNZ_OK)
 			{
-				//blog(LOG_ERROR, "Unzip: Could not read file info: %s", filepath.c_str());
 				unzClose(zipFile);
 				return false;
 			}
 
-			const std::string fullOutputPath = outputDir.string() + '/' + filename;
+			std::filesystem::path fullOutputPath = std::filesystem::path(filepath).parent_path() / filename;
 
-			// If the file in the zip archive is a directory, continue to next file
 			if (filename[strlen(filename) - 1] == '/')
 			{
-				if ((i + 1) < globalInfo.number_entry)
+				// It's a directory
+				std::filesystem::create_directories(fullOutputPath);
+			}
+			else
+			{
+				// It's a file
+				if (unzOpenCurrentFile(zipFile) != UNZ_OK)
 				{
-					if (unzGoToNextFile(zipFile) != UNZ_OK)
+					unzClose(zipFile);
+					return false;
+				}
+
+				std::filesystem::create_directories(fullOutputPath.parent_path());
+				std::ofstream outFile(fullOutputPath, std::ios::binary);
+				int error = UNZ_OK;
+				do
+				{
+					error = unzReadCurrentFile(zipFile, buffer, sizeof(buffer));
+					if (error < 0)
 					{
-						//blog(LOG_ERROR, "Unzip: Could not read next file: %s", filepath.c_str());
+						unzCloseCurrentFile(zipFile);
 						unzClose(zipFile);
 						return false;
 					}
-				}
+					if (error > 0)
+					{
+						outFile.write(buffer, error);
+					}
+				} while (error > 0);
 
-				continue;
-			}
+				outFile.close();
+				output.push_back(fullOutputPath.string());
 
-			if (unzOpenCurrentFile(zipFile) != UNZ_OK)
-			{
-				//blog(LOG_ERROR, "Unzip: Could not open current file: %s", filepath.c_str());
-				unzClose(zipFile);
-				return false;
-			}
-
-			// Create necessary directories
-			std::filesystem::path pathToFile(fullOutputPath);
-			if (fileInfo.uncompressed_size > 0)
-				std::filesystem::create_directories(pathToFile.parent_path());
-			
-			std::ofstream outFile(fullOutputPath, std::ios::binary);
-			int error = UNZ_OK;
-			do
-			{
-				error = unzReadCurrentFile(zipFile, buffer, sizeof(buffer));
-				if (error < 0)
+				if (unzCloseCurrentFile(zipFile) != UNZ_OK)
 				{
-					//blog(LOG_ERROR, "Unzip: Error %d with zipfile in unzReadCurrentFile: %s", error, filepath.c_str());
-					break;
+					unzClose(zipFile);
+					return false;
 				}
-
-				if (error > 0)
-					outFile.write(buffer, error);
 			}
-			while (error > 0);
-
-			outFile.close();
-
-			// Adding the file path to the output vector
-			output.push_back(fullOutputPath);
-
-			if (unzCloseCurrentFile(zipFile) != UNZ_OK)
-				//blog(LOG_ERROR, "Unzip: Could not close file: %s", filepath.c_str());
 
 			if ((i + 1) < globalInfo.number_entry)
 			{
 				if (unzGoToNextFile(zipFile) != UNZ_OK)
 				{
-					//blog(LOG_ERROR, "Unzip: Could not read next file: %s", filepath.c_str());
 					unzClose(zipFile);
 					return false;
 				}
@@ -133,7 +120,7 @@ namespace Util
 
 		unzClose(zipFile);
 		return true;
-	};
+	}
 
 	static bool DownloadFile(const std::string &url, const std::string &filename)
 	{
