@@ -964,7 +964,227 @@ void PluginJsHandler::JS_SCENE_ADD(const json11::Json& params, std::string& out_
 
 void PluginJsHandler::JS_SOURCE_GET_PROPERTIES(const json11::Json& params, std::string& out_jsonReturn)
 {
-	// oof
+	const auto &param2Value = params["param2"];
+	std::string source_name = param2Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease existingSource = obs_get_source_by_name(source_name.c_str());
+
+			if (existingSource == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Source not found: " + source_name}})).dump();
+				return;
+			}
+
+			obs_properties_t *prp = obs_source_properties(existingSource);
+			obs_data_t *settings = obs_source_get_settings(existingSource);
+
+			Json::array jsonProperties;
+
+			const char *buf = nullptr;
+			for (obs_property_t *p = obs_properties_first(prp); (p != nullptr); obs_property_next(&p))
+			{
+				Json::object propJson;
+				const char *name = obs_property_name(p);
+
+				switch (obs_property_get_type(p))
+				{
+				case OBS_PROPERTY_BOOL:
+				{
+					propJson = {{name, obs_data_get_bool(settings, name)}};
+					break;
+				}
+				case OBS_PROPERTY_INT:
+				{
+					Json::object valueObj;
+					valueObj["type"] = "integer";
+					valueObj["value"] = (int)obs_data_get_int(settings, name);
+					valueObj["min"] = obs_property_int_min(p);
+					valueObj["max"] = obs_property_int_max(p);
+					valueObj["step"] = obs_property_int_step(p);
+					propJson[name] = valueObj;
+					break;
+				}
+				case OBS_PROPERTY_FLOAT:
+				{
+					Json::object valueObj = {{"type", "float"}, {"value", obs_data_get_double(settings, name)}, {"min", obs_property_float_min(p)}, {"max", obs_property_float_max(p)}, {"step", obs_property_float_step(p)}};
+					propJson[name] = valueObj;
+					break;
+				}
+				case OBS_PROPERTY_TEXT:
+				{
+					const char *valueBuf = obs_data_get_string(settings, name);
+					std::string value = valueBuf ? valueBuf : "";
+					Json::object valueObj = {{"type", "text"}, {"value", value}};
+					propJson[name] = valueObj;
+					break;
+				}
+				case OBS_PROPERTY_PATH: {
+					const char *valueBuf = obs_data_get_string(settings, name);
+					const char *filterBuf = obs_property_path_filter(p);
+					const char *defaultPathBuf = obs_property_path_default_path(p);
+
+					Json::object valueObj = {{"type", "path"}, {"value", valueBuf ? valueBuf : ""}, {"filter", filterBuf ? filterBuf : ""}, {"default_path", defaultPathBuf ? defaultPathBuf : ""}};
+					propJson[name] = valueObj;
+					break;
+				}
+				case OBS_PROPERTY_LIST:
+				{
+					enum ListType
+					{
+						InvalidListType,
+						Editable,
+						List,
+					};
+
+					enum Format
+					{
+						InvalidFormat,
+						Integer,
+						Float,
+						String,
+					};
+
+					Json::array itemsArray;
+					size_t items = obs_property_list_item_count(p);
+
+					ListType fieldType = ListType(obs_property_list_type(p));
+					Format format = Format(obs_property_list_format(p));
+
+					for (size_t idx = 0; idx < items; ++idx)
+					{
+						const char *itemBuf = obs_property_list_item_name(p, idx);
+						Json::object entry = {{"name", itemBuf ? itemBuf : ""}, {"enabled", !obs_property_list_item_disabled(p, idx)}};
+
+						switch (format)
+						{
+						case Format::Integer:
+							entry["value_int"] = (int)obs_property_list_item_int(p, idx);
+							break;
+						case Format::Float:
+							entry["value_float"] = obs_property_list_item_float(p, idx);
+							break;
+						case Format::String:
+							entry["value_string"] = (itemBuf = obs_property_list_item_string(p, idx)) ? itemBuf : "";
+							break;
+						}
+						itemsArray.push_back(entry);
+					}
+
+					Json::object listObj = {{"type", "list"},
+								{"field_type", static_cast<int>(fieldType)}, // Assuming you want to store the enum value
+								{"format", static_cast<int>(format)},
+								{"items", itemsArray}};
+
+					propJson[name] = listObj;
+					break;
+				}
+
+				case OBS_PROPERTY_COLOR_ALPHA:
+				case OBS_PROPERTY_COLOR:
+				{
+					propJson["type"] = "ColorProperty";
+					propJson["field_type"] = (int)obs_property_int_type(p);
+					propJson["value"] = (int)obs_data_get_int(settings, name);
+					break;
+				}
+				case OBS_PROPERTY_BUTTON:
+					propJson["type"] = "ButtonProperty";
+					break;
+				case OBS_PROPERTY_FONT:
+				{
+					obs_data_t *font_obj = obs_data_get_obj(settings, name);
+					propJson["type"] = "FontProperty";
+					propJson["face"] = (buf = obs_data_get_string(font_obj, "face")) != nullptr ? buf : "";
+					propJson["style"] = (buf = obs_data_get_string(font_obj, "style")) != nullptr ? buf : "";
+					propJson["path"] = (buf = obs_data_get_string(font_obj, "path")) != nullptr ? buf : "";
+					propJson["size"] = (int)obs_data_get_int(font_obj, "size");
+					propJson["flags"] = (int)obs_data_get_int(font_obj, "flags");
+					break;
+				}
+				case OBS_PROPERTY_EDITABLE_LIST:
+				{
+					propJson["type"] = "EditableListProperty";
+					propJson["field_type"] = int(obs_property_editable_list_type(p));
+					propJson["filter"] = (buf = obs_property_editable_list_filter(p)) != nullptr ? buf : "";
+					propJson["default_path"] = (buf = obs_property_editable_list_default_path(p)) != nullptr ? buf : "";
+
+					obs_data_array_t *array = obs_data_get_array(settings, name);
+					size_t count = obs_data_array_count(array);
+					json11::Json::array valuesArray;
+
+					for (size_t idx = 0; idx < count; ++idx)
+					{
+						obs_data_t *item = obs_data_array_item(array, idx);
+						valuesArray.push_back((buf = obs_data_get_string(item, "value")) != nullptr ? buf : "");
+					}
+					propJson["values"] = valuesArray;
+					break;
+				}
+
+				case OBS_PROPERTY_FRAME_RATE:
+				{
+					propJson["type"] = "FrameRateProperty";
+					size_t num_ranges = obs_property_frame_rate_fps_ranges_count(p);
+					json11::Json::array rangesArray;
+
+					for (size_t idx = 0; idx < num_ranges; idx++)
+					{
+						auto min = obs_property_frame_rate_fps_range_min(p, idx);
+						auto max = obs_property_frame_rate_fps_range_max(p, idx);
+
+						json11::Json::object minObj;
+						minObj["numerator"] = (int)min.numerator;
+						minObj["denominator"] = (int)min.denominator;
+
+						json11::Json::object maxObj;
+						maxObj["numerator"] = (int)max.numerator;
+						maxObj["denominator"] = (int)max.denominator;
+
+						json11::Json::object rangeObj;
+						rangeObj["minimum"] = minObj;
+						rangeObj["maximum"] = maxObj;
+
+						rangesArray.push_back(rangeObj);
+					}
+
+					propJson["ranges"] = rangesArray;
+
+					size_t num_options = obs_property_frame_rate_options_count(p);
+					json11::Json::array optionsArray;
+
+					for (size_t idx = 0; idx < num_options; idx++)
+					{
+						auto min = obs_property_frame_rate_fps_range_min(p, idx), max = obs_property_frame_rate_fps_range_max(p, idx);
+						json11::Json::object optionObj;
+
+						optionObj["name"] = (buf = obs_property_frame_rate_option_name(p, idx)) != nullptr ? buf : "";
+						optionObj["description"] = (buf = obs_property_frame_rate_option_description(p, idx)) != nullptr ? buf : "";
+
+						optionsArray.push_back(optionObj);
+					}
+					propJson["options"] = optionsArray;
+
+					media_frames_per_second fps = {};
+					if (obs_data_get_frames_per_second(settings, name, &fps, nullptr))
+						propJson["current_fps"] = json11::Json::object{{"numerator", (int)fps.numerator}, {"denominator", (int)fps.denominator}};
+
+					break;
+				}
+				}
+
+				jsonProperties.push_back(propJson);
+			}
+
+			Json output = jsonProperties;
+			out_jsonReturn = output.dump();
+		},
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::JS_CREATE_SCENE(const json11::Json &params, std::string &out_jsonReturn)
