@@ -7,6 +7,9 @@
 #include <vector>
 #include <sstream>
 #include <iomanip>
+#include <ShlObj.h>
+
+// Placeholder stuff
 
 namespace Util
 {
@@ -41,11 +44,18 @@ namespace Util
             << std::setw(2) << st.wMinute
             << std::setw(2) << st.wSecond << ".dmp";
 
-        std::string timestamp = oss.str();
-        std::string finalPath_FullDmp = "Crashes\\" + exeName + timestamp;
-        std::string finalPath_StackDmp = "Crashes\\" + exeName + "_stack_" + timestamp;
+	
+	char appdatapath[MAX_PATH];
+	std::string prefix = "Crashes\\";
 
-        std::filesystem::create_directory("Crashes");
+	if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appdatapath)))
+	    prefix = std::string(appdatapath) + "\\StreamlabsOBS\\Crashes\\";
+
+        std::string timestamp = oss.str();
+	std::string finalPath_FullDmp = prefix + exeName + timestamp;
+	std::string finalPath_StackDmp = prefix + exeName + "_stack_" + timestamp;
+
+        std::filesystem::create_directory(prefix);
 
         HANDLE hFileStackDmp = CreateFileA(finalPath_StackDmp.c_str(), GENERIC_WRITE, FILE_SHARE_READ, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
         HANDLE hFileFullDmp = CreateFileA(finalPath_FullDmp.c_str(), GENERIC_WRITE, FILE_SHARE_READ, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);

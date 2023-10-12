@@ -860,7 +860,15 @@ void PluginJsHandler::JS_OBS_TOGGLE_HIDE_SELF(const json11::Json& params, std::s
 {
 	const auto &param2Value = params["param2"];
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-	mainWindow->setHidden(param2Value.bool_value());
+	bool boolval = param2Value.bool_value();
+	
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, boolval, &out_jsonReturn]() {
+			mainWindow->setHidden(boolval);
+		},
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::JS_OBS_BRING_FRONT(const json11::Json& params, std::string& out_jsonReturn)
