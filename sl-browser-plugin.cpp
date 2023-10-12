@@ -12,7 +12,6 @@
 #include "PluginJsHandler.h"
 #include "WebServer.h"
 #include "ConsoleToggle.h"
-#include "MakeMinidump.h"
 
 #include <QMainWindow>
 #include <QMenuBar>
@@ -31,7 +30,6 @@ MODULE_EXPORT const char *obs_module_description(void)
 
 bool obs_module_load(void)
 {
-	::SetUnhandledExceptionFilter(Util::unhandledHandler);
 	PluginJsHandler::instance().loadSlabsBrowserDocks();
 	return true;
 }
