@@ -75,6 +75,7 @@ public:
 		JS_QT_SET_ALLOW_HIDE_BROWSER,
 		JS_OBS_ADD_TRANSITION,
 		JS_OBS_SET_CURRENT_TRANSITION,
+		JS_OBS_REMOVE_TRANSITION,
 	};
 
 public:
@@ -356,6 +357,9 @@ public:
 
 			// .(@function(arg1), @sourceName)
 			{"obs_set_current_transition", JS_OBS_SET_CURRENT_TRANSITION},
+
+			// .(@function(arg1), @sourceName)
+			{"obs_remove_transition", JS_OBS_REMOVE_TRANSITION},
 
 			/***
 			* Web

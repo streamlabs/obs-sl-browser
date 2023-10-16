@@ -177,6 +177,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_OBS_TOGGLE_HIDE_SELF: JS_OBS_TOGGLE_HIDE_SELF(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_ADD_TRANSITION: JS_OBS_ADD_TRANSITION(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_SET_CURRENT_TRANSITION: JS_OBS_SET_CURRENT_TRANSITION(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_REMOVE_TRANSITION: JS_OBS_REMOVE_TRANSITION(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 		
@@ -896,6 +897,65 @@ void PluginJsHandler::JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, 
 			obs_frontend_set_current_transition(transition);
 		},
 		Qt::BlockingQueuedConnection);	
+}
+
+void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string sourceName = param2Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, sourceName, &out_jsonReturn]() {
+			obs_frontend_source_list transitions = {};
+			obs_frontend_get_transitions(&transitions);
+
+			OBSSourceAutoRelease transition;
+			for (size_t i = 0; i < transitions.sources.num; i++)
+			{
+				obs_source_t *source = transitions.sources.array[i]; 
+				if (obs_source_get_name(source) == sourceName)
+				{
+					transition = obs_source_get_ref(source);
+					break;
+				}
+			}
+
+			obs_frontend_source_list_free(&transitions);
+
+			if (!transition)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find transition named " + sourceName}})).dump();
+				return;
+			}
+						
+			// TODO: OBS needs frontend support for this, I'm looking for their transitions widget and manipulating it here with duplicated code from the UI
+			QList<QWidget *> allWidgets = mainWindow->findChildren<QWidget *>();
+			foreach(QWidget * widget, allWidgets)
+			{
+				if (widget->objectName().toStdString() == "transitions")
+				{
+					QComboBox *transitions = (QComboBox *)widget;
+					int idx = transitions->findData(QVariant::fromValue<OBSSource>(transition.Get()));
+
+					if (idx == -1)
+					{
+						out_jsonReturn = Json(Json::object({{"Transition not found in Qt widget", true}})).dump();
+						return;
+					}
+
+					transitions->removeItem(idx);
+					out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+					return;
+				}
+			}
+
+			out_jsonReturn = Json(Json::object({{"error", "Unable to find transitions widget"}})).dump();	
+		},
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::JS_OBS_ADD_TRANSITION(const json11::Json& params, std::string& out_jsonReturn)

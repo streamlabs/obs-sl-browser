@@ -92,6 +92,7 @@ private:
 	void JS_OBS_TOGGLE_HIDE_SELF(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_ADD_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);
 
 	std::wstring getDownloadsDir() const;
 
