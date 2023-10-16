@@ -73,6 +73,8 @@ public:
 		JS_QT_SET_WINDOW_POSITION,
 		JS_OBS_TOGGLE_HIDE_SELF,
 		JS_QT_SET_ALLOW_HIDE_BROWSER,
+		JS_OBS_ADD_TRANSITION,
+		JS_OBS_SET_CURRENT_TRANSITION,
 	};
 
 public:
@@ -348,6 +350,13 @@ public:
 			// .(@function(arg1), @bool_hide)
 			{"obs_toggle_hide_self", JS_OBS_TOGGLE_HIDE_SELF},
 
+			// .(@function(arg1), @id, @sourceName)
+			//	@id must be correct or application will crash, ie "swipe_transition" is one example
+			{"obs_add_transition", JS_OBS_ADD_TRANSITION},
+
+			// .(@function(arg1), @sourceName)
+			{"obs_set_current_transition", JS_OBS_SET_CURRENT_TRANSITION},
+
 			/***
 			* Web
 			*/
@@ -374,6 +383,7 @@ public:
 
 			// .(@function(arg1))
 			{"web_clearAuthToken", JS_CLEAR_AUTH_TOKEN},
+
 		};
 
 		return names;

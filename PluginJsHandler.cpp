@@ -26,6 +26,7 @@
 #include <QDockWidget>
 #include <QCheckBox>
 #include <QMessageBox>
+#include <QComboBox>
 
 using namespace json11;
 
@@ -174,6 +175,8 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_GET_CURRENT_SCENE: JS_GET_CURRENT_SCENE(jsonParams,jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_BRING_FRONT: JS_OBS_BRING_FRONT(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_TOGGLE_HIDE_SELF: JS_OBS_TOGGLE_HIDE_SELF(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_ADD_TRANSITION: JS_OBS_ADD_TRANSITION(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_SET_CURRENT_TRANSITION: JS_OBS_SET_CURRENT_TRANSITION(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 		
@@ -852,6 +855,123 @@ void PluginJsHandler::JS_SOURCE_SET_SETTINGS(const json11::Json &params, std::st
 			obs_data_release(newSettings);
 
 			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string sourceName = param2Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, sourceName, &out_jsonReturn]() {
+
+			obs_frontend_source_list transitions = {};
+			obs_frontend_get_transitions(&transitions);
+
+			OBSSourceAutoRelease transition;
+			for (size_t i = 0; i < transitions.sources.num; i++)
+			{
+				obs_source_t *source = transitions.sources.array[i];
+				if (obs_source_get_name(source) == sourceName)
+				{
+					transition = obs_source_get_ref(source);
+					break;
+				}
+			}
+
+			obs_frontend_source_list_free(&transitions);
+
+			if (!transition)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find transition named " + sourceName}})).dump();
+				return;
+			}
+
+			obs_frontend_set_current_transition(transition);
+		},
+		Qt::BlockingQueuedConnection);	
+}
+
+void PluginJsHandler::JS_OBS_ADD_TRANSITION(const json11::Json& params, std::string& out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string sourceName = param2Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, sourceName, & out_jsonReturn]() {
+
+			obs_frontend_source_list transitions = {};
+			obs_frontend_get_transitions(&transitions);
+
+			OBSSourceAutoRelease transition;
+			for (size_t i = 0; i < transitions.sources.num; i++)
+			{
+				obs_source_t *source = transitions.sources.array[i];
+				if (obs_source_get_name(source) == sourceName)
+				{
+					transition = obs_source_get_ref(source);
+					break;
+				}
+			}
+
+			obs_frontend_source_list_free(&transitions);
+
+			if (transition != nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Transition already exists named " + sourceName}})).dump();
+				return;
+			}
+
+			// TODO: OBS needs frontend support for this, I'm looking for their transitions widget and manipulating it here with duplicated code from the UI
+			QList<QWidget *> allWidgets = mainWindow->findChildren<QWidget *>();
+			foreach(QWidget * widget, allWidgets)
+			{
+				if (widget->objectName().toStdString() == "transitions")
+				{
+					QComboBox *transitions = (QComboBox *)widget;
+					obs_source_t *source = obs_source_create_private("swipe_transition", sourceName.c_str(), NULL);
+
+					if (!source)
+					{
+						out_jsonReturn = Json(Json::object({{"error", "Failed to create the object"}})).dump();	
+						return;
+					}
+
+					auto onTransitionStop = [](void *data, calldata_t *) {
+						QMainWindow *window = (QMainWindow *)data;
+						QMetaObject::invokeMethod(window, "TransitionStopped", Qt::QueuedConnection);
+					};
+
+					auto onTransitionFullStop = [](void *data, calldata_t *) {
+						QMainWindow *window = (QMainWindow *)data;
+						QMetaObject::invokeMethod(window, "TransitionFullyStopped", Qt::QueuedConnection);
+					};
+
+					signal_handler_t *handler = obs_source_get_signal_handler(source);
+					signal_handler_connect(handler, "transition_video_stop", onTransitionStop, mainWindow);
+					signal_handler_connect(handler, "transition_stop", onTransitionFullStop, mainWindow);
+
+					transitions->addItem(sourceName.c_str(), QVariant::fromValue(OBSSource(source)));
+					//transitions->setCurrentIndex(transitions->count() - 1);
+
+					obs_source_release(source);
+
+					out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+					return;
+				}
+			}
+
+			out_jsonReturn = Json(Json::object({{"error", "Unable to find transitions widget"}})).dump();	
 		},
 		Qt::BlockingQueuedConnection);
 }
