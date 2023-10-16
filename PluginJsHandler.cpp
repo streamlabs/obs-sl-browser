@@ -961,14 +961,16 @@ void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::
 void PluginJsHandler::JS_OBS_ADD_TRANSITION(const json11::Json& params, std::string& out_jsonReturn)
 {
 	const auto &param2Value = params["param2"];
-	std::string sourceName = param2Value.string_value();
+	const auto &param3Value = params["param3"];
+	std::string id = param2Value.string_value();
+	std::string sourceName = param3Value.string_value();
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[mainWindow, sourceName, & out_jsonReturn]() {
+		[mainWindow, id, sourceName, &out_jsonReturn]() {
 
 			obs_frontend_source_list transitions = {};
 			obs_frontend_get_transitions(&transitions);
@@ -999,7 +1001,7 @@ void PluginJsHandler::JS_OBS_ADD_TRANSITION(const json11::Json& params, std::str
 				if (widget->objectName().toStdString() == "transitions")
 				{
 					QComboBox *transitions = (QComboBox *)widget;
-					obs_source_t *source = obs_source_create_private("swipe_transition", sourceName.c_str(), NULL);
+					obs_source_t *source = obs_source_create_private(id.c_str(), sourceName.c_str(), NULL);
 
 					if (!source)
 					{
