@@ -76,6 +76,8 @@ public:
 		JS_OBS_ADD_TRANSITION,
 		JS_OBS_SET_CURRENT_TRANSITION,
 		JS_OBS_REMOVE_TRANSITION,
+		JS_TRANSITION_GET_SETTINGS,
+		JS_TRANSITION_SET_SETTINGS,
 	};
 
 public:
@@ -360,6 +362,15 @@ public:
 
 			// .(@function(arg1), @sourceName)
 			{"obs_remove_transition", JS_OBS_REMOVE_TRANSITION},
+
+			// .(@function(arg1), @sourceName)
+			//	Iterates the settings of a source and returns them as a json strong
+			//		Example arg1 = <settings>
+			{"obs_transition_get_settings_json", JS_TRANSITION_GET_SETTINGS},
+
+			// .(@function(arg1), @json_settings, @sourceName)
+			//	Applies the json data into the source settings
+			{"obs_transition_set_settings_json", JS_TRANSITION_SET_SETTINGS},
 
 			/***
 			* Web

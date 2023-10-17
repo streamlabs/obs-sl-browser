@@ -93,6 +93,8 @@ private:
 	void JS_OBS_ADD_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_TRANSITION_GET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_TRANSITION_SET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
 
 	std::wstring getDownloadsDir() const;
 

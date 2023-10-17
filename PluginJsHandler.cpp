@@ -178,9 +178,11 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_OBS_ADD_TRANSITION: JS_OBS_ADD_TRANSITION(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_SET_CURRENT_TRANSITION: JS_OBS_SET_CURRENT_TRANSITION(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_REMOVE_TRANSITION: JS_OBS_REMOVE_TRANSITION(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_TRANSITION_GET_SETTINGS: JS_TRANSITION_GET_SETTINGS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_TRANSITION_SET_SETTINGS: JS_TRANSITION_SET_SETTINGS(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
-		
+
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
 
 	// We're done, send callback
@@ -853,6 +855,102 @@ void PluginJsHandler::JS_SOURCE_SET_SETTINGS(const json11::Json &params, std::st
 			}
 
 			obs_source_update(existingSource, newSettings);
+			obs_data_release(newSettings);
+
+			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_TRANSITION_GET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string sourceName = param2Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, sourceName, &out_jsonReturn]() {
+			obs_frontend_source_list transitions = {};
+			obs_frontend_get_transitions(&transitions);
+
+			OBSSourceAutoRelease transition;
+			for (size_t i = 0; i < transitions.sources.num; i++)
+			{
+				obs_source_t *source = transitions.sources.array[i];
+				if (obs_source_get_name(source) == sourceName)
+				{
+					transition = obs_source_get_ref(source);
+					break;
+				}
+			}
+
+			obs_frontend_source_list_free(&transitions);
+
+			if (!transition)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find transition named " + sourceName}})).dump();
+				return;
+			}
+
+			obs_data_t *settingsSource = obs_source_get_settings(transition);
+			if (settingsSource == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Error getting settings from " + sourceName}})).dump();
+				return;
+			}
+
+			out_jsonReturn = Json(obs_data_get_json(settingsSource)).dump();
+			obs_data_release(settingsSource);
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_TRANSITION_SET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	std::string sourceName = param2Value.string_value();
+	std::string settingsJson = param3Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, sourceName, settingsJson, &out_jsonReturn]() {
+			obs_frontend_source_list transitions = {};
+			obs_frontend_get_transitions(&transitions);
+
+			OBSSourceAutoRelease transition;
+			for (size_t i = 0; i < transitions.sources.num; i++)
+			{
+				obs_source_t *source = transitions.sources.array[i];
+				if (obs_source_get_name(source) == sourceName)
+				{
+					transition = obs_source_get_ref(source);
+					break;
+				}
+			}
+
+			obs_frontend_source_list_free(&transitions);
+
+			if (!transition)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find transition named " + sourceName}})).dump();
+				return;
+			}
+
+			obs_data_t *newSettings = obs_data_create_from_json(settingsJson.c_str());
+			if (newSettings == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Error parsing settings JSON"}})).dump();
+				return;
+			}
+
+			obs_source_update(transition, newSettings);
 			obs_data_release(newSettings);
 
 			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
