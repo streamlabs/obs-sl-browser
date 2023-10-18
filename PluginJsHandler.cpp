@@ -180,6 +180,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_OBS_REMOVE_TRANSITION: JS_OBS_REMOVE_TRANSITION(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_TRANSITION_GET_SETTINGS: JS_TRANSITION_GET_SETTINGS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_TRANSITION_SET_SETTINGS: JS_TRANSITION_SET_SETTINGS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_ENUM_SCENES: JS_ENUM_SCENES(jsonParams, jsonReturnStr); break;			
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -1492,6 +1493,14 @@ void PluginJsHandler::JS_CREATE_SCENE(const json11::Json &params, std::string &o
 	QMetaObject::invokeMethod(
 		mainWindow,
 		[mainWindow, scene_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease existing = obs_get_source_by_name(scene_name.c_str());
+
+			if (existing != nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Source with that name exists"}})).dump();
+				return;
+			}
+
 			OBSSceneAutoRelease scene = obs_scene_create(scene_name.c_str());
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Failed to create scene."}})).dump();
@@ -2775,6 +2784,35 @@ void PluginJsHandler::JS_SCENE_GET_SOURCES(const json11::Json &params, std::stri
 				&source_names);
 
 			out_jsonReturn = Json(Json::object({{"source_names", source_names}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_ENUM_SCENES(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[&out_jsonReturn]() {
+			std::vector<json11::Json> sourcesList;
+
+			obs_enum_scenes(
+				[](void *param, obs_source_t *source) -> bool {
+					std::vector<json11::Json> *sourcesList = reinterpret_cast<std::vector<json11::Json> *>(param);
+
+					json11::Json sourceInfo = json11::Json::object({
+						{"name", obs_source_get_name(source)},
+						{"type", static_cast<int>(obs_source_get_type(source))},
+						{"id", obs_source_get_id(source)},
+					});
+
+					sourcesList->push_back(sourceInfo);
+					return true; // Continue enumeration
+				},
+				&sourcesList);
+
+			out_jsonReturn = json11::Json(sourcesList).dump();
 		},
 		Qt::BlockingQueuedConnection);
 }

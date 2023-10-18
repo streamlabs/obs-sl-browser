@@ -44,6 +44,7 @@ public:
 		JS_SCENE_ADD,
 		JS_SCENE_GET_SOURCES,
 		JS_QUERY_ALL_SOURCES,
+		JS_QUERY_SCENES,
 		JS_SOURCE_GET_PROPERTIES,
 		JS_SOURCE_GET_SETTINGS,
 		JS_SOURCE_SET_SETTINGS,
@@ -78,6 +79,7 @@ public:
 		JS_OBS_REMOVE_TRANSITION,
 		JS_TRANSITION_GET_SETTINGS,
 		JS_TRANSITION_SET_SETTINGS,
+		JS_ENUM_SCENES
 	};
 
 public:
@@ -243,11 +245,17 @@ public:
 			// .(@function(arg1))
 			//	OBS_SOURCE_TYPE_INPUT = 0
 			//	OBS_SOURCE_TYPE_FILTER = 1
-			//	OBS_SOURCE_TYPE_TRANSITION = 2
-			//	OBS_SOURCE_TYPE_SCENE = 3
 			//		Example arg1 = [ { "name": ".", "type": 0, "id": "." }, ... ]
+			//
+			//	Tansition/scene are sources yet may not be a part of obs_enum_sources
+			//		OBS_SOURCE_TYPE_TRANSITION = 2
+			//		OBS_SOURCE_TYPE_SCENE = 3
 			{"obs_query_all_sources", JS_QUERY_ALL_SOURCES},
-				
+
+			// .(@function(arg1))
+			//		Example arg1 = [ { "name": ".", "type": 0, "id": "." }, ... ]
+			{"obs_enum_scenes", JS_ENUM_SCENES},
+
 			// .(@function(arg1)
 			//	Not yet implemented
 			{"obs_source_get_properties_json", JS_SOURCE_GET_PROPERTIES},
