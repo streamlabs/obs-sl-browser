@@ -99,7 +99,16 @@ namespace Util
 				} while (error > 0);
 
 				outFile.close();
-				output.push_back(fullOutputPath.string());
+				auto fpstr = fullOutputPath.string();
+
+				// Use '\' for all just because
+				for (size_t i = 0; i < fpstr.size(); ++i)
+				{
+					if (fpstr[i] == '/')
+						fpstr[i] = '\\';
+				}
+
+				output.push_back(fpstr);
 
 				if (unzCloseCurrentFile(zipFile) != UNZ_OK)
 				{
