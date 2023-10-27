@@ -18,3 +18,6 @@ Add-Content -Path $cmakeListsPath -Value $addSubdirectoryLine
 
 # Move obs-sl-browser folder into obs-studio\plugins
 Move-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser"
+
+# Build
+.\CI\build-windows.ps1
