@@ -772,7 +772,7 @@ void PluginJsHandler::JS_DOCK_RENAME(const json11::Json &params, std::string &ou
 			{
 				if (dock->objectName().toStdString() == objectName)
 				{
-					dock->setObjectName(newName);
+					dock->setObjectName(newName.c_str());
 					out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 					return;
 				}
