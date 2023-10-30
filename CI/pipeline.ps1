@@ -1,5 +1,5 @@
 # We start inside obs-sl-browser folder, move up to make room for cloning OBS and moving obs-sl-browser into it
-cd ..\
+cd ..\..\
 
 # Read the obs.ver file to get the branch name
 $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
