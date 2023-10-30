@@ -1,0 +1,26 @@
+name: 'CI Build'
+
+on:
+  workflow_dispatch:
+
+env:
+  SLGenerator: Visual Studio 17 2022
+
+jobs:
+  win64:
+    name: 'Windows 64-bit'
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        ReleaseName: [release]
+        include:
+          - ReleaseName: release
+            ReleaseConfig: RelWithDebInfo
+    env:
+      OS_TAG: "win64"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Run build script
+        run: powershell -File ./ci/pipeline.ps1
