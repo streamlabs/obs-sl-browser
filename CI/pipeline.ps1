@@ -4,7 +4,7 @@ param(
 
 Write-Output "Workspace is $github_workspace"
 
-$env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\cmake"
+$env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\bin"
 $env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
 $env:gRPC_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\grpc"
 
