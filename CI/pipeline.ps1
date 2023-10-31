@@ -44,5 +44,11 @@ Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Rec
 # Copy platforms folder to plugin release fodler
 Copy-Item -Path ".\build64\rundir\RelWithDebInfo\bin\64bit\platforms" -Destination ".\build64\plugins\obs-sl-browser\RelWithDebInfo" -Recurse
 
-# todo
-#...
+# Clone symbols store scripts
+Write-Output "-- Symbols"
+cd ..\
+git clone --recursive --branch "no-http-source" https://github.com/stream-labs/symsrv-scripts.git
+
+# Run symbols
+cd symsrv-scripts
+.\main.ps1 -localSourceDir '${github_workspace}\..\${revision}' 
