@@ -8,3 +8,5 @@ if exist grpc_dist (
     if exist %GRPC_FILE% (curl -kLO %GRPC_URL% -f --retry 5 -z GRPC_FILE) else (curl -kLO %GRPC_URL% -f --retry 5 -C -)
     7z x %GRPC_FILE% -aoa -ogrpc_dist
 )
+
+dir %GRPC_DIST%

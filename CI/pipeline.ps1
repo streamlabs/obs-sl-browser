@@ -1,3 +1,13 @@
+# Access environment variables in PowerShell
+$Protobuf_DIR = $env:Protobuf_DIR
+$absl_DIR = $env:absl_DIR
+$gRPC_DIR = $env:gRPC_DIR
+
+# Example usage
+Write-Output "Protobuf_DIR is $Protobuf_DIR"
+Write-Output "absl_DIR is $absl_DIR"
+Write-Output "gRPC_DIR is $gRPC_DIR"
+
 # We start inside obs-sl-browser folder, move up to make room for cloning OBS and moving obs-sl-browser into it
 cd ..\
 
