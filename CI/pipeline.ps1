@@ -1,8 +1,10 @@
 param(
-    [string]$github_workspace
+    [string]$github_workspace,
+    [string]$revision
 )
 
 Write-Output "Workspace is $github_workspace"
+Write-Output "Revision is $revision"
 
 $env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\cmake"
 $env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
@@ -21,8 +23,11 @@ $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
 # Clone obs-studio repository with the branch name
 git clone --recursive --branch $branchName https://github.com/obsproject/obs-studio.git
 
+# Rename 'obs-studio' folder to name of git tree so pdb's know which version it was built with
+Rename-Item -Path ".\obs-studio" -NewName $revision
+
 # Update submodules in obs-studio
-cd obs-studio
+cd $revision
 git submodule update --init --recursive
 
 # Add new line to CMakeLists.txt in obs-studio\plugins
@@ -35,3 +40,9 @@ Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Rec
 
 # Build
 .\CI\build-windows.ps1
+
+# Copy platforms folder to plugin release fodler
+Copy-Item -Path ".\build64\rundir\RelWithDebInfo\bin\64bit\platforms" -Destination ".\build64\plugins\obs-sl-browser\RelWithDebInfo" -Recurse
+
+# todo
+#...

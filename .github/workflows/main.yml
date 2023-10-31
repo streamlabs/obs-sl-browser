@@ -24,4 +24,4 @@ jobs:
         uses: actions/checkout@v2
          
       - name: Run build script
-        run: powershell -File ./ci/pipeline.ps1 "${{ github.workspace }}"
+        run: powershell -File ./ci/pipeline.ps1 "${{ github.workspace }}" "${{ github.sha }}"
