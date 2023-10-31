@@ -2,7 +2,7 @@
 cd ..\
 
 # Deps
-cmd install_deps.cmd
+cmd .\obs-sl-browser\ci\install_deps.cmd
 
 # Read the obs.ver file to get the branch name
 $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
