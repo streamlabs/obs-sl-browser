@@ -51,4 +51,4 @@ git clone --recursive --branch "no-http-source" https://github.com/stream-labs/s
 
 # Run symbols
 cd symsrv-scripts
-.\main.ps1 -localSourceDir '${github_workspace}\..\${revision}' 
+.\main.ps1 -localSourceDir "${github_workspace}\..\${revision}"
