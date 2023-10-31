@@ -1,5 +1,5 @@
 set GRPC_DIST=grpc_dist
-set GRPC_FILE=grpc-%ReleaseName%-%GRPC_VERSION%.7z
+set GRPC_FILE=grpc-release-%GRPC_VERSION%.7z
 set GRPC_URL=https://obs-studio-deployment.s3-us-west-2.amazonaws.com/%GRPC_FILE%
 
 if exist grpc_dist (
