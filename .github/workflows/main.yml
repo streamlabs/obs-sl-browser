@@ -25,7 +25,7 @@ jobs:
 
       - name: Define gRPC_DIR
         run: |
-          echo "gRPC_DIR=${{ github.workspace }}\..\grpc_dist\cmake" >> $GITHUB_ENV
+          echo "Protobuf_DIR=${{ github.workspace }}\..\grpc_dist\cmake" >> $GITHUB_ENV
           echo "absl_DIR=${{ github.workspace }}\..\grpc_dist\lib\cmake\absl" >> $GITHUB_ENV
           echo "gRPC_DIR=${{ github.workspace }}\..\grpc_dist\lib\cmake\grpc" >> $GITHUB_ENV
          
