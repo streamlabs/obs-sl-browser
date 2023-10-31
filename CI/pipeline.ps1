@@ -4,19 +4,10 @@ param(
 
 Write-Output "Workspace is $github_workspace"
 
-$env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\bin"
+$env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\cmake"
 $env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
 $env:gRPC_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\grpc"
-
-# Access environment variables in PowerShell
-$Protobuf_DIR = $env:Protobuf_DIR
-$absl_DIR = $env:absl_DIR
-$gRPC_DIR = $env:gRPC_DIR
-
-# Example usage
-Write-Output "Protobuf_DIR is $Protobuf_DIR"
-Write-Output "absl_DIR is $absl_DIR"
-Write-Output "gRPC_DIR is $gRPC_DIR"
+$env:utf8_range_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\utf8_range"
 
 # We start inside obs-sl-browser folder, move up to make room for cloning OBS and moving obs-sl-browser into it
 cd ..\
