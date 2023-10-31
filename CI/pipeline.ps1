@@ -1,8 +1,8 @@
 param(
-    [string]$workspace
+    [string]$github_workspace
 )
 
-Write-Output "Workspace is $workspace"
+Write-Output "Workspace is $github_workspace"
 
 $env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\cmake"
 $env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
