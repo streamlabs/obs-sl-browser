@@ -24,9 +24,10 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Define gRPC_DIR
-        run: echo "gRPC_DIR=${{ github.workspace }}\..\grpc_dist\cmake" >> $GITHUB_ENV
-        run: echo "absl_DIR=${{ github.workspace }}\..\grpc_dist\lib\cmake\absl" >> $GITHUB_ENV
-        run: echo "gRPC_DIR=${{ github.workspace }}\..\grpc_dist\lib\cmake\grpc" >> $GITHUB_ENV
+        run: |
+          echo "gRPC_DIR=${{ github.workspace }}\..\grpc_dist\cmake" >> $GITHUB_ENV
+          echo "absl_DIR=${{ github.workspace }}\..\grpc_dist\lib\cmake\absl" >> $GITHUB_ENV
+          echo "gRPC_DIR=${{ github.workspace }}\..\grpc_dist\lib\cmake\grpc" >> $GITHUB_ENV
          
       - name: Run build script
         run: powershell -File ./ci/pipeline.ps1
