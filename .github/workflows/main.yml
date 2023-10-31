@@ -22,12 +22,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-
-      - name: Define gRPC_DIR
-        run: |
-          echo "Protobuf_DIR=${{ github.workspace }}\..\grpc_dist\cmake" >> $GITHUB_ENV
-          echo "absl_DIR=${{ github.workspace }}\..\grpc_dist\lib\cmake\absl" >> $GITHUB_ENV
-          echo "gRPC_DIR=${{ github.workspace }}\..\grpc_dist\lib\cmake\grpc" >> $GITHUB_ENV
          
       - name: Run build script
-        run: powershell -File ./ci/pipeline.ps1
+        run: powershell -File ./ci/pipeline.ps1 "${{ github.workspace }}"

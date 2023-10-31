@@ -1,3 +1,13 @@
+param(
+    [string]$workspace
+)
+
+Write-Output "Workspace is $workspace"
+
+$env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\cmake"
+$env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
+$env:gRPC_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\grpc"
+
 # Access environment variables in PowerShell
 $Protobuf_DIR = $env:Protobuf_DIR
 $absl_DIR = $env:absl_DIR
