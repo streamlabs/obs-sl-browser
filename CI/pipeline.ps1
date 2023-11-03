@@ -76,7 +76,7 @@ cd symsrv-scripts
 $archiveFileName = "slplugin-$env:SL_VERSION-$revision.7z"
 
 # Create a 7z archive of the $revision folder
-7z a $archiveFileName "${github_workspace}\..\${revision}"
+7z a $archiveFileName "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"
 
 # Output the name of the archive file created
 Write-Output "Archive created: $archiveFileName"
