@@ -23,6 +23,25 @@ $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
 # Clone obs-studio repository with the branch name
 git clone --recursive --branch $branchName https://github.com/obsproject/obs-studio.git
 
+# Define the path to the build script
+$buildScriptPath = ".\obs-studio\CI\windows\02_build_obs.ps1"
+
+# Read the build script content
+$buildScriptContent = Get-Content -Path $buildScriptPath -Raw
+
+# Define the replacement string
+$replacementString = '"-G", `${CmakeGenerator}`n    "-DSL_VERSION=`"${env:SL_VERSION}`"",'
+
+# Use regex to add the new cmake argument line after each "-G", ${CmakeGenerator}
+$updatedBuildScriptContent = $buildScriptContent -replace '("\-G`", `${CmakeGenerator})', $replacementString
+
+# Write the updated content back to the build script
+Set-Content -Path $buildScriptPath -Value $updatedBuildScriptContent
+
+# Output the updated content to the console
+Write-Output "Updated build script with SL_VERSION definition:"
+Write-Output $updatedBuildScriptContent
+
 # Rename 'obs-studio' folder to name of git tree so pdb's know which version it was built with
 Rename-Item -Path ".\obs-studio" -NewName $revision
 
@@ -52,3 +71,12 @@ git clone --recursive --branch "no-http-source" https://github.com/stream-labs/s
 # Run symbols
 cd symsrv-scripts
 .\main.ps1 -localSourceDir "${github_workspace}\..\${revision}"
+
+# Define the output file name for the 7z archive
+$archiveFileName = "slplugin-$env:SL_VERSION-$revision.7z"
+
+# Create a 7z archive of the $revision folder
+7z a $archiveFileName "$revision\*"
+
+# Output the name of the archive file created
+Write-Output "Archive created: $archiveFileName"

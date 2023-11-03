@@ -137,8 +137,8 @@ private:
 		std::string payload;
 		std::string version;
 
-		#ifdef STREAMLABS_PLUGIN_VERSION
-			version = STREAMLABS_PLUGIN_VERSION;
+		#ifdef SL_VERSION
+			version = SL_VERSION;
 		#else
 			return;
 		#endif
