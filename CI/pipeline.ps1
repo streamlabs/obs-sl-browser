@@ -80,3 +80,6 @@ $archiveFileName = "slplugin-$env:SL_VERSION-$revision.7z"
 
 # Output the name of the archive file created
 Write-Output "Archive created: $archiveFileName"
+
+# Move the 7z archive to the $github_workspace directory
+Move-Item -Path $archiveFileName -Destination "${github_workspace}\"
