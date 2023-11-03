@@ -24,16 +24,16 @@ $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
 git clone --recursive --branch $branchName https://github.com/obsproject/obs-studio.git
 
 # Define the path to the build script
-$buildScriptPath = ".\obs-studio\CI\windows\02_build_obs.ps1"
+$buildScriptPath = ".\02_build_obs.ps1"
 
 # Read the build script content
 $buildScriptContent = Get-Content -Path $buildScriptPath -Raw
 
-# Define the replacement string
-$replacementString = '"-G", `${CmakeGenerator}`n    "-DSL_VERSION=`"${env:SL_VERSION}`"",'
-
+# Define the replacement string with appropriate newlines and indentation
+$replacementString = "`"-G`", `${CmakeGenerator}`," + "`r`n" + "    `"-DSL_VERSION=`"${env:SL_VERSION}`"`,"
+  
 # Use regex to add the new cmake argument line after each "-G", ${CmakeGenerator}
-$updatedBuildScriptContent = $buildScriptContent -replace '("\-G`", `${CmakeGenerator})', $replacementString
+$updatedBuildScriptContent = $buildScriptContent -replace '("-G", \${CmakeGenerator})', $replacementString
 
 # Write the updated content back to the build script
 Set-Content -Path $buildScriptPath -Value $updatedBuildScriptContent
@@ -76,7 +76,7 @@ cd symsrv-scripts
 $archiveFileName = "slplugin-$env:SL_VERSION-$revision.7z"
 
 # Create a 7z archive of the $revision folder
-7z a $archiveFileName "$revision\*"
+7z a $archiveFileName "${github_workspace}\..\${revision}"
 
 # Output the name of the archive file created
 Write-Output "Archive created: $archiveFileName"
