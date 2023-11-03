@@ -1,6 +1,7 @@
 #include "SlBrowser.h"
 #include "SlBrowserWidget.h"
 #include "GrpcBrowser.h"
+#include "CrashHandler.h"
 
 #include <functional>
 #include <sstream>
@@ -151,8 +152,10 @@ void SlBrowser::browserInit()
 
 	if (!cache_pathStdStr.empty())
 	{
-		CefString(&settings.log_file) = cache_pathStdStr + "\\cef.log";
+		std::string logPathFile = cache_pathStdStr + "\\cef.log";
+		CefString(&settings.log_file) = logPathFile;
 		settings.log_severity = LOGSEVERITY_DEBUG;
+		CrashHandler::instance().setLogfilePath(logPathFile);
 	}
 
 	// Set the remote debugging port

@@ -2,6 +2,7 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <obs-config.h>
+#include <util\platform.h>
 
 #include <Windows.h>
 #include <stdio.h>
@@ -12,6 +13,7 @@
 #include "PluginJsHandler.h"
 #include "WebServer.h"
 #include "ConsoleToggle.h"
+#include "CrashHandler.h"
 
 #include <QMainWindow>
 #include <QMenuBar>
@@ -36,6 +38,45 @@ bool obs_module_load(void)
 
 void obs_module_post_load(void)
 {
+	/***
+	* Initializing crash handler information
+	*/
+
+	blog(LOG_INFO, "Starting %s plugin...", obs_module_description());
+
+	static auto normalCrash = []() { bcrash(""); };
+
+	CrashHandler::instance().setNormalCrashHandler(normalCrash);
+	CrashHandler::instance().setUploadTitle("OBS has crashed!");
+	CrashHandler::instance().setUploadMsg("Would you like to upload a detailed report to Streamlabs for further review?");
+	CrashHandler::instance().setSentryUri("https://o114354.ingest.sentry.io/api/4506154577756160/minidump/?sentry_key=9860cbedfdebf06a6f209d004b921add");
+
+	// Path to OBS log file, find the most recently updated log file
+	std::string logdir = os_get_config_path_ptr("obs-studio/logs/");
+	std::filesystem::directory_iterator dir_it(logdir);
+	std::filesystem::path latest_file;
+	auto latest_time = std::filesystem::file_time_type::min();
+
+	// Find the most recently updated file
+	for (const auto &entry : dir_it)
+	{
+		if (entry.is_regular_file())
+		{
+			auto last_write_time = entry.last_write_time();
+			if (latest_file.empty() || last_write_time > latest_time)
+			{
+				latest_file = entry.path();
+				latest_time = last_write_time;
+			}
+		}
+	}
+
+	CrashHandler::instance().setLogfilePath(latest_file.string());
+
+	/***
+	* Plugin begnis
+	*/
+
 	PluginJsHandler::instance().start();
 
 	auto chooseProxyPort = []() {

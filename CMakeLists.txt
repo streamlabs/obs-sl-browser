@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16...3.25)
 
 find_package(CEF REQUIRED)
 find_package(ZLIB REQUIRED)
+find_package(Detours REQUIRED)
 
 find_qt(COMPONENTS Widgets)
 
@@ -87,6 +88,7 @@ target_compile_features(sl-browser PRIVATE cxx_std_17)
 
 target_link_libraries(sl-browser PRIVATE CEF::Wrapper CEF::Library d3d11 dxgi)
 target_link_libraries(sl-browser PRIVATE Qt::Widgets Qt::Core Qt::Gui)
+target_link_libraries(sl-browser PRIVATE Detours::Detours)
 
 target_link_libraries(sl-browser PRIVATE 
 	  papi_grpc_proto
@@ -129,6 +131,7 @@ target_sources(
     ${papi_grpc_srcs}
 )
     
+target_link_libraries(sl-browser-plugin PRIVATE Detours::Detours)
 target_link_libraries(sl-browser-plugin PRIVATE ZLIB::ZLIB)
 target_link_libraries(sl-browser-plugin PRIVATE Qt::Widgets)
 target_link_libraries(sl-browser-plugin PRIVATE Qt::Core)
