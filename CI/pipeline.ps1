@@ -11,6 +11,17 @@ $env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
 $env:gRPC_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\grpc"
 $env:utf8_range_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\utf8_range"
 
+# Edit the CMAKE with the SL_VERSION 
+# Read the content of CMakeLists.txt into a variable
+$cmakeContent = Get-Content -Path .\CMakeLists.txt -Raw
+
+# Replace the placeholders with the actual environment variable value
+$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser PRIVATE SL_VERSION=""\)', "target_compile_definitions(sl-browser PRIVATE SL_VERSION=`"$($env:SL_VERSION)`")"
+$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser-plugin PRIVATE SL_VERSION=""\)', "target_compile_definitions(sl-browser-plugin PRIVATE SL_VERSION=`"$($env:SL_VERSION)`")"
+
+# Write the updated content back to CMakeLists.txt
+Set-Content -Path .\CMakeLists.txt -Value $cmakeContent
+
 # We start inside obs-sl-browser folder, move up to make room for cloning OBS and moving obs-sl-browser into it
 cd ..\
 
@@ -22,21 +33,6 @@ $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
 
 # Clone obs-studio repository with the branch name
 git clone --recursive --branch $branchName https://github.com/obsproject/obs-studio.git
-
-# Define the path to the build script
-$buildScriptPath = ".\obs-studio\CI\windows\02_build_obs.ps1"
-
-# Read the build script content
-$buildScriptContent = Get-Content -Path $buildScriptPath -Raw
-
-# Define the replacement string with appropriate newlines and indentation
-$replacementString = "`"-G`", `${CmakeGenerator}`," + "`r`n" + "    `"-DSL_VERSION='${env:SL_VERSION}'`","
-  
-# Use regex to add the new cmake argument line after each "-G", ${CmakeGenerator}
-$updatedBuildScriptContent = $buildScriptContent -replace '("-G", \${CmakeGenerator})', $replacementString
-
-# Write the updated content back to the build script
-Set-Content -Path $buildScriptPath -Value $updatedBuildScriptContent
 
 # Output the updated content to the console
 Write-Output "Updated build script with SL_VERSION definition:"
