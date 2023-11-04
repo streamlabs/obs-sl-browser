@@ -22,6 +22,10 @@ $cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser-
 # Write the updated content back to CMakeLists.txt
 Set-Content -Path .\CMakeLists.txt -Value $cmakeContent
 
+# Output the updated content to the console
+Write-Output "Updated cmake with SL_VERSION definition:"
+Write-Output $cmakeContent
+
 # We start inside obs-sl-browser folder, move up to make room for cloning OBS and moving obs-sl-browser into it
 cd ..\
 
@@ -33,10 +37,6 @@ $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
 
 # Clone obs-studio repository with the branch name
 git clone --recursive --branch $branchName https://github.com/obsproject/obs-studio.git
-
-# Output the updated content to the console
-Write-Output "Updated build script with SL_VERSION definition:"
-Write-Output $updatedBuildScriptContent
 
 # Rename 'obs-studio' folder to name of git tree so pdb's know which version it was built with
 Rename-Item -Path ".\obs-studio" -NewName $revision
@@ -66,7 +66,11 @@ git clone --recursive --branch "no-http-source" https://github.com/stream-labs/s
 
 # Run symbols
 cd symsrv-scripts
-.\main.ps1 -localSourceDir "${github_workspace}\..\${revision}"
+.\main.ps1 -localSourceDir "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"
+
+if ($LastExitCode -ne 0) {
+    throw
+}
 
 # Define the output file name for the 7z archive
 $archiveFileName = "slplugin-$env:SL_VERSION-$revision.7z"
