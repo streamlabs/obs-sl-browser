@@ -30,7 +30,7 @@ $buildScriptPath = ".\obs-studio\CI\windows\02_build_obs.ps1"
 $buildScriptContent = Get-Content -Path $buildScriptPath -Raw
 
 # Define the replacement string with appropriate newlines and indentation
-$replacementString = "`"-G`", `${CmakeGenerator}`," + "`r`n" + "    `"-DSL_VERSION='${env:SL_VERSION}'`""
+$replacementString = "`"-G`", `${CmakeGenerator}`," + "`r`n" + "    `"-DSL_VERSION='${env:SL_VERSION}'`","
   
 # Use regex to add the new cmake argument line after each "-G", ${CmakeGenerator}
 $updatedBuildScriptContent = $buildScriptContent -replace '("-G", \${CmakeGenerator})', $replacementString
