@@ -51,8 +51,6 @@ void obs_module_post_load(void)
 	CrashHandler::instance().setUploadMsg("Would you like to upload a detailed report to Streamlabs for further review?");
 	CrashHandler::instance().setSentryUri("https://o114354.ingest.sentry.io/api/4506154577756160/minidump/?sentry_key=9860cbedfdebf06a6f209d004b921add");
 
-	*((unsigned int *)0) = 0xDEAD;
-
 	// Path to OBS log file, find the most recently updated log file
 	std::string logdir = os_get_config_path_ptr("obs-studio/logs/");
 	std::filesystem::directory_iterator dir_it(logdir);
