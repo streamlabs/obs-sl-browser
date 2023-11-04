@@ -137,6 +137,8 @@ private:
 		std::string payload;
 		std::string version;
 
+		::MessageBoxA(0, SL_VERSION, SL_VERSION, 0);
+
 		#ifdef SL_VERSION
 			version = SL_VERSION;
 		#else
