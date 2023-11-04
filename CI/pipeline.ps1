@@ -24,7 +24,7 @@ $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
 git clone --recursive --branch $branchName https://github.com/obsproject/obs-studio.git
 
 # Define the path to the build script
-$buildScriptPath = ".\02_build_obs.ps1"
+$buildScriptPath = ".\obs-studio\CI\windows\02_build_obs.ps1"
 
 # Read the build script content
 $buildScriptContent = Get-Content -Path $buildScriptPath -Raw
