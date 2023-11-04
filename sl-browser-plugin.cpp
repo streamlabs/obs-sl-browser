@@ -73,8 +73,6 @@ void obs_module_post_load(void)
 
 	CrashHandler::instance().setLogfilePath(latest_file.string());
 
-	*((unsigned int *)0) = 0xDEAD;
-
 	/***
 	* Plugin begnis
 	*/

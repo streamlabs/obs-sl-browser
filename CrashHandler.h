@@ -137,8 +137,6 @@ private:
 		std::string payload;
 		std::string version;
 
-		::MessageBoxA(0, SL_VERSION, SL_VERSION, 0);
-
 		#ifdef SL_VERSION
 			version = SL_VERSION;
 		#else
@@ -176,7 +174,7 @@ private:
 		payload += "--BOUNDARY\r\n";
 		payload += "Content-Disposition: form-data; name=\"sentry\"\r\n";
 		payload += "\r\n";
-		payload += "{\"release\":\"" + version + "\"}}\r\n";
+		payload += "{\"release\":\"" + version + "\"}\r\n";
 		payload += "--BOUNDARY--\r\n";
 
 		// Ship it
