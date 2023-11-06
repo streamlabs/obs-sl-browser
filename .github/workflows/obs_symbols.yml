@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  DOWNLOAD_URL: https://github.com/obsproject/obs-studio/releases/download/29.1.2/OBS-Studio-29.1.2.zip
+  DOWNLOAD_URL: https://github.com/obsproject/obs-studio/releases/download/29.1.1/OBS-Studio-29.1.1.zip
   AWS_SYMB_ACCESS_KEY_ID: ${{ secrets.AWS_SYMB_ACCESS_KEY_ID }}
   AWS_SYMB_SECRET_ACCESS_KEY: ${{ secrets.AWS_SYMB_SECRET_ACCESS_KEY }}
     
