@@ -29,7 +29,7 @@ Expand-Archive -LiteralPath $zipFile -DestinationPath "."
 Remove-Item -Path $zipFile
 
 # Change directory back to the original script location
-cd ..
+cd ..\
 
 # Clone symbol scripts
 git clone --recursive --branch "no-http-source" https://github.com/stream-labs/symsrv-scripts.git
@@ -37,6 +37,12 @@ git clone --recursive --branch "no-http-source" https://github.com/stream-labs/s
 # Run symbols
 cd symsrv-scripts
 .\main.ps1 -localSourceDir "${github_workspace}\..\${obsFolder}"
+
+# Cleanup
+cd ..\
+Remove-Item -Path "symsrv-scripts" -Recurse -Force
+Remove-Item -Path "${github_workspace}\..\${obsFolder}" -Recurse -Force
+
 
 if ($LastExitCode -ne 0) {
     throw "Symbol processing script exited with error code $LastExitCode"
