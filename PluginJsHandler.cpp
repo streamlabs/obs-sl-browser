@@ -1784,8 +1784,9 @@ void PluginJsHandler::JS_QUERY_DOWNLOADS_FOLDER(const Json &params, std::string 
 
 	try
 	{
-		for (const auto &entry : std::filesystem::directory_iterator(downloadsFolderFullPath))
-			pathsList.push_back(entry.path().string());
+		// Use recursive_directory_iterator for recursive traversal
+		for (const auto &entry : std::filesystem::recursive_directory_iterator(downloadsFolderFullPath))
+			pathsList.push_back(entry.path().generic_string());
 
 		out_jsonReturn = Json(Json::array(pathsList)).dump();
 	}
