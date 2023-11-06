@@ -45,5 +45,5 @@ Remove-Item -Path "${github_workspace}\..\${obsFolder}" -Recurse -Force
 
 
 if ($LastExitCode -ne 0) {
-    throw "Symbol processing script exited with error code $LastExitCode"
+    throw "Symbol processing script exited with error code ${LastExitCode}"
 }

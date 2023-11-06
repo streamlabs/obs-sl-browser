@@ -69,7 +69,7 @@ cd symsrv-scripts
 .\main.ps1 -localSourceDir "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"
 
 if ($LastExitCode -ne 0) {
-    throw
+     throw "Symbol processing script exited with error code ${LastExitCode}"
 }
 
 # Define the output file name for the 7z archive
