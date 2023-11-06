@@ -1,0 +1,24 @@
+name: 'OBS Symbols'
+
+on:
+  workflow_dispatch:
+
+env:
+  DOWNLOAD_URL: https://github.com/obsproject/obs-studio/releases/download/29.1.3/OBS-Studio-29.1.3.zip
+  AWS_SYMB_ACCESS_KEY_ID: ${{ secrets.AWS_SYMB_ACCESS_KEY_ID }}
+  AWS_SYMB_SECRET_ACCESS_KEY: ${{ secrets.AWS_SYMB_SECRET_ACCESS_KEY }}
+    
+jobs:
+  win64:
+    name: 'Windows 64-bit'
+    runs-on: windows-latest
+    env:
+      OS_TAG: "win64"
+      ReleaseName: release
+      ReleaseConfig: RelWithDebInfo
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+         
+      - name: Run build script
+        run: powershell -File ./ci/obs_symbols.ps1 "${{ github.workspace }}" "${{ env.DOWNLOAD_URL }}"
