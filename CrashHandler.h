@@ -138,8 +138,8 @@ private:
 		std::string version;
 		std::string githubRevision;
 
-		#ifdef OBS_VERSION
-			version = OBS_VERSION;
+		#ifdef SL_OBS_VERSION
+			version = SL_OBS_VERSION;
 		#else
 			return;
 		#endif
