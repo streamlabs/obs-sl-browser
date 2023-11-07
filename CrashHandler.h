@@ -136,9 +136,16 @@ private:
 		std::string response;
 		std::string payload;
 		std::string version;
+		std::string githubRevision;
 
-		#ifdef SL_VERSION
-			version = SL_VERSION;
+		#ifdef OBS_VERSION
+			version = OBS_VERSION;
+		#else
+			return;
+		#endif
+
+		#ifdef GITHUB_REVISION
+			githubRevision = GITHUB_REVISION;
 		#else
 			return;
 		#endif
@@ -174,7 +181,7 @@ private:
 		payload += "--BOUNDARY\r\n";
 		payload += "Content-Disposition: form-data; name=\"sentry\"\r\n";
 		payload += "\r\n";
-		payload += "{\"release\":\"" + version + "\"}\r\n";
+		payload += "{\"release\":\"" + version + "\", \"tags\":{\"gitrev\":\"" + githubRevision + "\"}}\r\n";
 		payload += "--BOUNDARY--\r\n";
 
 		// Ship it

@@ -11,19 +11,21 @@ $env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
 $env:gRPC_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\grpc"
 $env:utf8_range_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\utf8_range"
 
-# Edit the CMAKE with the SL_VERSION 
+# Edit the CMAKE with the OBS_VERSION and $revision
 # Read the content of CMakeLists.txt into a variable
 $cmakeContent = Get-Content -Path .\CMakeLists.txt -Raw
 
 # Replace the placeholders with the actual environment variable value
-$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser PRIVATE SL_VERSION=""\)', "target_compile_definitions(sl-browser PRIVATE SL_VERSION=`"$($env:SL_VERSION)`")"
-$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser-plugin PRIVATE SL_VERSION=""\)', "target_compile_definitions(sl-browser-plugin PRIVATE SL_VERSION=`"$($env:SL_VERSION)`")"
+$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser PRIVATE OBS_VERSION=""\)', "target_compile_definitions(sl-browser PRIVATE OBS_VERSION=`"$($env:OBS_VERSION)`")"
+$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser-plugin PRIVATE OBS_VERSION=""\)', "target_compile_definitions(sl-browser-plugin PRIVATE OBS_VERSION=`"$($env:OBS_VERSION)`")"
+$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser PRIVATE GITHUB_REVISION=""\)', "target_compile_definitions(sl-browser PRIVATE GITHUB_REVISION=`"${revision}`")"
+$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser-plugin PRIVATE GITHUB_REVISION=""\)', "target_compile_definitions(sl-browser-plugin PRIVATE GITHUB_REVISION=`"${revision}`")"
 
 # Write the updated content back to CMakeLists.txt
 Set-Content -Path .\CMakeLists.txt -Value $cmakeContent
 
 # Output the updated content to the console
-Write-Output "Updated cmake with SL_VERSION definition:"
+Write-Output "Updated cmake with OBS_VERSION definition:"
 Write-Output $cmakeContent
 
 # We start inside obs-sl-browser folder, move up to make room for cloning OBS and moving obs-sl-browser into it
@@ -73,7 +75,7 @@ if ($LastExitCode -ne 0) {
 }
 
 # Define the output file name for the 7z archive
-$archiveFileName = "slplugin-$env:SL_VERSION-$revision.7z"
+$archiveFileName = "slplugin-$env:OBS_VERSION-$revision.7z"
 
 # Create a 7z archive of the $revision folder
 7z a $archiveFileName "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"

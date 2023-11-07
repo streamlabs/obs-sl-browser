@@ -50,7 +50,8 @@ target_link_libraries(papi_grpc_proto
 
 add_executable(sl-browser WIN32)
 
-target_compile_definitions(sl-browser PRIVATE SL_VERSION="")
+#target_compile_definitions(sl-browser PRIVATE OBS_VERSION="")
+#target_compile_definitions(sl-browser PRIVATE GITHUB_REVISION="")
 target_compile_options(sl-browser PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
 target_link_options(sl-browser PRIVATE /NODEFAULTLIB:msvcrt)
 
@@ -146,7 +147,8 @@ target_include_directories(sl-browser-plugin PRIVATE "${CMAKE_CURRENT_SOURCE_DIR
 
 target_compile_features(sl-browser-plugin PRIVATE cxx_std_17)
 target_compile_definitions(sl-browser-plugin PRIVATE BROWSER_AVAILABLE)
-target_compile_definitions(sl-browser-plugin PRIVATE SL_VERSION="")
+#target_compile_definitions(sl-browser-plugin PRIVATE OBS_VERSION="")
+#target_compile_definitions(sl-browser PRIVATE GITHUB_REVISION="")
 
 target_link_libraries(sl-browser-plugin PRIVATE OBS::libobs OBS::frontend-api)
 target_link_libraries(sl-browser-plugin PRIVATE ZLIB::ZLIB)
