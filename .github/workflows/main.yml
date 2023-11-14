@@ -1,4 +1,4 @@
-name: 'CI Build 29.1.0-beta3'
+name: 'CI Build'
 
 on:
   workflow_dispatch:
