@@ -47,10 +47,12 @@ Rename-Item -Path ".\obs-studio" -NewName $revision
 cd $revision
 git submodule update --init --recursive
 
-# Add new line to CMakeLists.txt in obs-studio\plugins
+# Add to top of CMakeLists.txt in obs-studio\plugins
 $cmakeListsPath = ".\plugins\CMakeLists.txt"
 $addSubdirectoryLine = "add_subdirectory(obs-sl-browser)"
-Add-Content -Path $cmakeListsPath -Value $addSubdirectoryLine
+$cmakeListsContent = Get-Content -Path $cmakeListsPath
+$cmakeListsContent = $cmakeListsContent[0], $addSubdirectoryLine, $cmakeListsContent[1..($cmakeListsContent.Length - 1)]
+Set-Content -Path $cmakeListsPath -Value $cmakeListsContent
 
 # Move obs-sl-browser folder into obs-studio\plugins
 Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Recurse
