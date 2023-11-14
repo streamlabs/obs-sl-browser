@@ -64,24 +64,30 @@ cmake --build --preset windows-x64
 # Copy platforms folder to plugin release fodler
 Copy-Item -Path ".\build_x64\rundir\RelWithDebInfo\bin\64bit\platforms" -Destination ".\build_x64\plugins\obs-sl-browser\RelWithDebInfo" -Recurse
 
+# Move back up
+cd ..\
+$currentDirFullPath = (Get-Location).Path
+
 # Clone symbols store scripts
 Write-Output "-- Symbols"
-cd ..\
 git clone --recursive --branch "no-http-source" https://github.com/stream-labs/symsrv-scripts.git
 
 # Run symbols
 cd symsrv-scripts
-.\main.ps1 -localSourceDir "${github_workspace}\..\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+Write-Output "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+.\main.ps1 -localSourceDir "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 
 if ($LastExitCode -ne 0) {
      throw "Symbol processing script exited with error code ${LastExitCode}"
 }
 
 # Define the output file name for the 7z archive
-$archiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision.7z"
+Write-Output "-- 7z"
+Write-Output "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 
 # Create a 7z archive of the $revision folder
-7z a $archiveFileName "${github_workspace}\..\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+$archiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision.7z"
+7z a $archiveFileName "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 
 # Output the name of the archive file created
 Write-Output "Archive created: $archiveFileName"
