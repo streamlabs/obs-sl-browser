@@ -56,10 +56,11 @@ Add-Content -Path $cmakeListsPath -Value $addSubdirectoryLine
 Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Recurse
 
 # Build
-.\CI\build-windows.ps1
+cmake --preset windows-x64
+cmake --build --preset windows-x64
 
 # Copy platforms folder to plugin release fodler
-Copy-Item -Path ".\build64\rundir\RelWithDebInfo\bin\64bit\platforms" -Destination ".\build64\plugins\obs-sl-browser\RelWithDebInfo" -Recurse
+Copy-Item -Path ".\build_x64\rundir\RelWithDebInfo\bin\64bit\platforms" -Destination ".\build_x64\plugins\obs-sl-browser\RelWithDebInfo" -Recurse
 
 # Clone symbols store scripts
 Write-Output "-- Symbols"
@@ -68,7 +69,7 @@ git clone --recursive --branch "no-http-source" https://github.com/stream-labs/s
 
 # Run symbols
 cd symsrv-scripts
-.\main.ps1 -localSourceDir "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"
+.\main.ps1 -localSourceDir "${github_workspace}\..\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 
 if ($LastExitCode -ne 0) {
      throw "Symbol processing script exited with error code ${LastExitCode}"
@@ -78,7 +79,7 @@ if ($LastExitCode -ne 0) {
 $archiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision.7z"
 
 # Create a 7z archive of the $revision folder
-7z a $archiveFileName "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"
+7z a $archiveFileName "${github_workspace}\..\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 
 # Output the name of the archive file created
 Write-Output "Archive created: $archiveFileName"
