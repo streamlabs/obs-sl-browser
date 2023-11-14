@@ -1,10 +1,10 @@
-name: 'CI Build'
+name: 'CI Build 30.0.0-rc1'
 
 on:
   workflow_dispatch:
 
 env:
-  SL_OBS_VERSION: "29.1"
+  SL_OBS_VERSION: "30.0.0-rc1"
   SLGenerator: Visual Studio 17 2022
   GRPC_VERSION: v1.58.0
   AWS_SYMB_ACCESS_KEY_ID: ${{secrets.AWS_SYMB_ACCESS_KEY_ID}}
