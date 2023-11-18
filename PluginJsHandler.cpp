@@ -1620,9 +1620,6 @@ void PluginJsHandler::JS_DOWNLOAD_FILE(const Json &params, std::string &out_json
 			out_jsonReturn = Json(Json::object({{"path", downloadPath}})).dump();
 		else
 			out_jsonReturn = Json(Json::object({{"error", "Http download file failed"}})).dump();
-
-		// zip file itself not needed
-		::_wremove(downloadPath.c_str());
 	}
 	else
 	{
