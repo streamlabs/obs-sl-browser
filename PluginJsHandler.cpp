@@ -27,6 +27,7 @@
 #include <QCheckBox>
 #include <QMessageBox>
 #include <QComboBox>
+#include <QFontDatabase>
 
 using namespace json11;
 
@@ -1639,9 +1640,23 @@ void PluginJsHandler::JS_INSTALL_FONT(const json11::Json& params, std::string& o
 	}
 
 	if (Util::InstallFont(filepath.c_str()))
-		out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+	{
+		int id = QFontDatabase::addApplicationFont(filepath.c_str());
+
+		if (id != -1)
+		{
+			QStringList family = QFontDatabase::applicationFontFamilies(id);
+			out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+		}
+		else
+		{
+			out_jsonReturn = Json(Json::object({{"error", "QFontDatabase addApplicationFont failed"}})).dump();
+		}
+	}
 	else
+	{
 		out_jsonReturn = Json(Json::object({{"error", "WinApi AddFontResourceA failed"}})).dump();
+	}
 }
 
 void PluginJsHandler::JS_READ_FILE(const Json &params, std::string &out_jsonReturn)
