@@ -16,6 +16,7 @@ public:
 	void executeApiRequest(const std::string &funcName, const std::string &params);
 	void loadSlabsBrowserDocks();
 	void saveSlabsBrowserDocks();
+	void loadFonts();
 
 public:
 	static PluginJsHandler &instance()
@@ -98,6 +99,7 @@ private:
 	void JS_ENUM_SCENES(const json11::Json &params, std::string &out_jsonReturn);
 
 	std::wstring getDownloadsDir() const;
+	std::wstring getFontsDir() const;
 
 	std::mutex m_queueMtx;
 	std::atomic<bool> m_running = false;

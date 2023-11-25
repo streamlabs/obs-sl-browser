@@ -48,6 +48,16 @@ std::wstring PluginJsHandler::getDownloadsDir() const
 	return L"";
 }
 
+std::wstring PluginJsHandler::getFontsDir() const
+{
+	auto downloadsDir = getDownloadsDir();
+
+	if (!downloadsDir.empty())
+		return downloadsDir + L"\\Fonts";
+
+	return L"";
+}
+
 void PluginJsHandler::start()
 {
 	m_running = true;
@@ -1645,7 +1655,24 @@ void PluginJsHandler::JS_INSTALL_FONT(const json11::Json& params, std::string& o
 
 		if (id != -1)
 		{
-			QStringList family = QFontDatabase::applicationFontFamilies(id);
+			std::wstring fontDir = getFontsDir();
+
+			try
+			{
+				// Create the fonts directory if it does not exist
+				std::filesystem::create_directories(fontDir);
+
+				// Copy the file, overwrite if it already exists
+				std::filesystem::path destPath = fontDir;
+				destPath /= std::filesystem::path(filepath).filename();
+				std::filesystem::copy(filepath, destPath, std::filesystem::copy_options::overwrite_existing);
+			}
+			catch (const std::filesystem::filesystem_error &e)
+			{
+				out_jsonReturn = Json(Json::object({{"error", e.what()}})).dump();
+				return;
+			}
+
 			out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 		}
 		else
@@ -1998,6 +2025,39 @@ void PluginJsHandler::saveSlabsBrowserDocks()
 
 	std::string output = Json(jarray).dump();
 	config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsBrowserDocks", output.c_str());
+}
+
+void PluginJsHandler::loadFonts()
+{
+	auto fontsDir = getFontsDir();
+
+	if (fontsDir.empty())
+		return;
+
+	try
+	{
+		for (const auto &itr : std::filesystem::directory_iterator(fontsDir))
+		{
+			if (itr.path().extension() == ".ttf")
+			{
+				const std::string &filepath = itr.path().generic_u8string();
+
+				if (Util::InstallFont(filepath.c_str()))
+				{
+					if (QFontDatabase::addApplicationFont(filepath.c_str()) == -1)
+						blog(LOG_ERROR, "Streamlabs - QFontDatabase::addApplicationFont %s", filepath.c_str());
+				}
+				else
+				{
+					blog(LOG_ERROR, "Streamlabs - AddFontResourceA %s", filepath.c_str());
+				}
+			}
+		}
+	}
+	catch (const std::filesystem::filesystem_error&)
+	{
+
+	}
 }
 
 void PluginJsHandler::loadSlabsBrowserDocks()
