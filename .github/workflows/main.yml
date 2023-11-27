@@ -4,12 +4,11 @@ on:
   workflow_dispatch:
 
 env:
-  SL_OBS_VERSION: "28.1.0-beta1"
+  SL_OBS_VERSION: ${{ github.ref_name }}
   SLGenerator: Visual Studio 17 2022
   GRPC_VERSION: v1.58.0
   AWS_SYMB_ACCESS_KEY_ID: ${{secrets.AWS_SYMB_ACCESS_KEY_ID}}
   AWS_SYMB_SECRET_ACCESS_KEY: ${{secrets.AWS_SYMB_SECRET_ACCESS_KEY}}
-  RELEASE_BUCKET: "obsstudionodes3.streamlabs.com"
     
 jobs:
   win64:
@@ -37,5 +36,8 @@ jobs:
           aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           aws-region: us-west-2
           
-      - name: Deploy
-        run: aws s3 cp slplugin-${{env.SL_OBS_VERSION}}-${{ github.sha }}.7z s3://${{env.RELEASE_BUCKET}} --acl public-read
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: slplugin-archive
+          path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
