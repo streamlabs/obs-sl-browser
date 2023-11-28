@@ -41,3 +41,18 @@ jobs:
         with:
           name: slplugin-archive
           path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
+
+  deploy:
+    name: Deploy to Production
+    runs-on: windows-latest
+    environment: Release
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download Archive
+        uses: actions/download-artifact@v3
+        with:
+          name: slplugin-archive
+      - name: Install Dependencies
+        run: yarn --cwd ${{ github.workspace }}/CI/code-signing install
+      - name: Extract and Sign
+        run: yarn --cwd ${{ github.workspace }}/CI/code-signing sign
