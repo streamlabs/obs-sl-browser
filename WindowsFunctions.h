@@ -4,12 +4,13 @@
 #include <windows.h>
 #include <wininet.h>
 #include <fstream>
+#include <TlHelp32.h>
 
 #include "deps/minizip/unzip.h"
 
 #pragma comment(lib, "wininet.lib")
 
-namespace Util
+namespace WindowsFunctions
 {
 	static void ForceForegroundWindow(HWND focusOnWindowHandle)
 	{
@@ -231,8 +232,8 @@ namespace Util
 					if (HINTERNET session = ::InternetConnectA(handle, serverName.c_str(), uri.nPort, username.c_str(), password.c_str(), INTERNET_SERVICE_HTTP, 0, 0))
 					{
 						// Request object
-						DWORD dwFlags = INTERNET_FLAG_IGNORE_CERT_CN_INVALID | INTERNET_FLAG_IGNORE_CERT_DATE_INVALID | INTERNET_FLAG_IGNORE_REDIRECT_TO_HTTP | INTERNET_FLAG_IGNORE_REDIRECT_TO_HTTPS | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_COOKIES |
-								INTERNET_FLAG_NO_UI | INTERNET_FLAG_RELOAD;
+						DWORD dwFlags = INTERNET_FLAG_IGNORE_CERT_CN_INVALID | INTERNET_FLAG_IGNORE_CERT_DATE_INVALID | INTERNET_FLAG_IGNORE_REDIRECT_TO_HTTP | INTERNET_FLAG_IGNORE_REDIRECT_TO_HTTPS | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI |
+								INTERNET_FLAG_RELOAD;
 
 						if (scheme == "https")
 						{
@@ -365,4 +366,50 @@ namespace Util
 		return false;
 	}
 
+	static bool KillProcess(DWORD processId)
+	{
+		// Then terminate the main process
+		HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, processId);
+		if (hProcess == NULL)
+			return false;
+
+		BOOL result = TerminateProcess(hProcess, 0);
+		CloseHandle(hProcess);
+
+		return (result != FALSE);
+	}
+
+	static bool LaunchProcess(const std::wstring &filePath)
+	{
+		// Extract directory from filePath
+		std::wstring directory = filePath.substr(0, filePath.find_last_of(L"\\/"));
+
+		// Initialize STARTUPINFO and PROCESS_INFORMATION
+		STARTUPINFOW si = {sizeof(si)};
+		PROCESS_INFORMATION pi = {};
+
+		// Create a modifiable copy of filePath for CreateProcessW
+		std::wstring modifiableFilePath = filePath;
+
+		// Launch the process
+		if (!CreateProcessW(nullptr,                                         // Application name
+				    &modifiableFilePath[0],                          // Command line (modifiable)
+				    nullptr,                                         // Process handle not inheritable
+				    nullptr,                                         // Thread handle not inheritable
+				    FALSE,                                           // Set handle inheritance to FALSE
+				    0,                                               // No creation flags
+				    nullptr,                                         // Use parent's environment block
+				    directory.empty() ? nullptr : directory.c_str(), // Set working directory
+				    &si,                                             // Pointer to STARTUPINFO structure
+				    &pi                                              // Pointer to PROCESS_INFORMATION structure
+				    ))
+		{
+			return false;
+		}
+
+		// Close the process and thread handles
+		CloseHandle(pi.hProcess);
+		CloseHandle(pi.hThread);
+		return true;
+	}
 }

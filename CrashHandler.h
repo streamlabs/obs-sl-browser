@@ -10,7 +10,7 @@
 #include <ShlObj.h>
 #include <psapi.h>
 
-#include "Util.h"
+#include "WindowsFunctions.h"
 
 #pragma comment(lib, "Psapi.lib")
 
@@ -185,7 +185,7 @@ private:
 		payload += "--BOUNDARY--\r\n";
 
 		// Ship it
-		Util::HTTPRequest(uri, method, headers, &httpCode, timeoutMS, response, payload, "application/json");
+		WindowsFunctions::HTTPRequest(uri, method, headers, &httpCode, timeoutMS, response, payload, "application/json");
 	}
 
 	EXCEPTION_POINTERS *m_exceptionPointers = nullptr;
