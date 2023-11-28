@@ -32,6 +32,7 @@ MODULE_EXPORT const char *obs_module_description(void)
 
 bool obs_module_load(void)
 {
+	PluginJsHandler::instance().loadFonts();
 	PluginJsHandler::instance().loadSlabsBrowserDocks();
 	return true;
 }
