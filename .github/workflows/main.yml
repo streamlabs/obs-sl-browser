@@ -53,7 +53,9 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: slplugin-archive
-      - name: Install Dependencies
-        run: yarn --cwd ${{ github.workspace }}/CI/code-signing install
+      - name: Download Certificate
+        env:
+          CODE_SIGNING_CERTIFICATE: ${{ secrets.CODE_SIGNING_CERTIFICATE }}
+        run: echo "$CODE_SIGNING_CERTIFICATE" > code-signing.p7b
       - name: Extract and Sign
-        run: yarn --cwd ${{ github.workspace }}/CI/code-signing sign
+        run: powershell -File ./ci/sign.ps1 "${{ github.workspace }}" "${{ github.sha }}"

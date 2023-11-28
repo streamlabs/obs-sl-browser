@@ -82,6 +82,3 @@ tags
 .DS_Store
 */.DS_Store
 */**/.DS_Store
-
-#node
-CI/code-signing/node_modules
