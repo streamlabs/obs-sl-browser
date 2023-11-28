@@ -4,7 +4,7 @@
 #include "JavascriptApi.h"
 #include "GrpcPlugin.h"
 #include "WebServer.h"
-#include "Util.h"
+#include "WindowsFunctions.h"
 
 // Windows
 #include <ShlObj.h>
@@ -28,6 +28,8 @@
 #include <QMessageBox>
 #include <QComboBox>
 #include <QFontDatabase>
+#include <QApplication>
+#include <QProcess>
 
 using namespace json11;
 
@@ -44,6 +46,16 @@ std::wstring PluginJsHandler::getDownloadsDir() const
 
 	if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, path)))
 		return std::wstring(path) + L"\\StreamlabsOBS";
+
+	return L"";
+}
+
+std::wstring PluginJsHandler::getFontsDir() const
+{
+	auto downloadsDir = getDownloadsDir();
+
+	if (!downloadsDir.empty())
+		return downloadsDir + L"\\Fonts";
 
 	return L"";
 }
@@ -181,7 +193,8 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_OBS_REMOVE_TRANSITION: JS_OBS_REMOVE_TRANSITION(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_TRANSITION_GET_SETTINGS: JS_TRANSITION_GET_SETTINGS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_TRANSITION_SET_SETTINGS: JS_TRANSITION_SET_SETTINGS(jsonParams, jsonReturnStr); break;
-		case JavascriptApi::JS_ENUM_SCENES: JS_ENUM_SCENES(jsonParams, jsonReturnStr); break;			
+		case JavascriptApi::JS_ENUM_SCENES: JS_ENUM_SCENES(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_RESTART_OBS: JS_RESTART_OBS(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -1163,7 +1176,7 @@ void PluginJsHandler::JS_OBS_BRING_FRONT(const json11::Json& params, std::string
 			::GetWindowThreadProcessId(hWnd, &processId);
 
 			if (processId == (DWORD)lParam)
-				Util::ForceForegroundWindow(hWnd);
+				WindowsFunctions::ForceForegroundWindow(hWnd);
 			
 			return TRUE;
 		},
@@ -1538,11 +1551,11 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 			return myconv.to_bytes(str);
 		};
 
-		if (Util::DownloadFile(url, wstring_to_utf8(zipFilepath)))
+		if (WindowsFunctions::DownloadFile(url, wstring_to_utf8(zipFilepath)))
 		{
 			std::vector<std::string> filepaths;
 
-			if (Util::Unzip(wstring_to_utf8(zipFilepath), filepaths))
+			if (WindowsFunctions::Unzip(wstring_to_utf8(zipFilepath), filepaths))
 			{
 				// Build json string now
 				Json::array json_array;
@@ -1617,7 +1630,7 @@ void PluginJsHandler::JS_DOWNLOAD_FILE(const Json &params, std::string &out_json
 		CreateDirectoryW(folderPath.c_str(), NULL);
 		CreateDirectoryW(subFolderPath.c_str(), NULL);
 
-		if (Util::DownloadFile(url, wstring_to_utf8(downloadPath)))
+		if (WindowsFunctions::DownloadFile(url, wstring_to_utf8(downloadPath)))
 			out_jsonReturn = Json(Json::object({{"path", downloadPath}})).dump();
 		else
 			out_jsonReturn = Json(Json::object({{"error", "Http download file failed"}})).dump();
@@ -1639,13 +1652,30 @@ void PluginJsHandler::JS_INSTALL_FONT(const json11::Json& params, std::string& o
 		return;
 	}
 
-	if (Util::InstallFont(filepath.c_str()))
+	if (WindowsFunctions::InstallFont(filepath.c_str()))
 	{
 		int id = QFontDatabase::addApplicationFont(filepath.c_str());
 
 		if (id != -1)
 		{
-			QStringList family = QFontDatabase::applicationFontFamilies(id);
+			std::wstring fontDir = getFontsDir();
+
+			try
+			{
+				// Create the fonts directory if it does not exist
+				std::filesystem::create_directories(fontDir);
+
+				// Copy the file, overwrite if it already exists
+				std::filesystem::path destPath = fontDir;
+				destPath /= std::filesystem::path(filepath).filename();
+				std::filesystem::copy(filepath, destPath, std::filesystem::copy_options::overwrite_existing);
+			}
+			catch (const std::filesystem::filesystem_error &e)
+			{
+				out_jsonReturn = Json(Json::object({{"error", e.what()}})).dump();
+				return;
+			}
+
 			out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 		}
 		else
@@ -1998,6 +2028,39 @@ void PluginJsHandler::saveSlabsBrowserDocks()
 
 	std::string output = Json(jarray).dump();
 	config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsBrowserDocks", output.c_str());
+}
+
+void PluginJsHandler::loadFonts()
+{
+	auto fontsDir = getFontsDir();
+
+	if (fontsDir.empty())
+		return;
+
+	try
+	{
+		for (const auto &itr : std::filesystem::directory_iterator(fontsDir))
+		{
+			if (itr.path().extension() == ".ttf")
+			{
+				const std::string &filepath = itr.path().generic_u8string();
+
+				if (WindowsFunctions::InstallFont(filepath.c_str()))
+				{
+					if (QFontDatabase::addApplicationFont(filepath.c_str()) == -1)
+						blog(LOG_ERROR, "Streamlabs - QFontDatabase::addApplicationFont %s", filepath.c_str());
+				}
+				else
+				{
+					blog(LOG_ERROR, "Streamlabs - AddFontResourceA %s", filepath.c_str());
+				}
+			}
+		}
+	}
+	catch (const std::filesystem::filesystem_error&)
+	{
+
+	}
 }
 
 void PluginJsHandler::loadSlabsBrowserDocks()
@@ -2799,6 +2862,21 @@ void PluginJsHandler::JS_SCENE_GET_SOURCES(const json11::Json &params, std::stri
 			out_jsonReturn = Json(Json::object({{"source_names", source_names}})).dump();
 		},
 		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_RESTART_OBS(const json11::Json& params, std::string& out_jsonReturn)
+{
+	// OBS30 and later uses this to know if a shutdown was graceful, we need to trick it by deleteing this file (it has no extension)
+	CHAR appDataPath[MAX_PATH];
+
+	if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appDataPath)))
+	{
+		std::string safeModeFilePath = std::string(appDataPath) + "\\obs-studio\\safe_mode";
+		DeleteFileA(safeModeFilePath.c_str());
+	}
+
+	QProcess::startDetached(qApp->arguments()[0], qApp->arguments());
+	WindowsFunctions::KillProcess(::GetCurrentProcessId());
 }
 
 void PluginJsHandler::JS_ENUM_SCENES(const json11::Json &params, std::string &out_jsonReturn)
