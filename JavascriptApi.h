@@ -79,7 +79,8 @@ public:
 		JS_OBS_REMOVE_TRANSITION,
 		JS_TRANSITION_GET_SETTINGS,
 		JS_TRANSITION_SET_SETTINGS,
-		JS_ENUM_SCENES
+		JS_ENUM_SCENES,
+		JS_RESTART_OBS,
 	};
 
 public:
@@ -161,6 +162,10 @@ public:
 			// .(@function(arg1), @bool_enable)
 			//	Disable/Enable user input to the window
 			{"win_toggleUserInput", JS_TOGGLE_USER_INPUT},
+
+			// .(@function(arg1), @bool_enable)
+			//	Disable/Enable user input to the window
+			{"win_restartOBS", JS_RESTART_OBS},
 
 			/***
 			* Filesystem
