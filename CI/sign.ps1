@@ -15,9 +15,15 @@ $archiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision.7z"
 $signtool = "C:\Program Files (x86)\Microsoft SDKs\ClickOnce\SignTool\signtool.exe"
 $cert = "sl-code-signing.pfx"
 $certPass = $env:CODE_SIGNING_PASSWORD
+$signExtensions = ".exe",".dll"
 
 Get-ChildItem -Path "archive" -File -Recurse |
+  Where-Object { $signExtensions.Contains($_.Extension) } |
   ForEach-Object {
     $fullName = $_.FullName
     & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $cert /p $certPass "$fullName"
   }
+
+7z a $archiveFileName archive\RelWithDebInfo
+
+Move-Item -Path $archiveFileName -Destination "${github_workspace}\"

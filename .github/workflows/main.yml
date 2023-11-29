@@ -61,3 +61,8 @@ jobs:
         env:
           CODE_SIGNING_PASSWORD: ${{ secrets.CODE_SIGNING_PASSWORD }}
         run: powershell -File ./ci/sign.ps1 "${{ github.workspace }}" "${{ github.sha }}"
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: slplugin-archive
+          path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
