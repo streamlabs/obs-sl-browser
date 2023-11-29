@@ -13,9 +13,11 @@ $archiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision.7z"
 7z x $archiveFileName -oarchive
 
 $signtool = "C:\Program Files (x86)\Microsoft SDKs\ClickOnce\SignTool\signtool.exe"
-$cert = "code-signing.p7b"
+$cert = "sl-code-signing.pfx"
+$certPass = $env:CODE_SIGNING_PASSWORD
 
 Get-ChildItem -Path "archive" -File -Recurse |
   ForEach-Object {
-    & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $cert $_ | Write-Debug
+    $fullName = $_.FullName
+    & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $cert /p $certPass "$fullName"
   }
