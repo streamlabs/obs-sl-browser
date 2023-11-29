@@ -22,7 +22,7 @@ $signExtensions = ".exe",".dll"
 echo $cert > "sl-code-signing.b64"
 certutil -decode "sl-code-signing.b64" $certFile
 
-$signedArchiveFileName = "archive\slplugin-$env:SL_OBS_VERSION-$revision-signed.zip"
+$signedArchiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision-signed.zip"
 
 Get-ChildItem -Path "archive" -File -Recurse |
   Where-Object { $signExtensions.Contains($_.Extension) } |
@@ -31,6 +31,8 @@ Get-ChildItem -Path "archive" -File -Recurse |
     & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $certFile /p $certPass "$fullName"
   }
 
-7z a $signedArchiveFileName archive\RelWithDebInfo
+cd archive
+
+7z a $signedArchiveFileName RelWithDebInfo
 
 Move-Item -Path $signedArchiveFileName -Destination "${github_workspace}\"
