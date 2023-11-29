@@ -8,7 +8,7 @@
 #include "GrpcBrowser.h"
 #include "JavascriptApi.h"
 #include "SlBrowser.h"
-#include "Util.h"
+#include "WindowsFunctions.h"
 
 #include <json11/json11.hpp>
 
