@@ -13,15 +13,20 @@ $archiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision.7z"
 7z x $archiveFileName -oarchive
 
 $signtool = "C:\Program Files (x86)\Microsoft SDKs\ClickOnce\SignTool\signtool.exe"
-$cert = "sl-code-signing.pfx"
+$cert = $env:CODE_SIGNING_CERTIFICATE
+$certFile = "sl-code-signing.pfx"
 $certPass = $env:CODE_SIGNING_PASSWORD
 $signExtensions = ".exe",".dll"
+
+# Download and decode the certificate
+echo $cert > "sl-code-signing.b64"
+certutil -decode "sl-code-signing.b64" $certFile
 
 Get-ChildItem -Path "archive" -File -Recurse |
   Where-Object { $signExtensions.Contains($_.Extension) } |
   ForEach-Object {
     $fullName = $_.FullName
-    & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $cert /p $certPass "$fullName"
+    & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $certFile /p $certPass "$fullName"
   }
 
 7z a $archiveFileName archive\RelWithDebInfo
