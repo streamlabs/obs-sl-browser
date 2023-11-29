@@ -56,7 +56,7 @@ jobs:
       - name: Download Certificate
         env:
           CODE_SIGNING_CERTIFICATE: ${{ secrets.CODE_SIGNING_CERTIFICATE }}
-        run: echo "$CODE_SIGNING_CERTIFICATE" > code-signing.p7b
+        run: echo "$CODE_SIGNING_CERTIFICATE" | base64 --decode > code-signing.p7b
       - name: Extract and Sign
         env:
           CODE_SIGNING_PASSWORD: ${{ secrets.CODE_SIGNING_PASSWORD }}
