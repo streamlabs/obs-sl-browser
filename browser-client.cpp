@@ -218,7 +218,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			if (::IsIconic(hwnd))
 				::ShowWindow(hwnd, SW_RESTORE);
 
-			Util::ForceForegroundWindow(hwnd);
+			WindowsFunctions::ForceForegroundWindow(hwnd);
 			break;
 		}
 		case JavascriptApi::JS_QT_SET_WINDOW_POSITION:
