@@ -30,9 +30,17 @@ Get-ChildItem -Path "archive" -File -Recurse |
     $fullName = $_.FullName
     & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $certFile /p $certPass "$fullName"
   }
+  
+# Delete all files in archive that are not signExtensions
+Get-ChildItem -Path "archive" -File -Recurse |
+  Where-Object { -not $signExtensions.Contains($_.Extension) } |
+  Remove-Item -Force
 
-cd archive
+# Move to the RelWithDebInfo directory to zip its contents directly
+cd archive/RelWithDebInfo
 
-7z a $signedArchiveFileName RelWithDebInfo
+# Create a zip file with the contents of RelWithDebInfo at the top level
+7z a "../$signedArchiveFileName" .\*
 
-Move-Item -Path $signedArchiveFileName -Destination "${github_workspace}\"
+# Move the signed archive to the specified workspace
+Move-Item -Path "..\$signedArchiveFileName" -Destination "${github_workspace}\"
