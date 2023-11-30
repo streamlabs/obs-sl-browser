@@ -163,8 +163,8 @@ public:
 			//	Disable/Enable user input to the window
 			{"win_toggleUserInput", JS_TOGGLE_USER_INPUT},
 
-			// .(@function(arg1), @bool_enable)
-			//	Disable/Enable user input to the window
+			// .(@function(arg1))
+			//	Launches a new OBS and terminates existing one at same time.
 			{"win_restartOBS", JS_RESTART_OBS},
 
 			/***
