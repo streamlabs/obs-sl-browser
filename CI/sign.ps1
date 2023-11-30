@@ -17,6 +17,7 @@ $cert = $env:CODE_SIGNING_CERTIFICATE
 $certFile = "sl-code-signing.pfx"
 $certPass = $env:CODE_SIGNING_PASSWORD
 $signExtensions = ".exe",".dll"
+$keepExtensions = ".exe",".dll",".png"
 
 # Download and decode the certificate
 echo $cert > "sl-code-signing.b64"
@@ -31,9 +32,9 @@ Get-ChildItem -Path "archive" -File -Recurse |
     & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $certFile /p $certPass "$fullName"
   }
   
-# Delete all files in archive that are not signExtensions
+# Delete all files in archive that are not keepExtensions
 Get-ChildItem -Path "archive" -File -Recurse |
-  Where-Object { -not $signExtensions.Contains($_.Extension) } |
+  Where-Object { -not $keepExtensions.Contains($_.Extension) } |
   Remove-Item -Force
 
 # Move to the RelWithDebInfo directory to zip its contents directly
