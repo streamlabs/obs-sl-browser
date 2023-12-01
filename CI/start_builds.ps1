@@ -1,12 +1,13 @@
+param(
+    [string]$token
+)
+
 # URL to the JSON data
 $jsonUrl = "https://slobs-cdn.streamlabs.com/obsplugin/obsversions.json"
 
 # Fetch the JSON content
 $jsonContent = Invoke-RestMethod -Uri $jsonUrl
 $branchNames = $jsonContent.obsversions.PSObject.Properties.Value
-
-# GitHub API Token
-$token = "API_TOKEN"
 
 # Iterate through each branch
 foreach ($branchName in $branchNames) {
