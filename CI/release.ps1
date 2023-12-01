@@ -91,8 +91,14 @@ function CreateJsonFile($folder, $branchName) {
 	$Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
 	$Env:AWS_DEFAULT_REGION = "us-west-2"
 	
-	aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read
-	aws s3 cp $zipFilePath s3://slobs-cdn.streamlabs.com/obsplugin/package/	--acl public-read
+	try {
+		aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read
+		aws s3 cp $zipFilePath s3://slobs-cdn.streamlabs.com/obsplugin/package/	--acl public-read
+	}
+	catch {
+		Write-Host "S3Upload: Error: $_"
+		throw
+	}
 }
 
 if ($allBranchesReady) {
