@@ -92,8 +92,8 @@ function CreateJsonFile($folder, $branchName) {
 	$Env:AWS_DEFAULT_REGION = "us-west-2"
 	
 	try {
-		aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read
-		aws s3 cp $zipFilePath s3://slobs-cdn.streamlabs.com/obsplugin/package/	--acl public-read
+		aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+		aws s3 cp $zipFilePath s3://slobs-cdn.streamlabs.com/obsplugin/package/	--acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
 	}
 	catch {
 		Write-Host "S3Upload: Error: $_"
