@@ -9,6 +9,7 @@ env:
   GRPC_VERSION: v1.58.0
   AWS_SYMB_ACCESS_KEY_ID: ${{secrets.AWS_SYMB_ACCESS_KEY_ID}}
   AWS_SYMB_SECRET_ACCESS_KEY: ${{secrets.AWS_SYMB_SECRET_ACCESS_KEY}}
+  RELEASE_BUCKET: "slobs-cdn.streamlabs.com/obsplugin/intermediary_packages/"
     
 jobs:
   win64:
@@ -41,3 +42,28 @@ jobs:
         with:
           name: slplugin-archive
           path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
+
+  deploy:
+    name: Sign Binaries
+    runs-on: windows-latest
+    environment: Release
+    needs: [win64]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download Archive
+        uses: actions/download-artifact@v3
+        with:
+          name: slplugin-archive
+      - name: Extract and Sign
+        env:
+          CODE_SIGNING_CERTIFICATE: ${{ secrets.CODE_SIGNING_CERTIFICATE }}
+          CODE_SIGNING_PASSWORD: ${{ secrets.CODE_SIGNING_PASSWORD }}
+        run: powershell -File ./ci/sign.ps1 "${{ github.workspace }}" "${{ github.sha }}"
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
+          aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
+          aws-region: us-west-2
+      - name: Upload to AWS Intermediary
+        run: aws s3 cp slplugin-${{env.SL_OBS_VERSION}}-${{ github.sha }}-signed.zip s3://${{env.RELEASE_BUCKET}} --acl public-read
