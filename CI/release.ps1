@@ -17,9 +17,9 @@ function CheckAndDownloadFile($url, $folder, $branchName) {
 
         # Unzip and verify the number of files
         $extractedPath = Join-Path $folder "$branchName"
-        if (Test-Path $extractedPath) { Remove-Item -Path $extractedPath -Recurse -Force }
-        Expand-Archive -Path $filePath -DestinationPath $extractedPath -PassThru
-        $files = Get-ChildItem -Path $extractedPath -Recurse
+		if (Test-Path $extractedPath) { Remove-Item -Path $extractedPath -Recurse -Force }
+		Expand-Archive -Path $filePath -DestinationPath $extractedPath
+		$files = Get-ChildItem -Path $extractedPath -Recurse
         if ($files.Count -le 2) { throw "Insufficient files in the archive." }
     } catch {
         Write-Host "$branchName failed: '$_', URL is $url" -ForegroundColor Yellow
@@ -55,12 +55,11 @@ foreach ($branchName in $branchNames) {
 # Check if all branches are ready
 $allBranchesReady = $successfulBranches -eq $branchNames.Count -and $branchNames.Count -gt 0
 if ($allBranchesReady) {
-    Write-Host "All branches ready." -ForegroundColor Green
+    Write-Host "All branches ready."
 } else {
-    Write-Host "Not all branches are ready." -ForegroundColor Red
+    Write-Host "Not all branches are ready."
+	throw "Error: Not all branches are ready."
 }
-<<<<<<< Updated upstream
-=======
 
 
 # Function to create JSON file for each branch
@@ -100,4 +99,3 @@ if ($allBranchesReady) {
 		Write-Host "JSON file created for $branchName."
 	}
 }
->>>>>>> Stashed changes
