@@ -1,3 +1,5 @@
+cd obs-sl-browser
+
 # URL to the JSON data
 $jsonUrl = "https://slobs-cdn.streamlabs.com/obsplugin/obsversions.json"
 
@@ -17,9 +19,9 @@ function CheckAndDownloadFile($url, $folder, $branchName) {
 
         # Unzip and verify the number of files
         $extractedPath = Join-Path $folder "$branchName"
-        if (Test-Path $extractedPath) { Remove-Item -Path $extractedPath -Recurse -Force }
-        Expand-Archive -Path $filePath -DestinationPath $extractedPath -PassThru
-        $files = Get-ChildItem -Path $extractedPath -Recurse
+		if (Test-Path $extractedPath) { Remove-Item -Path $extractedPath -Recurse -Force }
+		Expand-Archive -Path $filePath -DestinationPath $extractedPath
+		$files = Get-ChildItem -Path $extractedPath -Recurse
         if ($files.Count -le 2) { throw "Insufficient files in the archive." }
     } catch {
         Write-Host "$branchName failed: '$_', URL is $url" -ForegroundColor Yellow
@@ -54,7 +56,46 @@ foreach ($branchName in $branchNames) {
 # Check if all branches are ready
 $allBranchesReady = $successfulBranches -eq $branchNames.Count -and $branchNames.Count -gt 0
 if ($allBranchesReady) {
-    Write-Host "All branches ready." -ForegroundColor Green
+    Write-Host "All branches ready."
 } else {
-    Write-Host "Not all branches are ready." -ForegroundColor Red
+    Write-Host "Not all branches are ready."
+	throw "Error: Not all branches are ready."
+}
+
+
+# Function to create JSON file for each branch
+function CreateJsonFile($folder, $branchName) {
+    $jsonFilePath = Join-Path $folder "$branchName.json"
+    $zipFile = Get-ChildItem -Path $folder -Filter "*.zip"
+    $branchFolderPath = Join-Path $folder $branchName
+    $filesInBranch = Get-ChildItem -Path $branchFolderPath -Recurse
+
+    $jsonContent = @{}
+    $jsonContent.package = $zipFile.Name
+    $jsonContent.files = $filesInBranch | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
+        $subPath = $_.FullName.Substring($_.FullName.IndexOf("$branchName\$branchName") + $branchName.Length * 2 + 2)
+        @{
+            file = $subPath.Replace('\', '/')
+            hash = (Get-FileHash $_.FullName -Algorithm MD5).Hash
+        }
+    }
+
+    $jsonContent | ConvertTo-Json -Depth 10 | Out-File $jsonFilePath
+	
+	Write-Host jsonFilePath
+	
+	# Local environment variables, even if there are system ones with the same name, these are used for the cmd below
+	$Env:AWS_ACCESS_KEY_ID = $Env:AWS_SYMB_ACCESS_KEY_ID
+	$Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_SYMB_SECRET_ACCESS_KEY
+	$Env:AWS_DEFAULT_REGION = "us-west-2"
+	
+	aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --recursive --acl public-read --debug
+}
+
+if ($allBranchesReady) {
+    foreach ($branchName in $branchNames) {
+		$downloadDir = ".\.ReleaseTemp\$branchName\"
+		CreateJsonFile $downloadDir $branchName
+		Write-Host "JSON file created for $branchName."
+	}
 }
