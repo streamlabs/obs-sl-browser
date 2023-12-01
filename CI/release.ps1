@@ -87,18 +87,18 @@ function CreateJsonFile($folder, $branchName) {
 	Write-Host $zipFilePath
 	
 	# Local environment variables, even if there are system ones with the same name, these are used for the cmd below
-	$Env:AWS_ACCESS_KEY_ID = $Env:AWS_SYMB_ACCESS_KEY_ID
-	$Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_SYMB_SECRET_ACCESS_KEY
+	$Env:AWS_ACCESS_KEY_ID = $Env:AWS_RELEASE_ACCESS_KEY_ID
+	$Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
 	$Env:AWS_DEFAULT_REGION = "us-west-2"
 	
-	aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --recursive --acl public-read
-	aws s3 cp $zipFilePath s3://slobs-cdn.streamlabs.com/obsplugin/package/	--recursive --acl public-read
+	aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read
+	aws s3 cp $zipFilePath s3://slobs-cdn.streamlabs.com/obsplugin/package/	--acl public-read
 }
 
 if ($allBranchesReady) {
     foreach ($branchName in $branchNames) {
 		$downloadDir = ".\.ReleaseTemp\$branchName\"
+		Write-Host "Creating json file created for $branchName..."
 		CreateJsonFile $downloadDir $branchName
-		Write-Host "JSON file created for $branchName."
 	}
 }
