@@ -6,7 +6,6 @@ on:
 env:
   SL_OBS_VERSION: ${{ github.ref_name }}
   SLGenerator: Visual Studio 17 2022
-  GRPC_VERSION: v1.58.0
     
 jobs:
   publish:

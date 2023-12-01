@@ -1,5 +1,3 @@
-cd obs-sl-browser
-
 # URL to the JSON data
 $jsonUrl = "https://slobs-cdn.streamlabs.com/obsplugin/obsversions.json"
 
@@ -19,9 +17,9 @@ function CheckAndDownloadFile($url, $folder, $branchName) {
 
         # Unzip and verify the number of files
         $extractedPath = Join-Path $folder "$branchName"
-		if (Test-Path $extractedPath) { Remove-Item -Path $extractedPath -Recurse -Force }
-		Expand-Archive -Path $filePath -DestinationPath $extractedPath
-		$files = Get-ChildItem -Path $extractedPath -Recurse
+        if (Test-Path $extractedPath) { Remove-Item -Path $extractedPath -Recurse -Force }
+        Expand-Archive -Path $filePath -DestinationPath $extractedPath -PassThru
+        $files = Get-ChildItem -Path $extractedPath -Recurse
         if ($files.Count -le 2) { throw "Insufficient files in the archive." }
     } catch {
         Write-Host "$branchName failed: '$_', URL is $url" -ForegroundColor Yellow
@@ -36,7 +34,8 @@ $successfulBranches = 0
 # Iterate through each branch
 foreach ($branchName in $branchNames) {
     # Fetch head commit SHA for the branch
-    $commitSha = git rev-parse $branchName
+	git fetch origin $branchName
+	$commitSha = git rev-parse FETCH_HEAD
 
     # URL for the zip file
     $zipUrl = "https://slobs-cdn.streamlabs.com/obsplugin/intermediary_packages/slplugin-$branchName-$commitSha-signed.zip"
@@ -56,11 +55,12 @@ foreach ($branchName in $branchNames) {
 # Check if all branches are ready
 $allBranchesReady = $successfulBranches -eq $branchNames.Count -and $branchNames.Count -gt 0
 if ($allBranchesReady) {
-    Write-Host "All branches ready."
+    Write-Host "All branches ready." -ForegroundColor Green
 } else {
-    Write-Host "Not all branches are ready."
-	throw "Error: Not all branches are ready."
+    Write-Host "Not all branches are ready." -ForegroundColor Red
 }
+<<<<<<< Updated upstream
+=======
 
 
 # Function to create JSON file for each branch
@@ -90,6 +90,7 @@ function CreateJsonFile($folder, $branchName) {
 	$Env:AWS_DEFAULT_REGION = "us-west-2"
 	
 	aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --recursive --acl public-read --debug
+	aws s3 cp $zipFile s3://slobs-cdn.streamlabs.com/obsplugin/package/	--recursive --acl public-read --debug	
 }
 
 if ($allBranchesReady) {
@@ -99,3 +100,4 @@ if ($allBranchesReady) {
 		Write-Host "JSON file created for $branchName."
 	}
 }
+>>>>>>> Stashed changes
