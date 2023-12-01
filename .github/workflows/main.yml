@@ -43,7 +43,6 @@ jobs:
           name: slplugin-archive
           path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
 
-  deploy:
     name: Sign Binaries
     runs-on: windows-latest
     environment: Release
