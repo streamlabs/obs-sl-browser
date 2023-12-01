@@ -1,0 +1,35 @@
+name: 'Publish'
+
+on:
+  workflow_dispatch:
+
+env:
+  SL_OBS_VERSION: ${{ github.ref_name }}
+  SLGenerator: Visual Studio 17 2022
+  GRPC_VERSION: v1.58.0
+    
+jobs:
+  publish:
+    name: 'Publish'
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        ReleaseName: [release]
+        include:
+          - ReleaseName: release
+            ReleaseConfig: RelWithDebInfo
+    env:
+      OS_TAG: "win64"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
+          aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
+          aws-region: us-west-2
+         
+      - name: Run publish script
+        run: powershell -File ./ci/release.ps1 "${{ github.workspace }}" "${{ github.sha }}"
