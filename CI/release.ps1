@@ -1,5 +1,5 @@
 # URL to the JSON data
-$jsonUrl = "https://slobs-cdn.streamlabs.com/obsplugin/obsversions.json"
+$jsonUrl = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/obsversions.json"
 
 # Fetch the JSON content
 $jsonContent = Invoke-RestMethod -Uri $jsonUrl
