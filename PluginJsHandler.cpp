@@ -228,45 +228,41 @@ void PluginJsHandler::JS_STOP_WEBSERVER(const json11::Json &params, std::string 
 	WebServer::instance().stop();
 }
 
+// Function to find the main window of a process
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
+{
+	DWORD lpdwProcessId;
+	GetWindowThreadProcessId(hwnd, &lpdwProcessId);
+	if (lpdwProcessId == lParam)
+	{
+		SetForegroundWindow(hwnd);
+		return FALSE;
+	}
+	return TRUE;
+}
+
 void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::string &out_jsonReturn)
 {	
-	std::map<INT_PTR, std::string> shellExecuteErrors = {
-		{0, "The operating system is out of memory or resources."},
-		{ERROR_FILE_NOT_FOUND, "The specified file was not found."},
-		{ERROR_PATH_NOT_FOUND, "The specified path was not found."},
-		{ERROR_BAD_FORMAT, "The .exe file is invalid (non-Win32 .exe or error in .exe image)."},
-		{SE_ERR_ACCESSDENIED, "The operating system denied access to the specified file."},
-		{SE_ERR_ASSOCINCOMPLETE, "The file name association is incomplete or invalid."},
-		{SE_ERR_DDEBUSY, "The DDE transaction could not be completed because other DDE transactions were being processed."},
-		{SE_ERR_DDEFAIL, "The DDE transaction failed."},
-		{SE_ERR_DDETIMEOUT, "The DDE transaction could not be completed because the request timed out."},
-		{SE_ERR_DLLNOTFOUND, "The specified DLL was not found."},
-		{SE_ERR_FNF, "The specified file was not found."},
-		{SE_ERR_NOASSOC, "There is no application associated with the given file name extension. This error will also be returned if you attempt to print a file that is not printable."},
-		{SE_ERR_OOM, "There was not enough memory to complete the operation."},
-		{SE_ERR_PNF, "The specified path was not found."},
-		{SE_ERR_SHARE, "A sharing violation occurred."},
-	};
-
 	const auto &param2Value = params["param2"];
 	std::string url = param2Value.string_value();
-	INT_PTR result = (INT_PTR)::ShellExecuteA(NULL, "open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
 
-	// ShellExecuteA
-	// "If the function succeeds, it returns a value greater than 32."
-	if (result <= 32)
+	SHELLEXECUTEINFOA sei = {0};
+	sei.cbSize = sizeof(SHELLEXECUTEINFOA);
+	sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+	sei.lpVerb = "open";
+	sei.lpFile = url.c_str();
+	sei.nShow = SW_SHOWNORMAL;
+
+	if (ShellExecuteExA(&sei))
 	{
-		std::string err = "An unknown error occured. GetLastError() = " + GetLastError();
-		auto itr = shellExecuteErrors.find(result);
-
-		if (itr != shellExecuteErrors.end())
-			err = itr->second;
-
-		out_jsonReturn = Json(Json::object{{"error", err}}).dump();
+		Sleep(1000);
+		DWORD processId = GetProcessId(sei.hProcess);
+		EnumWindows(EnumWindowsProc, (LPARAM)processId);
+		CloseHandle(sei.hProcess);
 	}
 	else
 	{
-		out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+		out_jsonReturn = Json(Json::object{{"error", "ShellExecuteEx failed."}}).dump();
 	}
 }
 
