@@ -81,6 +81,7 @@ public:
 		JS_TRANSITION_SET_SETTINGS,
 		JS_ENUM_SCENES,
 		JS_RESTART_OBS,
+		JS_SL_VERSION_INFO,
 	};
 
 public:
@@ -411,6 +412,14 @@ public:
 
 			// .(@function(arg1))
 			{"web_clearAuthToken", JS_CLEAR_AUTH_TOKEN},
+
+			/***
+			* Streamlabs
+			*/
+
+			// .(@function(arg1))
+			//		Example arg1 = { "branch": '29.1.0', "git_sha": 'abcdefg...' }
+			{"sl_getVersionInfo", JS_SL_VERSION_INFO},
 
 		};
 
