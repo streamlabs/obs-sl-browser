@@ -151,6 +151,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_DOCK_SETTITLE: JS_DOCK_SETTITLE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_STREAMSETTINGS: JS_SET_STREAMSETTINGS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_GET_STREAMSETTINGS: JS_GET_STREAMSETTINGS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SL_VERSION_INFO: JS_SL_VERSION_INFO(jsonParams, jsonReturnStr); break;		
 		case JavascriptApi::JS_START_WEBSERVER: JS_START_WEBSERVER(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_STOP_WEBSERVER: JS_STOP_WEBSERVER(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_LAUNCH_OS_BROWSER_URL: JS_LAUNCH_OS_BROWSER_URL(jsonParams, jsonReturnStr); break;
@@ -275,6 +276,15 @@ void PluginJsHandler::JS_CLEAR_AUTH_TOKEN(const json11::Json &params, std::strin
 {
 	WebServer::instance().clearToken();
 	out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+}
+
+void PluginJsHandler::JS_SL_VERSION_INFO(const json11::Json &params, std::string &out_jsonReturn)
+{
+#ifdef GITHUB_REVISION
+	out_jsonReturn = Json(Json::object{{"branch", SL_OBS_VERSION}, {"git_sha", GITHUB_REVISION}}).dump();
+#else
+	out_jsonReturn = Json(Json::object{{"branch", "debug"}, {"git_sha", "debug"}}).dump();
+#endif
 }
 
 void PluginJsHandler::JS_GET_STREAMSETTINGS(const json11::Json &params, std::string &out_jsonReturn)
