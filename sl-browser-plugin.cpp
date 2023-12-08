@@ -33,9 +33,9 @@ MODULE_EXPORT const char *obs_module_description(void)
 bool obs_module_load(void)
 {
 #ifdef GITHUB_REVISION
-	blog(LOG_INFO, "%s module git sha is %s for OBS %s", GITHUB_REVISION, SL_OBS_VERSION);
+	blog(LOG_INFO, "%s module git sha is %s for OBS %s", obs_module_description(), GITHUB_REVISION, SL_OBS_VERSION);
 #else
-	blog(LOG_INFO, "%s module is a debug build, version information unknown.");
+	blog(LOG_INFO, "%s module is a debug build, version information unknown.", obs_module_description());
 #endif
 
 	PluginJsHandler::instance().loadFonts();
