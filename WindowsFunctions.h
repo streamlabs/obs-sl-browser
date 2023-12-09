@@ -358,11 +358,10 @@ namespace WindowsFunctions
 	{
 		if (AddFontResourceA(fontPath))
 		{
-			SendMessage(HWND_BROADCAST, WM_FONTCHANGE, 0, 0);
+			PostMessage(HWND_BROADCAST, WM_FONTCHANGE, 0, 0);
 			return true;
 		}
 
-		//blog(LOG_ERROR, "InstallFont: Failed, last error = %d\n", GetLastError());
 		return false;
 	}
 
