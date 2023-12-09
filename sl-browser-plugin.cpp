@@ -33,7 +33,7 @@ MODULE_EXPORT const char *obs_module_description(void)
 bool obs_module_load(void)
 {
 #ifdef GITHUB_REVISION
-	blog(LOG_INFO, "%s module git sha is %s for OBS %s", obs_module_description(), GITHUB_REVISION, SL_OBS_VERSION);
+	blog(LOG_INFO, "%s module git sha is %s for OBS %s", obs_module_description(), std::string(GITHUB_REVISION).c_str(), std::string(SL_OBS_VERSION).c_str());
 #else
 	blog(LOG_INFO, "%s module is a debug build, version information unknown.", obs_module_description());
 #endif
