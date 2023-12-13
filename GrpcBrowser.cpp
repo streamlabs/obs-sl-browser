@@ -50,8 +50,9 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 		{
 			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
 			WindowsFunctions::ForceForegroundWindow(hwnd);
-		}								  	
+		}
 
+		SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_widget->isHidden());		  	
 		return grpc::Status::OK;
 	}
 };
