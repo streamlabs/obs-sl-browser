@@ -55,7 +55,9 @@ public:
 	virtual bool GetAudioParameters(CefRefPtr<CefBrowser> browser, CefAudioParameters &params) override;
 
 	/* CefLoadHandler */
+	void OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type) override; 
 	void OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode) override;
+	void OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode, const CefString &errorText, const CefString &failedUrl) override;
 
 	int m_channels = 0;
 	int m_sample_rate = 0;
