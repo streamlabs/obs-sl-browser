@@ -11,6 +11,13 @@ public:
 	void run(int argc, char *argv[]);
 
 	static void CreateCefBrowser(int arg);
+	static const char *getDefaultUrl() { return "https://obs-plugin.streamlabs.dev"; }
+
+	bool getMainPageSuccess() const { return m_mainPageSuccess; }
+	bool getMainLoadingInProgress() const { return m_mainLoadingInProgress; }
+
+	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
+	void setMainLoadingInProgress(const bool b) { m_mainLoadingInProgress = b; }
 
 public:
 	QWidget *m_widget = nullptr;
@@ -37,6 +44,9 @@ private:
 
 	static void DebugInputThread();
 	static void CheckForObsThread();
+
+	bool m_mainPageSuccess = false;
+	bool m_mainLoadingInProgress = false;
 
 public:
 	// Disallow copying
