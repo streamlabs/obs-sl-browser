@@ -13,6 +13,9 @@ public:
 	static void CreateCefBrowser(int arg);
 	static const char *getDefaultUrl() { return "https://obs-plugin.streamlabs.dev"; }
 
+	bool getSavedHiddenState() const;
+	void saveHiddenState(const bool b) const;
+
 	bool getMainPageSuccess() const { return m_mainPageSuccess; }
 	bool getMainLoadingInProgress() const { return m_mainLoadingInProgress; }
 
@@ -41,6 +44,8 @@ private:
 	void browserInit();
 	void browserShutdown();
 	void browserManagerThread();
+
+	std::wstring getCacheDir() const;
 
 	static void DebugInputThread();
 	static void CheckForObsThread();
