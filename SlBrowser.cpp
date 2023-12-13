@@ -8,6 +8,7 @@
 #include <thread>
 #include <mutex>
 #include <filesystem>
+#include <fstream>
 
 #include <QTimer>
 #include <QPointer>
@@ -82,9 +83,10 @@ void SlBrowser::run(int argc, char *argv[])
 	CefPostTask(TID_UI, base::BindOnce(&CreateCefBrowser, 5));
 
 	std::thread(CheckForObsThread).detach();
-
-	// todo: remove this
 	std::thread(DebugInputThread).detach();
+
+	if (SlBrowser::getSavedHiddenState())
+		m_widget->hide();
 
 	// Run Qt Application
 	int result = a.exec();
@@ -218,9 +220,41 @@ void SlBrowser::CheckForObsThread()
 	}
 }
 
-// todo: remove this
+bool SlBrowser::getSavedHiddenState() const
+{
+	std::wstring filePath = getCacheDir() + L"\\window_state.txt";
+	std::wifstream file(filePath);
+
+	if (!file.is_open())
+		return false;
+
+	wchar_t ch;
+	file >> ch;
+
+	return ch == L'1';
+}
+
+void SlBrowser::saveHiddenState(const bool b) const
+{
+	std::wstring filePath = getCacheDir() + L"\\window_state.txt";
+	std::wofstream file(filePath, std::ios::trunc);
+
+	if (file.is_open())
+		file << (b ? L'1' : L'0');
+}
+
+std::wstring SlBrowser::getCacheDir() const
+{
+	wchar_t path[MAX_PATH];
+
+	if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, path)))
+		return std::wstring(path) + L"\\StreamlabsOBS";
+
+	return L"";
+}
 
 /*static*/
+// todo: remove this?
 void SlBrowser::DebugInputThread()
 {
 	::Sleep(2000);
