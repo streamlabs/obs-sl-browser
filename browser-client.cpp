@@ -355,15 +355,22 @@ bool BrowserClient::GetAudioParameters(CefRefPtr<CefBrowser> browser, CefAudioPa
 	return true;
 }
 
-void BrowserClient::OnLoadEnd(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, int)
+void BrowserClient::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type)
 {
-	if (!valid())
-	{
-		return;
-	}
+	SlBrowser::instance().setMainLoadingInProgress(true);
+}
 
-	if (frame->IsMain())
-	{}
+void BrowserClient::OnLoadEnd(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, int httpStatusCode)
+{
+	if (httpStatusCode == 200)
+		SlBrowser::instance().setMainPageSuccess(true);
+
+	SlBrowser::instance().setMainLoadingInProgress(false);
+}
+
+void BrowserClient::OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode, const CefString &errorText, const CefString &failedUrl)
+{
+
 }
 
 bool BrowserClient::OnConsoleMessage(CefRefPtr<CefBrowser>, cef_log_severity_t level, const CefString &message, const CefString &source, int line)
