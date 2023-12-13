@@ -32,6 +32,18 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 
 	grpc::Status com_grpc_window_toggleVisibility(grpc::ServerContext *context, const grpc_window_toggleVisibility *request, grpc_empty_Reply *response) override
 	{
+		// If hidden
+		if (SlBrowser::instance().m_widget->isHidden())
+		{
+			// Main page isn't loading and it also failed
+			if (!SlBrowser::instance().getMainLoadingInProgress() && !SlBrowser::instance().getMainPageSuccess())
+			{
+				// Attempt load default URL again
+				SlBrowser::instance().setMainLoadingInProgress(true);
+				SlBrowser::instance().m_browser->GetMainFrame()->LoadURL(SlBrowser::getDefaultUrl());
+			}
+		}
+
 		SlBrowser::instance().m_widget->setHidden(!SlBrowser::instance().m_widget->isHidden());
 
 		if (!SlBrowser::instance().m_widget->isHidden())
