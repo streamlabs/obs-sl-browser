@@ -196,6 +196,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_TRANSITION_SET_SETTINGS: JS_TRANSITION_SET_SETTINGS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_ENUM_SCENES: JS_ENUM_SCENES(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_RESTART_OBS: JS_RESTART_OBS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_IS_OBS_STREAMING: JS_GET_IS_OBS_STREAMING(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -1016,6 +1017,11 @@ void PluginJsHandler::JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, 
 			obs_frontend_set_current_transition(transition);
 		},
 		Qt::BlockingQueuedConnection);	
+}
+
+void PluginJsHandler::JS_GET_IS_OBS_STREAMING(const json11::Json &params, std::string &out_jsonReturn)
+{
+	out_jsonReturn = Json(Json::object({{"value", obs_frontend_streaming_active()}})).dump();
 }
 
 void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::string &out_jsonReturn)
