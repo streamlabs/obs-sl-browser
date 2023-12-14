@@ -286,7 +286,7 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 	else
 		browserCommand = "\"" + browserCommand + "\" \"" + url + "\"";
 
-	system(browserCommand.c_str());
+	WinExec(browserCommand.c_str(), SW_SHOWDEFAULT);
 }
 
 void PluginJsHandler::JS_GET_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn)
