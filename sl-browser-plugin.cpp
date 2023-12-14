@@ -78,8 +78,18 @@ void obs_module_post_load(void)
 		}
 	}
 
-	CrashHandler::instance().setLogfilePath(latest_file.string());
+	CrashHandler::instance().addLogfilePath(latest_file.string());
+		
+	// Path to CEF log file, find the most recently updated log file
+	char cache_path[MAX_PATH];
+	std::string cache_pathStdStr;
 
+	if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, cache_path)))
+		cache_pathStdStr = std::string(cache_path) + "\\StreamlabsOBS_CEF_Cache";
+
+	if (!cache_pathStdStr.empty())
+		CrashHandler::instance().addLogfilePath(cache_pathStdStr + "\\cef.log");
+		
 	/***
 	* Plugin begnis
 	*/
