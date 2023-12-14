@@ -23,7 +23,7 @@ public:
 	void setErrorTitle(const std::string &msg) { m_errorTitle = msg; }
 	void setNormalCrashHandler(std::function<void()> func) { m_normalCrashHandler = func; }
 	void setSentryUri(const std::string &uri) { m_sentryURI = uri; }
-	void setLogfilePath(const std::string &path) { m_logfilePath = path; }
+	void addLogfilePath(const std::string &path) { m_logfilePaths.push_back(path); }
 
 public:
 	static CrashHandler& instance()
@@ -43,7 +43,7 @@ private:
 	std::string m_uploadTitle;
 	std::string m_uploadMessage;
 	std::string m_sentryURI;
-	std::string m_logfilePath;
+	std::vector<std::string> m_logfilePaths;
 	std::function<void()> m_normalCrashHandler;
 
 private:
@@ -101,9 +101,9 @@ private:
 		{
 		    // Small dmp with just stack, in case heap is huge and something goes wrong with how easy it is to open
 		    auto dumped = pMiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFileStackDmp, MINIDUMP_TYPE(MiniDumpWithIndirectlyReferencedMemory | MiniDumpScanMemory), e ? &exceptionInfo : nullptr, nullptr, nullptr);
-		    sendReportToSentry(instance().m_logfilePath, finalPath_StackDmp.c_str(), instance().m_sentryURI);
-		    std::filesystem::remove(finalPath_StackDmp);
+		    sendReportToSentry(instance().m_logfilePaths, finalPath_StackDmp.c_str(), instance().m_sentryURI);
 		    CloseHandle(hFileStackDmp);
+		    std::filesystem::remove(finalPath_StackDmp);
 		}
 
 		// todo
@@ -126,7 +126,7 @@ private:
 		//}
 	}
 
-	static void sendReportToSentry(const std::string &logfile_path, const std::string &minidump_path, const std::string &uri)
+	static void sendReportToSentry(const std::vector<std::string> &logfiles, const std::string &minidump_path, const std::string &uri)
 	{
 		DWORD httpCode = 0;
 		DWORD timeoutMS = 10000;
@@ -141,31 +141,18 @@ private:
 		#ifdef SL_OBS_VERSION
 			version = SL_OBS_VERSION;
 		#else
-			return;
+			version = "debug";
 		#endif
 
 		#ifdef GITHUB_REVISION
 			githubRevision = GITHUB_REVISION;
 		#else
-			return;
+			githubRevision = "debug";
 		#endif
 
 		// Read .dmp file content
 		std::ifstream minidump_file(minidump_path, std::ios::binary);
 		std::string minidumpContent((std::istreambuf_iterator<char>(minidump_file)), std::istreambuf_iterator<char>());
-
-		// Open log file
-		std::ifstream logfile(logfile_path, std::ios::binary | std::ios::ate); 
-		std::streamsize size = logfile.tellg();                                
-		logfile.seekg(0, std::ios::beg);                                       
-
-		// If the log file is larger than 2MB, we want to keep only the last 2MB
-		const std::streamsize maxSize = 2 * 1024 * 1024;
-		if (size > maxSize)
-		    logfile.seekg(-maxSize, std::ios::end);
-
-		// Read the log file content into a string
-		std::string logfileContent((std::istreambuf_iterator<char>(logfile)), std::istreambuf_iterator<char>());
 
 		// Construct payload
 		payload += "--BOUNDARY\r\n";
@@ -174,11 +161,34 @@ private:
 		payload += "\r\n";
 		payload += minidumpContent + "\r\n";
 		payload += "--BOUNDARY\r\n";
-		payload += "Content-Disposition: form-data; name=\"log_file\"; filename=\"log.txt\"\r\n";
-		payload += "Content-Type: text/plain\r\n";
-		payload += "\r\n";
-		payload += logfileContent + "\r\n";
-		payload += "--BOUNDARY\r\n";
+
+		for (size_t i = 0; i < logfiles.size(); ++i)
+		{
+			const std::string &logfile_path = logfiles[i];
+
+			// Open log file
+			std::ifstream logfile(logfile_path, std::ios::binary | std::ios::ate);
+			std::streamsize size = logfile.tellg();
+			logfile.seekg(0, std::ios::beg);
+			
+			// If the log file is larger than 2MB, we want to keep only the last 2MB
+			const std::streamsize maxSize = 2 * 1024 * 1024;
+			if (size > maxSize)
+			    logfile.seekg(-maxSize, std::ios::end);
+			
+			// Read the log file content into a string
+			std::string logfileContent((std::istreambuf_iterator<char>(logfile)), std::istreambuf_iterator<char>());
+			std::string filename = std::filesystem::path(logfile_path).filename().string();
+
+			// Construct payload
+			payload += "Content-Disposition: form-data; name=\"log_file\"" + std::to_string(i) + "; filename=\"" + filename + "\"\r\n";
+			payload += "Content-Type: text/plain\r\n";
+			payload += "\r\n";
+			payload += logfileContent + "\r\n";
+			payload += "--BOUNDARY\r\n";
+		}
+
+		// Construct tags payload
 		payload += "Content-Disposition: form-data; name=\"sentry\"\r\n";
 		payload += "\r\n";
 		payload += "{\"release\":\"" + version + "\", \"tags\":{\"gitrev\":\"" + githubRevision + "\"}}\r\n";
