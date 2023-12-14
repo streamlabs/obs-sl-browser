@@ -230,42 +230,63 @@ void PluginJsHandler::JS_STOP_WEBSERVER(const json11::Json &params, std::string 
 	WebServer::instance().stop();
 }
 
-// Function to find the main window of a process
-BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
-{
-	DWORD lpdwProcessId;
-	GetWindowThreadProcessId(hwnd, &lpdwProcessId);
-	if (lpdwProcessId == lParam)
-	{
-		SetForegroundWindow(hwnd);
-		return FALSE;
-	}
-	return TRUE;
-}
-
 void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::string &out_jsonReturn)
-{	
+{
+	auto getRegistryValue = [](const HKEY rootKey, const std::string &subKey, const std::string &valueName)
+	{
+		HKEY hKey;
+		char value[512];
+		DWORD valueLength = sizeof(value);
+
+		if (RegOpenKeyExA(rootKey, subKey.c_str(), 0, KEY_READ, &hKey) != ERROR_SUCCESS)
+			return std::string();
+
+		if (RegQueryValueExA(hKey, valueName.c_str(), nullptr, nullptr, (LPBYTE)value, &valueLength) != ERROR_SUCCESS)
+		{
+			RegCloseKey(hKey);
+			return std::string();
+		}
+
+		RegCloseKey(hKey);
+		return std::string(value);
+	};
+
+	auto getDefaultBrowserPath = [&]()
+	{
+		// Get the name of the default browser
+		std::string browserName = getRegistryValue(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice", "ProgId");
+		if (browserName.empty())
+			return std::string();
+
+		// Get the path of the browser executable
+		std::string browserPathKey = "SOFTWARE\\Classes\\" + browserName + "\\shell\\open\\command";
+		return getRegistryValue(HKEY_LOCAL_MACHINE, browserPathKey, "");
+	};
+	
 	const auto &param2Value = params["param2"];
 	std::string url = param2Value.string_value();
+	std::string browserCommand = getDefaultBrowserPath();
 
-	SHELLEXECUTEINFOA sei = {0};
-	sei.cbSize = sizeof(SHELLEXECUTEINFOA);
-	sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-	sei.lpVerb = "open";
-	sei.lpFile = url.c_str();
-	sei.nShow = SW_SHOWNORMAL;
-
-	if (ShellExecuteExA(&sei))
+	if (browserCommand.empty())
 	{
-		Sleep(1000);
-		DWORD processId = GetProcessId(sei.hProcess);
-		EnumWindows(EnumWindowsProc, (LPARAM)processId);
-		CloseHandle(sei.hProcess);
+		// Just use ShellExecuteExA if there was an issue getting path to their default browser
+		SHELLEXECUTEINFOA sei = {0};
+		sei.cbSize = sizeof(SHELLEXECUTEINFOA);
+		sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+		sei.lpVerb = "open";
+		sei.lpFile = url.c_str();
+		sei.nShow = SW_SHOWNORMAL;
+		ShellExecuteExA(&sei);
+		return;
 	}
+
+	size_t placeholderPos = browserCommand.find("%1");
+	if (placeholderPos != std::string::npos)
+		browserCommand.replace(placeholderPos, 2, url);
 	else
-	{
-		out_jsonReturn = Json(Json::object{{"error", "ShellExecuteEx failed."}}).dump();
-	}
+		browserCommand = "\"" + browserCommand + "\" \"" + url + "\"";
+
+	system(browserCommand.c_str());
 }
 
 void PluginJsHandler::JS_GET_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn)
