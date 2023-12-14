@@ -24,6 +24,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
+
+      - name: Install Cloudflare CLI
+        run: npm install -g cloudflare-cli
                  
       - name: Run publish script
+        env:
+          CF_API_EMAIL: ${{ secrets.CLOUDFLARE_AUTH_EMAIL }}
+          CF_API_KEY: ${{ secrets.CLOUDFLARE_AUTH_KEY }}
         run: powershell -File ./ci/release.ps1 "${{ github.workspace }}" "${{ github.sha }}"
