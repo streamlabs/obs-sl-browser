@@ -156,7 +156,7 @@ void SlBrowser::browserInit()
 		std::string logPathFile = cache_pathStdStr + "\\cef.log";
 		CefString(&settings.log_file) = logPathFile;
 		settings.log_severity = LOGSEVERITY_DEBUG;
-		CrashHandler::instance().setLogfilePath(logPathFile);
+		CrashHandler::instance().addLogfilePath(logPathFile);
 	}
 
 	// Set the remote debugging port
