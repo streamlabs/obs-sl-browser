@@ -99,6 +99,7 @@ private:
 	void JS_TRANSITION_SET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_ENUM_SCENES(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_RESTART_OBS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_IS_OBS_STREAMING(const json11::Json &params, std::string &out_jsonReturn);
 
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;
