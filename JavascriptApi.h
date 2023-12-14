@@ -77,6 +77,7 @@ public:
 		JS_OBS_ADD_TRANSITION,
 		JS_OBS_SET_CURRENT_TRANSITION,
 		JS_OBS_REMOVE_TRANSITION,
+		JS_GET_IS_OBS_STREAMING,
 		JS_TRANSITION_GET_SETTINGS,
 		JS_TRANSITION_SET_SETTINGS,
 		JS_ENUM_SCENES,
@@ -385,6 +386,11 @@ public:
 			// .(@function(arg1), @json_settings, @sourceName)
 			//	Applies the json data into the source settings
 			{"obs_transition_set_settings_json", JS_TRANSITION_SET_SETTINGS},
+
+			// .(@function(arg1))
+			//	Returns the boolean value of the named obs function
+			//		Example arg1 = { "value": true }
+			{"obs_frontend_streaming_active", JS_GET_IS_OBS_STREAMING},
 
 			/***
 			* Web
