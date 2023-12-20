@@ -86,7 +86,7 @@ if ($LastExitCode -ne 0) {
 
 # Define the output file name for the 7z archive
 Write-Output "-- 7z"
-$pathToArchive = "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+$pathToArchive = "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"
 Write-Output $pathToArchive
 
 # Check if the path exists
