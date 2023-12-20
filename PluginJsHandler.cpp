@@ -197,6 +197,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_ENUM_SCENES: JS_ENUM_SCENES(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_RESTART_OBS: JS_RESTART_OBS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_GET_IS_OBS_STREAMING: JS_GET_IS_OBS_STREAMING(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SAVE_SL_BROWSER_DOCKS: JS_SAVE_SL_BROWSER_DOCKS(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -1038,6 +1039,12 @@ void PluginJsHandler::JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, 
 			obs_frontend_set_current_transition(transition);
 		},
 		Qt::BlockingQueuedConnection);	
+}
+
+void PluginJsHandler::JS_SAVE_SL_BROWSER_DOCKS(const json11::Json& params, std::string& out_jsonReturn)
+{
+	saveSlabsBrowserDocks();
+	out_jsonReturn = Json(Json::object({{"success", true}})).dump();
 }
 
 void PluginJsHandler::JS_GET_IS_OBS_STREAMING(const json11::Json &params, std::string &out_jsonReturn)
@@ -2022,45 +2029,70 @@ void PluginJsHandler::JS_OBS_SOURCE_DESTROY(const Json &params, std::string &out
 // Handle the close event here before Qt sees it
 LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	if (uMsg == WM_CLOSE)
+	static bool finishedSaving = false;
+	static bool doOnce = false;
+
+	// Intercept WM_CLOSE with our own logic
+	if (uMsg == WM_CLOSE && !finishedSaving)
 	{
-		PluginJsHandler::instance().saveSlabsBrowserDocks();
+		if (!doOnce)
+		{
+			auto perform = [](HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+			{
+				::Sleep(100);
+				PluginJsHandler::instance().saveSlabsBrowserDocks();
+				finishedSaving = true;
+				::PostMessage(hwnd, WM_CLOSE, 0, 0);
+			};
+
+			std::thread(perform, hwnd, uMsg, wParam, lParam).detach();
+		}
+
+		doOnce = true;
+		return 0;
 	}
 
-	// Allow Qt to process the message as well
+	// Allow normal messaging
 	WNDPROC origWndProc = (WNDPROC)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 	return CallWindowProc(origWndProc, hwnd, uMsg, wParam, lParam);
 }
 
 void PluginJsHandler::saveSlabsBrowserDocks()
 {
-	Json::array jarray;
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-	QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
 
-	foreach(QDockWidget * dock, docks)
-	{
-		if (dock->property("isSlabs").isValid())
-		{
-			QCefWidgetInternal *widget = (QCefWidgetInternal *)dock->widget();
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, this]() {
+			Json::array jarray;
+			QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+			QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
 
-			std::string url;
+			foreach(QDockWidget * dock, docks)
+			{
+				if (dock->property("isSlabs").isValid())
+				{
+					QCefWidgetInternal *widget = (QCefWidgetInternal *)dock->widget();
 
-			if (widget->cefBrowser != nullptr)
-				url = widget->cefBrowser->GetMainFrame()->GetURL();
+					std::string url;
 
-			Json::object obj{
-				{"title", dock->windowTitle().toStdString()},
-				{"url", url},
-				{"objectName", dock->objectName().toStdString()},
-			};
+					if (widget->cefBrowser != nullptr)
+						url = widget->cefBrowser->GetMainFrame()->GetURL();
 
-			jarray.push_back(obj);
-		}
-	}
+					Json::object obj{
+						{"title", dock->windowTitle().toStdString()},
+						{"url", url},
+						{"objectName", dock->objectName().toStdString()},
+					};
 
-	std::string output = Json(jarray).dump();
-	config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsBrowserDocks", output.c_str());
+					jarray.push_back(obj);
+				}
+			}
+
+			std::string output = Json(jarray).dump();
+			config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsBrowserDocks", output.c_str());
+		},
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::loadFonts()
