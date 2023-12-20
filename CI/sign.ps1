@@ -31,6 +31,10 @@ Get-ChildItem -Path "archive" -File -Recurse |
     $fullName = $_.FullName
     & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $certFile /p $certPass "$fullName"
   }
+
+# Remove the certificate
+Remove-Item -Path "sl-code-signing.b64"
+Remove-Item -Path $certFile
   
 # Delete all files in archive that are not keepExtensions
 Get-ChildItem -Path "archive" -File -Recurse |
