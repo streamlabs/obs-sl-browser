@@ -83,6 +83,7 @@ public:
 		JS_ENUM_SCENES,
 		JS_RESTART_OBS,
 		JS_SL_VERSION_INFO,
+		JS_SAVE_SL_BROWSER_DOCKS,
 	};
 
 public:
@@ -147,6 +148,11 @@ public:
 			// .(@function(arg1), @objectName, @newTitle)
 			//	Renames a dock's objectName, which must be unique and not match any other existing
 			{"dock_setTitle", JS_DOCK_SETTITLE},
+
+			// .(@function(arg1)
+			//	This is automatically done when the user gracefully closes the program
+			//	However, the program might not gracefully close, so this can be used to save to their OBS config the existence of the docks
+			{"dock_saveSlabsBrowserDocks", JS_SAVE_SL_BROWSER_DOCKS},
 
 			/***
 			* Qt Information
