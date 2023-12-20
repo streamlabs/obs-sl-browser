@@ -58,18 +58,9 @@ Set-Content -Path $cmakeListsPath -Value $cmakeListsContent
 Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Recurse
 
 # Build
-try {
-    .\CI\build-windows.ps1 -ErrorAction Stop
-}
-catch {
-    # Handle the error
-    Write-Host "Error: $_"
-    exit 1
-}
-if ($LASTEXITCODE -ne 0) {
-    throw "Build failed with exit code ${LastExitCode}"
-}
-	
+cmake --preset windows-x64
+cmake --build --preset windows-x64
+
 # Copy platforms folder to plugin release fodler
 Copy-Item -Path ".\build_x64\rundir\RelWithDebInfo\bin\64bit\platforms" -Destination ".\build_x64\plugins\obs-sl-browser\RelWithDebInfo" -Recurse
 
@@ -92,7 +83,7 @@ if ($LastExitCode -ne 0) {
 
 # Define the output file name for the 7z archive
 Write-Output "-- 7z"
-$pathToArchive = "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"
+$pathToArchive = "${github_workspace}\..\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 Write-Output $pathToArchive
 
 # Check if the path exists
