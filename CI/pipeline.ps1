@@ -65,7 +65,7 @@ catch {
     exit 1
 }
 if ($LASTEXITCODE -ne 0) {
-    throw "Build failed with exit code $LASTEXITCODE: $Command"
+    throw "Build failed with exit code ${LastExitCode}"
 }
 	
 # Copy platforms folder to plugin release fodler
