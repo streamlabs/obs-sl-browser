@@ -100,6 +100,7 @@ private:
 	void JS_ENUM_SCENES(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_RESTART_OBS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_IS_OBS_STREAMING(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SAVE_SL_BROWSER_DOCKS(const json11::Json &params, std::string &out_jsonReturn);
 
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;
