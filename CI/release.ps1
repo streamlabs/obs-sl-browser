@@ -94,6 +94,8 @@ function CreateJsonFile($folder, $branchName) {
 	try {
 		aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
 		aws s3 cp $zipFilePath s3://slobs-cdn.streamlabs.com/obsplugin/package/	--acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+        cfcli -d streamlabs.com purge $jsonFilePath
+        cfcli -d streamlabs.com purge $zipFilePath
 	}
 	catch {
 		Write-Host "S3Upload: Error: $_"
