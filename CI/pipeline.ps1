@@ -58,9 +58,18 @@ Set-Content -Path $cmakeListsPath -Value $cmakeListsContent
 Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Recurse
 
 # Build
-cmake --preset windows-x64
-cmake --build --preset windows-x64
-
+try {
+    .\CI\build-windows.ps1 -ErrorAction Stop
+}
+catch {
+    # Handle the error
+    Write-Host "Error: $_"
+    exit 1
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "Build failed with exit code ${LastExitCode}"
+}
+	
 # Copy platforms folder to plugin release fodler
 Copy-Item -Path ".\build_x64\rundir\RelWithDebInfo\bin\64bit\platforms" -Destination ".\build_x64\plugins\obs-sl-browser\RelWithDebInfo" -Recurse
 
@@ -83,11 +92,21 @@ if ($LastExitCode -ne 0) {
 
 # Define the output file name for the 7z archive
 Write-Output "-- 7z"
-Write-Output "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+$pathToArchive = "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"
+Write-Output $pathToArchive
 
-# Create a 7z archive of the $revision folder
-$archiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision.7z"
-7z a $archiveFileName "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+# Check if the path exists
+if (Test-Path -Path $pathToArchive) {
+    # Create a 7z archive of the $revision folder
+    $archiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision.7z"
+    7z a $archiveFileName $pathToArchive
+
+    # Output the name of the archive file created
+    Write-Output "Archive created: $archiveFileName"
+} else {
+    # Throw an error if the path does not exist
+    throw "Error: The path $pathToArchive does not exist."
+}
 
 # Output the name of the archive file created
 Write-Output "Archive created: $archiveFileName"
