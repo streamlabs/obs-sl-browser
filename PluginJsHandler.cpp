@@ -1232,7 +1232,8 @@ void PluginJsHandler::JS_GET_CURRENT_SCENE(const json11::Json &params, std::stri
 		mainWindow,
 		[mainWindow, &out_jsonReturn]() {
 			OBSSourceAutoRelease current_scene_source = obs_frontend_get_current_scene();
-			out_jsonReturn = Json(Json::object({{"name", obs_source_get_name(current_scene_source)}})).dump();
+			auto rawName = obs_source_get_name(current_scene_source);
+			out_jsonReturn = Json(Json::object({{"name", rawName ? rawName : ""}})).dump();
 		},
 		Qt::BlockingQueuedConnection);
 }
@@ -2918,7 +2919,10 @@ void PluginJsHandler::JS_SCENE_GET_SOURCES(const json11::Json &params, std::stri
 					if (source)
 					{
 						std::vector<std::string> *names = reinterpret_cast<std::vector<std::string> *>(param);
-						names->push_back(obs_source_get_name(source));
+						auto str = obs_source_get_name(source);
+
+						if (str != NULL)
+							names->push_back(str);
 					}
 					return true; 
 				},
@@ -2957,10 +2961,13 @@ void PluginJsHandler::JS_ENUM_SCENES(const json11::Json &params, std::string &ou
 				[](void *param, obs_source_t *source) -> bool {
 					std::vector<json11::Json> *sourcesList = reinterpret_cast<std::vector<json11::Json> *>(param);
 
+					auto rawName = obs_source_get_name(source);
+					auto rawId = obs_source_get_id(source);
+
 					json11::Json sourceInfo = json11::Json::object({
-						{"name", obs_source_get_name(source)},
+						{"name", rawName ? rawName : ""},
 						{"type", static_cast<int>(obs_source_get_type(source))},
-						{"id", obs_source_get_id(source)},
+						{"id", rawId ? rawId : ""},
 					});
 
 					sourcesList->push_back(sourceInfo);
@@ -2985,12 +2992,15 @@ void PluginJsHandler::JS_QUERY_ALL_SOURCES(const json11::Json &params, std::stri
 			obs_enum_sources(
 				[](void *param, obs_source_t *source) -> bool {
 					std::vector<json11::Json> *sourcesList = reinterpret_cast<std::vector<json11::Json> *>(param);
-					
+
+					auto rawName = obs_source_get_name(source);
+					auto rawId = obs_source_get_id(source);
+
 					json11::Json sourceInfo = json11::Json::object({
-						{"name", obs_source_get_name(source)},
+						{"name", rawName ? rawName : ""},
 						{"type", static_cast<int>(obs_source_get_type(source))},
-						{"id", obs_source_get_id(source)},
-						});
+						{"id", rawId ? rawId : ""},
+					});
 
 					sourcesList->push_back(sourceInfo);
 					return true; // Continue enumeration
