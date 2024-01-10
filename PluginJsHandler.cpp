@@ -2915,8 +2915,7 @@ void PluginJsHandler::JS_SCENE_GET_SOURCES(const json11::Json &params, std::stri
 			obs_scene_enum_items(
 				scene_obj,
 				[](obs_scene_t *, obs_sceneitem_t *item, void *param) {
-					OBSSourceAutoRelease source = obs_sceneitem_get_source(item);
-					if (source)
+					if (obs_source_t *source = obs_sceneitem_get_source(item))
 					{
 						std::vector<std::string> *names = reinterpret_cast<std::vector<std::string> *>(param);
 						auto str = obs_source_get_name(source);
