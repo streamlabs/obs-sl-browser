@@ -29,6 +29,9 @@ jobs:
          
       - name: Run build script
         run: powershell -File ./ci/pipeline.ps1 "${{ github.workspace }}" "${{ github.sha }}"
+         
+      - name: Compile installer
+        run: powershell -File ./ci/build_nsis_package.ps1 "${{ github.workspace }}" "${{ github.sha }}"
         
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -37,11 +40,17 @@ jobs:
           aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           aws-region: us-west-2
           
-      - name: Upload Artifact
+      - name: Upload Zip
         uses: actions/upload-artifact@v2
         with:
           name: slplugin-archive
           path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
+          
+      - name: Upload Installer
+        uses: actions/upload-artifact@v2
+        with:
+          name: slplugin-archive
+          path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.exe
 
   sign_binaries:
     name: Sign Binaries
