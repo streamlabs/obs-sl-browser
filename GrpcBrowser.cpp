@@ -1,6 +1,8 @@
 #include "GrpcBrowser.h"
-#include "SlBrowser.h"
 #include "WindowsFunctions.h"
+#include "BrowserApp.h"
+
+#include "cef-headers.hpp"
 
 #include <filesystem>
 
@@ -15,44 +17,22 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 	{
 		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
 		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
-		execute_args->SetInt(0, request->funcid());
-		execute_args->SetString(1, request->jsonstr());
 
-		if (auto ptr = SlBrowser::instance().browserClient->PopCallback(request->funcid()))
-		{
-			SendBrowserProcessMessage(ptr, PID_RENDERER, msg);
-		}
-		else
-		{
-			printf("com_grpc_js_executeCallback failed to find browser for function");
-		}
+		std::pair<CefRefPtr<CefV8Value>, CefRefPtr<CefV8Context>> callbackInfo;
 
-		return grpc::Status::OK;
-	}
-
-	grpc::Status com_grpc_window_toggleVisibility(grpc::ServerContext *context, const grpc_window_toggleVisibility *request, grpc_empty_Reply *response) override
-	{
-		// If hidden
-		if (SlBrowser::instance().m_widget->isHidden())
+		if (BrowserApp::instance().PopCallback(request->funcid(), callbackInfo))
 		{
-			// Main page isn't loading and it also failed
-			if (!SlBrowser::instance().getMainLoadingInProgress() && !SlBrowser::instance().getMainPageSuccess())
+			if (callbackInfo.first != nullptr)
 			{
-				// Attempt load default URL again
-				SlBrowser::instance().setMainLoadingInProgress(true);
-				SlBrowser::instance().m_browser->GetMainFrame()->LoadURL(SlBrowser::getDefaultUrl());
+				CefRefPtr<CefV8Value> function = callbackInfo.first;
+				CefRefPtr<CefV8Context> context = callbackInfo.second;
+
+				CefV8ValueList args;
+				args.push_back(CefV8Value::CreateString(request->jsonstr()));
+				callbackInfo.first->ExecuteFunctionWithContext(context, nullptr, args);
 			}
 		}
 
-		SlBrowser::instance().m_widget->setHidden(!SlBrowser::instance().m_widget->isHidden());
-
-		if (!SlBrowser::instance().m_widget->isHidden())
-		{
-			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
-			WindowsFunctions::ForceForegroundWindow(hwnd);
-		}
-
-		SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_widget->isHidden());		  	
 		return grpc::Status::OK;
 	}
 };
@@ -96,19 +76,21 @@ bool GrpcBrowser::startServer(int32_t listenPort)
 	if (m_listenPort != 0)
 		return false;
 
-	m_listenPort = listenPort;
+	int32_t selectedPort = 0;
+	std::string server_address = "localhost:" + std::to_string(listenPort);
 
 	grpc::EnableDefaultHealthCheckService(true);
 	grpc::reflection::InitProtoReflectionServerBuilderPlugin();
 
 	m_builder = std::make_unique<grpc::ServerBuilder>();
-	m_builder->AddListeningPort(std::string("localhost:") + std::to_string(m_listenPort), grpc::InsecureServerCredentials());
+	m_builder->AddListeningPort(server_address, grpc::InsecureServerCredentials(), &selectedPort);
+
+	m_listenPort = selectedPort;
 
 	m_serverObj = std::make_unique<grpc_proxy_objImpl>();
 	m_builder->RegisterService(m_serverObj.get());
 
 	m_server = m_builder->BuildAndStart();
-
 	return m_server != nullptr;
 }
 

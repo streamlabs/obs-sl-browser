@@ -18,7 +18,8 @@ public:
 
 private:
 	std::atomic<bool> m_connected{false};
-	std::unique_ptr<grpc_proxy_obj::Stub> stub_;
+	std::unique_ptr<grpc_proxy_obj::Stub> stub_Browser;
+	std::unique_ptr<grpc_browser_window_obj::Stub> stub_BrowserWindow;
 };
 
 class GrpcPlugin

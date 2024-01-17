@@ -13,17 +13,18 @@ class grpc_plugin_objImpl final : public grpc_plugin_obj::Service
 {
 	grpc::Status com_grpc_js_api(grpc::ServerContext *context, const grpc_js_api_Request *request, grpc_js_api_Reply *response) override
 	{
-		PluginJsHandler::instance().pushApiRequest(request->funcname(), request->params());
 		return grpc::Status::OK;
 	}
 };
 
 /***
 * Client
-* Sending messages to the browser
+* Sending messages to the browser processes
 */
 
-grpc_plugin_objClient::grpc_plugin_objClient(std::shared_ptr<grpc::Channel> channel) : stub_(grpc_proxy_obj::NewStub(channel))
+grpc_plugin_objClient::grpc_plugin_objClient(std::shared_ptr<grpc::Channel> channel) :
+	stub_Browser(grpc_proxy_obj::NewStub(channel)),
+	stub_BrowserWindow(grpc_browser_window_obj::NewStub(channel))
 {
 	m_connected = channel->WaitForConnected(std::chrono::system_clock::now() + std::chrono::seconds(3));
 }
@@ -36,7 +37,7 @@ bool grpc_plugin_objClient::send_executeCallback(const int functionId, const std
 
 	grpc_js_api_Reply reply;
 	grpc::ClientContext context;
-	grpc::Status status = stub_->com_grpc_js_executeCallback(&context, request, &reply);
+	grpc::Status status = stub_Browser->com_grpc_js_executeCallback(&context, request, &reply);
 
 	if (!status.ok())
 		return m_connected = false;
@@ -50,7 +51,7 @@ bool grpc_plugin_objClient::send_windowToggleVisibility()
 
 	grpc_empty_Reply reply;
 	grpc::ClientContext context;
-	grpc::Status status = stub_->com_grpc_window_toggleVisibility(&context, request, &reply);
+	grpc::Status status = stub_BrowserWindow->com_grpc_window_toggleVisibility(&context, request, &reply);
 
 	if (!status.ok())
 		return m_connected = false;

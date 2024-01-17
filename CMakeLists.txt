@@ -65,10 +65,10 @@ target_sources(
   sl-browser
   PRIVATE main.cpp
           GrpcBrowser.cpp
+          GrpcBrowserWindow.cpp
           SlBrowser.cpp
           SlBrowserWidget.cpp
-          browser-app.cpp
-          browser-app.hpp
+          BrowserApp.cpp
           browser-client.cpp
           browser-client.hpp
           browser-scheme.cpp
@@ -174,8 +174,16 @@ target_compile_definitions(sl-browser-plugin PRIVATE NOMINMAX)
 
 add_executable(sl-browser-page)
 
-target_sources(sl-browser-page PRIVATE cef-headers.hpp sl-browser-page/sl-browser-page-main.cpp browser-app.cpp
-                                        browser-app.hpp deps/json11/json11.cpp deps/json11/json11.hpp)
+target_sources(sl-browser-page PRIVATE
+          cef-headers.hpp
+          sl-browser-page-main.cpp
+          BrowserApp.cpp
+          GrpcBrowser.cpp
+          BrowserApp.h
+          deps/json11/json11.cpp
+          deps/json11/json11.hpp
+		      ${papi_proto_srcs}
+		      ${papi_grpc_srcs})
 
 target_link_libraries(sl-browser-page PRIVATE CEF::Library)
 
@@ -186,13 +194,15 @@ target_sources(sl-browser-page PRIVATE sl-browser-page.manifest)
 
 target_compile_features(sl-browser-page PRIVATE cxx_std_17)
 
-if(TARGET CEF::Wrapper_Debug)
-  target_link_libraries(sl-browser-page PRIVATE optimized CEF::Wrapper)
-  target_link_libraries(sl-browser-page PRIVATE debug CEF::Wrapper_Debug)
-else()
-  target_link_libraries(sl-browser-page PRIVATE CEF::Wrapper)
-endif()
+target_link_libraries(sl-browser-page PRIVATE CEF::Wrapper CEF::Library d3d11 dxgi)
+
+target_link_libraries(sl-browser-page PRIVATE 
+	  papi_grpc_proto
+	  ${_REFLECTION}
+	  ${_GRPC_GRPCPP}
+	  ${_PROTOBUF_LIBPROTOBUF})
 
 target_compile_definitions(sl-browser-page PRIVATE ENABLE_BROWSER_SHARED_TEXTURE)
 target_compile_options(sl-browser-page PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
+target_compile_definitions(sl-browser-page PRIVATE NOMINMAX)
 target_link_options(sl-browser-page PRIVATE "LINKER:/IGNORE:4099" "LINKER:/SUBSYSTEM:WINDOWS")

@@ -9,6 +9,9 @@ service grpc_plugin_obj {
 service grpc_proxy_obj {
   rpc com_grpc_js_api (grpc_js_api_Request) returns (grpc_js_api_Reply) {}
   rpc com_grpc_js_executeCallback (grpc_js_api_ExecuteCallback) returns (grpc_js_api_Reply) {}
+}
+
+service grpc_browser_window_obj {
   rpc com_grpc_window_toggleVisibility (grpc_window_toggleVisibility) returns (grpc_empty_Reply) {}
 }
 
