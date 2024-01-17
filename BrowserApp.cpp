@@ -81,12 +81,6 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 	if (message->GetName() == "GrpcPort")
 	{
-		AllocConsole();
-		freopen("conin$", "r", stdin);
-		freopen("conout$", "w", stdout);
-		freopen("conout$", "w", stderr);
-		printf("Debugging Window:\n");
-
 		// Start listening
 		if (GrpcBrowser::instance().startServer(0))
 		{
@@ -95,7 +89,6 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 			if (!GrpcBrowser::instance().connectToClient(arguments->GetInt(0)))
 			{
 				LOG(ERROR) << "Context process unable to connect to plugin's Grpc!";
-				printf("Context process unable to connect to plugin's Grpc!");
 			}
 			else if (GrpcBrowser::instance().getClient()->send_hello(GrpcBrowser::instance().getListenPort()))
 			{
@@ -113,13 +106,11 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 			else
 			{
 				LOG(ERROR) << "Context process unable to send hello to plugin's Grpc!";
-				printf("Context process unable to send hello to plugin's Grpc!");
 			}
 		}
 		else
 		{
 			LOG(ERROR) << "Context process unable to start their Grpc server!";
-			printf("Context process unable to start their Grpc server!");
 		}
 	}
 
@@ -146,8 +137,6 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value> /*unused, dont without revising OnProcessMessageReceived*/, const CefV8ValueList &arguments, CefRefPtr<CefV8Value> & /*unused*/, CefString & /*unused*/)
 {
-	printf("Execute %s\n", name.ToString().c_str());
-
 	std::lock_guard<std::recursive_mutex> grd(m_executeMtx);
 
 	if (JavascriptApi::isValidFunctionName(name.ToString()))
@@ -205,7 +194,17 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value> /*unused, 
 			{
 				// Send to the plugin, they'll phone back when they have an answer
 				grpc_js_api_Reply reply;
-				GrpcBrowser::instance().getClient()->send_js_api(name, cefListValueToJSONString(args), GrpcBrowser::instance().getListenPort());
+				GrpcBrowser::instance().getClient()->send_js_api(name, cefListValueToJSONString(args), GrpcBrowser::instance().getListenPort(), reply);
+
+				// We got an answer right away
+				if (!reply.jsonresponse().empty() && callBackId != 0)
+				{
+					m_callbackMap.erase(callBackId);
+
+					CefV8ValueList args;
+					args.push_back(CefV8Value::CreateString(reply.jsonresponse()));
+					arguments[0]->ExecuteFunctionWithContext(CefV8Context::GetCurrentContext(), nullptr, args);					
+				}
 			}
 		}
 	}

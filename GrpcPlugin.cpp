@@ -13,7 +13,12 @@ class grpc_plugin_objImpl final : public grpc_plugin_obj::Service
 {
 	grpc::Status com_grpc_js_api(grpc::ServerContext *context, const grpc_js_api_Request *request, grpc_js_api_Reply *response) override
 	{
-		PluginJsHandler::instance().pushApiRequest(request->funcname(), request->params(), request->peerport());
+		std::string jsonReply;
+		PluginJsHandler::instance().handleApiRequest(request->funcname(), request->params(), request->peerport(), &jsonReply);
+
+		if (!jsonReply.empty())
+			response->set_jsonresponse(jsonReply);
+
 		return grpc::Status::OK;
 	}
 

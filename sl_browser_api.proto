@@ -41,7 +41,7 @@ message grpc_window_toggleVisibility {
 
 // Server->
 message grpc_js_api_Reply {
-	string empty = 1;
+	string jsonresponse = 1;
 }
 
 // Server->
