@@ -68,6 +68,8 @@ void SlBrowser::run(int argc, char *argv[])
 		return;
 	}
 
+	printf("Success\n");
+
 	QApplication a(argc, argv);
 
 	// Create CEF Browser

@@ -12,8 +12,8 @@ class PluginJsHandler
 public:
 	void start();
 	void stop();
-	void pushApiRequest(const std::string &funcName, const std::string &params);
-	void executeApiRequest(const std::string &funcName, const std::string &params);
+	void pushApiRequest(const std::string &funcName, const std::string &params, const int32_t peerPort);
+	void executeApiRequest(const std::string &funcName, const std::string &params, const int32_t peerPort);
 	void loadSlabsBrowserDocks();
 	void saveSlabsBrowserDocks();
 	void loadFonts();
@@ -24,6 +24,14 @@ public:
 		static PluginJsHandler a;
 		return a;
 	}
+
+public:
+	struct ApiRequest
+	{
+		int32_t peerPort = 0;
+		std::string funcName;
+		std::string params;
+	};
 
 private:
 	PluginJsHandler();
@@ -107,6 +115,6 @@ private:
 
 	std::mutex m_queueMtx;
 	std::atomic<bool> m_running = false;
-	std::vector<std::pair<std::string, std::string>> m_queudRequests;
+	std::vector<ApiRequest> m_queudRequests;
 	std::thread m_workerThread;
 };

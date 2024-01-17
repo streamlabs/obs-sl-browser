@@ -74,17 +74,17 @@ void PluginJsHandler::stop()
 		m_workerThread.join();
 }
 
-void PluginJsHandler::pushApiRequest(const std::string &funcName, const std::string &params)
+void PluginJsHandler::pushApiRequest(const std::string &funcName, const std::string &params, const int32_t peerPort)
 {
 	std::lock_guard<std::mutex> grd(m_queueMtx);
-	m_queudRequests.push_back({funcName, params});
+	m_queudRequests.push_back({peerPort, funcName, params});
 }
 
 void PluginJsHandler::workerThread()
 {
 	while (m_running)
 	{
-		std::vector<std::pair<std::string, std::string>> latestBatch;
+		std::vector<PluginJsHandler::ApiRequest> latestBatch;
 
 		{
 			std::lock_guard<std::mutex> grd(m_queueMtx);
@@ -99,12 +99,12 @@ void PluginJsHandler::workerThread()
 		else
 		{
 			for (auto &itr : latestBatch)
-				executeApiRequest(itr.first, itr.second);
+				executeApiRequest(itr.funcName, itr.params, itr.peerPort);
 		}
 	}
 }
 
-void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::string &params)
+void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::string &params, const int32_t peerPort)
 {
 	std::string err;
 	Json jsonParams = Json::parse(params, err);
@@ -205,7 +205,10 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 
 	// We're done, send callback
 	if (param1Value.int_value() > 0)
-		GrpcPlugin::instance().getClient()->send_executeCallback(param1Value.int_value(), jsonReturnStr);
+	{
+		if (auto connection = GrpcPlugin::instance().getClientToBrowserSubProcess(peerPort))
+			connection->send_executeCallback(param1Value.int_value(), jsonReturnStr);
+	}
 }
 
 void PluginJsHandler::JS_START_WEBSERVER(const json11::Json &params, std::string &out_jsonReturn)

@@ -64,8 +64,15 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 	for (auto &itr : JavascriptApi::getBrowserFunctionNames())
 		slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
 
-	// Notify central of our existence so that they can tell us the port that the plugin is listening on
-	SendBrowserProcessMessage(CefV8Context::GetCurrentContext()->GetBrowser(), PID_BROWSER, CefProcessMessage::Create("OnContextCreated"));
+	if (!GrpcBrowser::instance().isServerRunning())
+	{
+		// Notify central of our existence so that they can tell us the port that the plugin is listening on
+		SendBrowserProcessMessage(CefV8Context::GetCurrentContext()->GetBrowser(), PID_BROWSER, CefProcessMessage::Create("OnContextCreated"));
+	}
+	else
+	{
+		printf("Same process, no need to establish connections");
+	}
 }
 
 bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message)
@@ -74,6 +81,12 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 	if (message->GetName() == "GrpcPort")
 	{
+		AllocConsole();
+		freopen("conin$", "r", stdin);
+		freopen("conout$", "w", stdout);
+		freopen("conout$", "w", stderr);
+		printf("Debugging Window:\n");
+
 		// Start listening
 		if (GrpcBrowser::instance().startServer(0))
 		{
@@ -82,8 +95,9 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 			if (!GrpcBrowser::instance().connectToClient(arguments->GetInt(0)))
 			{
 				LOG(ERROR) << "Context process unable to connect to plugin's Grpc!";
+				printf("Context process unable to connect to plugin's Grpc!");
 			}
-			else
+			else if (GrpcBrowser::instance().getClient()->send_hello(GrpcBrowser::instance().getListenPort()))
 			{
 				m_connected = true;
 
@@ -96,10 +110,16 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 				m_backlog.clear();
 			}
+			else
+			{
+				LOG(ERROR) << "Context process unable to send hello to plugin's Grpc!";
+				printf("Context process unable to send hello to plugin's Grpc!");
+			}
 		}
 		else
 		{
 			LOG(ERROR) << "Context process unable to start their Grpc server!";
+			printf("Context process unable to start their Grpc server!");
 		}
 	}
 
@@ -126,6 +146,8 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value> /*unused, dont without revising OnProcessMessageReceived*/, const CefV8ValueList &arguments, CefRefPtr<CefV8Value> & /*unused*/, CefString & /*unused*/)
 {
+	printf("Execute %s\n", name.ToString().c_str());
+
 	std::lock_guard<std::recursive_mutex> grd(m_executeMtx);
 
 	if (JavascriptApi::isValidFunctionName(name.ToString()))
@@ -133,6 +155,13 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value> /*unused, 
 		if (!m_connected)
 		{
 			m_backlog.push_back({ name, arguments });
+
+			// Sanity check
+			if (m_backlog.size() > 10000)
+			{
+				LOG(ERROR) << "Context process overflowing backlog messages, never connected to plugin!";
+				exit(1);
+			}
 		}
 		else
 		{
@@ -176,7 +205,7 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value> /*unused, 
 			{
 				// Send to the plugin, they'll phone back when they have an answer
 				grpc_js_api_Reply reply;
-				GrpcBrowser::instance().getClient()->send_js_api(name, cefListValueToJSONString(args));
+				GrpcBrowser::instance().getClient()->send_js_api(name, cefListValueToJSONString(args), GrpcBrowser::instance().getListenPort());
 			}
 		}
 	}
