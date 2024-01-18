@@ -5,9 +5,9 @@
     !error "PACKAGE_DIR not defined. Please define PACKAGE_DIR before compiling."
 !endif
 
-; Check if PACKAGE_DIR is defined, if not throw an error
+; Check if OUTPUT_NAME is defined, if not throw an error
 !ifdef OUTPUT_NAME
-    !echo "Output name directory: ${OUTPUT_NAME}"
+    !echo "Output name: ${OUTPUT_NAME}"
 !else
     !error "OUTPUT_NAME not defined. Please define OUTPUT_NAME before compiling."
 !endif
@@ -15,8 +15,8 @@
 ; Define the name of the installer as it will appear in Windows
 Name "Streamlabs Plugin for OBS"
 
-; Specify the output installer file
-Outfile "StreamlabsPlugin.exe"
+; Specify the output installer file using the OUTPUT_NAME parameter
+Outfile "${OUTPUT_NAME}"
 RequestExecutionLevel admin  ; Request admin rights
 
 ; Use Modern UI for the installer interface

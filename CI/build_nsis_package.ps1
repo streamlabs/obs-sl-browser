@@ -21,4 +21,10 @@ if ($LASTEXITCODE -ne 0) {
 $destinationPath = Join-Path $github_workspace $installerFileName
 Move-Item $installerFileName $destinationPath -Force
 
+# Check if the last operation (Move-Item) was successful
+if (-not $?) {
+    Write-Error "Failed to move installer file"
+    exit 1
+}
+
 Pop-Location
