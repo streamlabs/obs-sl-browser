@@ -210,6 +210,9 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
+	if (jsonReturnStr.empty())
+		jsonReturnStr = "{}";
+
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
 
 	// We're done, send callback
