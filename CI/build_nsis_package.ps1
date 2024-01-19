@@ -5,6 +5,14 @@ param(
 
 $pathToFiles = "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"
 
+# List of file extensions to remove
+$extensions = @(".pdb", ".exp", ".lib")
+
+# Iterating over each extension and removing files
+foreach ($ext in $extensions) {
+    Get-ChildItem -Path $pathToFiles -Recurse -Filter "*$ext" | Remove-Item -Force
+}
+
 Push-Location .\nsis
 
 $installerFileName = "slplugin-$env:SL_OBS_VERSION-$revision.exe"
