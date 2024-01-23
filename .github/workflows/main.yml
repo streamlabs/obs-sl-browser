@@ -29,9 +29,6 @@ jobs:
          
       - name: Run build script
         run: powershell -File ./ci/pipeline.ps1 "${{ github.workspace }}" "${{ github.sha }}"
-         
-      - name: Compile installer
-        run: powershell -File ./ci/build_nsis_package.ps1 "${{ github.workspace }}" "${{ github.sha }}"
         
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -45,15 +42,9 @@ jobs:
         with:
           name: slplugin-archive
           path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
-          
-      - name: Upload Installer
-        uses: actions/upload-artifact@v2
-        with:
-          name: slplugin-installer
-          path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.exe
 
   sign_binaries:
-    name: Sign Binaries
+    name: Sign Binaries and Build Installer
     runs-on: windows-latest
     environment: Release
     needs: [win64]
@@ -78,5 +69,8 @@ jobs:
           aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           aws-region: us-west-2
 
-      - name: Upload to AWS Intermediary
+      - name: Upload zip to AWS Intermediary
         run: aws s3 cp slplugin-${{env.SL_OBS_VERSION}}-${{ github.sha }}-signed.zip s3://${{env.RELEASE_BUCKET}} --acl public-read
+          
+      - name: Upload installer to AWS Intermediary
+        run: aws s3 cp slplugin-${{env.SL_OBS_VERSION}}-${{ github.sha }}-signed.exe s3://${{env.RELEASE_BUCKET}} --acl public-read
