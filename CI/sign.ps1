@@ -44,10 +44,10 @@ Get-ChildItem -Path "archive" -File -Recurse |
 # Make an installer out of those contents
 
 # Move to nsis folder
-Push-Location "${github_workspace}/obs-sl-browser/nsis"
+Push-Location "${github_workspace}/nsis"
 
 $installerFileName = "slplugin-$env:SL_OBS_VERSION-$revision-signed.exe"
-$nsisCommand = "makensis -DPACKAGE_DIR=`"${github_workspace}/obs-sl-browser/archive/RelWithDebInfo`" -DOUTPUT_NAME=`"$installerFileName`" package.nsi"
+$nsisCommand = "makensis -DPACKAGE_DIR=`"${github_workspace}/archive/RelWithDebInfo`" -DOUTPUT_NAME=`"$installerFileName`" package.nsi"
 Invoke-Expression $nsisCommand
 
 if ($LASTEXITCODE -ne 0) {
