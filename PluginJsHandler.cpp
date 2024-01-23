@@ -1254,6 +1254,13 @@ void PluginJsHandler::JS_GET_CURRENT_SCENE(const json11::Json &params, std::stri
 		mainWindow,
 		[mainWindow, &out_jsonReturn]() {
 			OBSSourceAutoRelease current_scene_source = obs_frontend_get_current_scene();
+
+			if (current_scene_source == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Empty current scene."}})).dump();
+				return;
+			}
+
 			auto rawName = obs_source_get_name(current_scene_source);
 			out_jsonReturn = Json(Json::object({{"name", rawName ? rawName : ""}})).dump();
 		},
@@ -1924,6 +1931,14 @@ void PluginJsHandler::JS_OBS_SOURCE_CREATE(const Json &params, std::string &out_
 				return;
 			}
 
+			OBSSourceAutoRelease scene = obs_frontend_get_current_scene();
+
+			if (scene == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Empty current scene."}})).dump();
+				return;
+			}
+
 			obs_data_t *settings = obs_data_create_from_json(settings_jsonStr.c_str());
 			obs_data_t *hotkeys = obs_data_create_from_json(hotkey_data_jsonStr.c_str());
 
@@ -1947,8 +1962,7 @@ void PluginJsHandler::JS_OBS_SOURCE_CREATE(const Json &params, std::string &out_
 
 			out_jsonReturn = jsonReturnValue.dump();
 			obs_data_release(settingsSource);
-						
-			OBSSourceAutoRelease scene = obs_frontend_get_current_scene();
+
 			obs_scene_t *scene_obj = obs_scene_from_source(scene);
 
 			if (obs_scene_find_source(scene_obj, name.c_str()))
