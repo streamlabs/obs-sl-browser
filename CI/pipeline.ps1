@@ -72,13 +72,27 @@ $currentDirFullPath = (Get-Location).Path
 Write-Output "-- Symbols"
 git clone --recursive --branch "no-http-source" https://github.com/stream-labs/symsrv-scripts.git
 
-# Run symbols
+# Run symbols (re-try for 5 minutes)
 cd symsrv-scripts
-Write-Output "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
-.\main.ps1 -localSourceDir "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+$startTime = Get-Date
+$maxDuration = New-TimeSpan -Minutes 5
 
-if ($LastExitCode -ne 0) {
-     throw "Symbol processing script exited with error code ${LastExitCode}"
+# Last error code initialized to a non-zero value
+$lastExitCode = 1
+
+while ((Get-Date) - $startTime -lt $maxDuration -and $lastExitCode -ne 0) {
+    .\main.ps1 -localSourceDir "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+
+    # Update the last exit code
+    $lastExitCode = $LastExitCode
+
+    # Add a delay between retries
+    Start-Sleep -Seconds 10
+}
+
+# Check if the last exit code is non-zero and throw the error
+if ($lastExitCode -ne 0) {
+    throw "Symbol processing script exited with error code $lastExitCode"
 }
 
 # Define the output file name for the 7z archive
