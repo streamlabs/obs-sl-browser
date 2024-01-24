@@ -1,7 +1,7 @@
 #pragma once
 
 #include "browser-client.hpp"
-#include "browser-app.hpp"
+#include "BrowserApp.h"
 
 #include <QWidget>
 
@@ -29,6 +29,7 @@ public:
 	CefRefPtr<BrowserClient> browserClient = nullptr;
 	int32_t m_obs64_PIDt = 0;
 	bool m_allowHideBrowser = true;
+	int32_t m_pluginListenPort = 0;
 
 public:
 	static SlBrowser &instance()
