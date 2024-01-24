@@ -150,7 +150,7 @@ void obs_module_post_load(void)
 			blog(LOG_ERROR, "%s: obs_module_post_load catch while launching server", obs_module_description());
 		}
 
-		if (browserGood && !GrpcPlugin::instance().connectToClient(targetListenPort))
+		if (browserGood && !GrpcPlugin::instance().connectToBrowserWindow(targetListenPort))
 		{
 			browserGood = FALSE;
 			blog(LOG_ERROR, "%s: obs_module_post_load can't connect to process, GetLastError = %d", obs_module_description(), GetLastError());
@@ -177,7 +177,7 @@ void obs_module_post_load(void)
 	QObject::connect(action, &QAction::triggered, [=]() {
 
 		// Has to be run in a seperate thread because bringing to foreground will take over input msg and we're in the middle of using it
-		std::thread([&]() { GrpcPlugin::instance().getClient()->send_windowToggleVisibility(); }).detach();
+		std::thread([&]() { GrpcPlugin::instance().getClientToBrowserWindow()->send_windowToggleVisibility(); }).detach();
 	});
 
 	window->menuBar()->addAction(action);
