@@ -12,9 +12,8 @@ class grpc_proxy_objClient
 {
 public:
 	grpc_proxy_objClient(std::shared_ptr<grpc::Channel> channel);
-
-	bool send_js_api(const std::string &funcName, const std::string &params);
-
+	bool send_js_api(const std::string &funcName, const std::string &params, const int32_t portImListeningOn, grpc_js_api_Reply& output);
+	bool send_hello(const int32_t portImListeningOn);
 	std::atomic<bool> m_connected{false};
 
 private:
@@ -32,10 +31,11 @@ public:
 
 	bool connectToClient(int32_t port);
 	bool startServer(int32_t port);
-
-	void stop();
+	bool isServerRunning() { return m_server != nullptr; }
 
 	auto *getClient() { return m_clientObj.get(); }
+
+	int32_t getListenPort() const { return m_listenPort; }
 
 private:
 	GrpcBrowser();

@@ -32,7 +32,7 @@ Get-ChildItem -Path "archive" -File -Recurse |
     & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $certFile /p $certPass "$fullName"
   }
 
-# Remove the certificate
+# Remove the certificate before any file operations are performed
 Remove-Item -Path "sl-code-signing.b64"
 Remove-Item -Path $certFile
   
@@ -40,6 +40,44 @@ Remove-Item -Path $certFile
 Get-ChildItem -Path "archive" -File -Recurse |
   Where-Object { -not $keepExtensions.Contains($_.Extension) } |
   Remove-Item -Force
+  
+# Make an installer out of those contents
+
+# Move to nsis folder
+Push-Location "${github_workspace}/nsis"
+
+$installerFileName = "slplugin-$env:SL_OBS_VERSION-$revision-signed.exe"
+$nsisCommand = "makensis -DPACKAGE_DIR=`"${github_workspace}/archive/RelWithDebInfo`" -DOUTPUT_NAME=`"$installerFileName`" package.nsi"
+Invoke-Expression $nsisCommand
+
+if ($LASTEXITCODE -ne 0) {
+	Pop-Location
+	Write-Error "NSIS compilation failed"
+	exit $LASTEXITCODE
+}
+	
+# Download and decode the certificate
+echo $cert > "sl-code-signing.b64"
+certutil -decode "sl-code-signing.b64" $certFile
+
+# Sign installer
+& $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $certFile /p $certPass "$installerFileName"
+
+# Remove the certificate before any more file operations are performed
+Remove-Item -Path "sl-code-signing.b64"
+Remove-Item -Path $certFile
+
+# Move the signed installer to the specified workspace
+Move-Item -Path $installerFileName -Destination "${github_workspace}\"
+
+# Check if the last operation (Move-Item) was successful
+if (-not $?) {
+	Write-Error "Failed to move installer file"
+	exit 1
+}
+
+# Return from nsis folder
+Pop-Location
 
 # Move to the RelWithDebInfo directory to zip its contents directly
 cd archive/RelWithDebInfo
