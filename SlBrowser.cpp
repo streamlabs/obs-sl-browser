@@ -1,6 +1,6 @@
 #include "SlBrowser.h"
 #include "SlBrowserWidget.h"
-#include "GrpcBrowserWindow.h"
+#include "GrpcBrowser.h"
 #include "CrashHandler.h"
 
 #include <functional>
@@ -53,22 +53,20 @@ void SlBrowser::run(int argc, char *argv[])
 	}
 
 	m_obs64_PIDt = atoi(argv[1]);
-	m_pluginListenPort = atoi(argv[2]);
+	int32_t parentListenPort = atoi(argv[2]);
 	int32_t myListenPort = atoi(argv[3]);
 
-	if (!GrpcBrowserWindow::instance().startServer(myListenPort))
+	if (!GrpcBrowser::instance().startServer(myListenPort))
 	{
 		printf("sl-proxy: failed to start grpc server, GetLastError = %d\n", GetLastError());
 		return;
 	}
 
-	if (!GrpcBrowserWindow::instance().connectToClient(m_pluginListenPort))
+	if (!GrpcBrowser::instance().connectToClient(parentListenPort))
 	{
 		printf("sl-proxy: failed to connected to plugin's grpc server, GetLastError = %d\n", GetLastError());
 		return;
 	}
-
-	printf("Success\n");
 
 	QApplication a(argc, argv);
 
