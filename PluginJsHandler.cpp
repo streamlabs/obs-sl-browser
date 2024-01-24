@@ -74,26 +74,17 @@ void PluginJsHandler::stop()
 		m_workerThread.join();
 }
 
-void PluginJsHandler::pushApiRequest(const std::string &funcName, const std::string &params, const int32_t peerPort, std::string *jsonOutput /*= nullptr*/)
+void PluginJsHandler::pushApiRequest(const std::string &funcName, const std::string &params)
 {
 	std::lock_guard<std::mutex> grd(m_queueMtx);
-	m_queudRequests.push_back({peerPort, funcName, params});
-}
-
-void PluginJsHandler::handleApiRequest(const std::string &funcName, const std::string &params, const int32_t peerPort, std::string *jsonOutput /*= nullptr*/)
-{
-	// Async vs Sync
-	if (JavascriptApi::getFunctionSyncType(funcName) == JavascriptApi::JSSync::JS_ASYNC)
-		pushApiRequest(funcName, params, peerPort);
-	else
-		executeApiRequest(funcName, params, peerPort, jsonOutput);
+	m_queudRequests.push_back({funcName, params});
 }
 
 void PluginJsHandler::workerThread()
 {
 	while (m_running)
 	{
-		std::vector<PluginJsHandler::ApiRequest> latestBatch;
+		std::vector<std::pair<std::string, std::string>> latestBatch;
 
 		{
 			std::lock_guard<std::mutex> grd(m_queueMtx);
@@ -108,12 +99,12 @@ void PluginJsHandler::workerThread()
 		else
 		{
 			for (auto &itr : latestBatch)
-				executeApiRequest(itr.funcName, itr.params, itr.peerPort);
+				executeApiRequest(itr.first, itr.second);
 		}
 	}
 }
 
-void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::string &params, const int32_t peerPort, std::string *jsonOutput /*= nullptr*/)
+void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::string &params)
 {
 	std::string err;
 	Json jsonParams = Json::parse(params, err);
@@ -210,24 +201,11 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
-	if (jsonReturnStr.empty())
-		jsonReturnStr = "{}";
-
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
 
 	// We're done, send callback
 	if (param1Value.int_value() > 0)
-	{
-		if (jsonOutput != nullptr)
-		{
-			*jsonOutput = jsonReturnStr;
-		}
-		else
-		{
-			if (auto connection = GrpcPlugin::instance().getClientToBrowserSubProcess(peerPort))
-				connection->send_executeCallback(param1Value.int_value(), jsonReturnStr);
-		}
-	}
+		GrpcPlugin::instance().getClient()->send_executeCallback(param1Value.int_value(), jsonReturnStr);
 }
 
 void PluginJsHandler::JS_START_WEBSERVER(const json11::Json &params, std::string &out_jsonReturn)
