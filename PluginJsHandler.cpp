@@ -74,17 +74,26 @@ void PluginJsHandler::stop()
 		m_workerThread.join();
 }
 
-void PluginJsHandler::pushApiRequest(const std::string &funcName, const std::string &params)
+void PluginJsHandler::pushApiRequest(const std::string &funcName, const std::string &params, const int32_t peerPort, std::string *jsonOutput /*= nullptr*/)
 {
 	std::lock_guard<std::mutex> grd(m_queueMtx);
-	m_queudRequests.push_back({funcName, params});
+	m_queudRequests.push_back({peerPort, funcName, params});
+}
+
+void PluginJsHandler::handleApiRequest(const std::string &funcName, const std::string &params, const int32_t peerPort, std::string *jsonOutput /*= nullptr*/)
+{
+	// Async vs Sync
+	if (JavascriptApi::getFunctionSyncType(funcName) == JavascriptApi::JSSync::JS_ASYNC)
+		pushApiRequest(funcName, params, peerPort);
+	else
+		executeApiRequest(funcName, params, peerPort, jsonOutput);
 }
 
 void PluginJsHandler::workerThread()
 {
 	while (m_running)
 	{
-		std::vector<std::pair<std::string, std::string>> latestBatch;
+		std::vector<PluginJsHandler::ApiRequest> latestBatch;
 
 		{
 			std::lock_guard<std::mutex> grd(m_queueMtx);
@@ -99,12 +108,12 @@ void PluginJsHandler::workerThread()
 		else
 		{
 			for (auto &itr : latestBatch)
-				executeApiRequest(itr.first, itr.second);
+				executeApiRequest(itr.funcName, itr.params, itr.peerPort);
 		}
 	}
 }
 
-void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::string &params)
+void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::string &params, const int32_t peerPort, std::string *jsonOutput /*= nullptr*/)
 {
 	std::string err;
 	Json jsonParams = Json::parse(params, err);
@@ -201,11 +210,24 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
+	if (jsonReturnStr.empty())
+		jsonReturnStr = "{}";
+
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
 
 	// We're done, send callback
 	if (param1Value.int_value() > 0)
-		GrpcPlugin::instance().getClient()->send_executeCallback(param1Value.int_value(), jsonReturnStr);
+	{
+		if (jsonOutput != nullptr)
+		{
+			*jsonOutput = jsonReturnStr;
+		}
+		else
+		{
+			if (auto connection = GrpcPlugin::instance().getClientToBrowserSubProcess(peerPort))
+				connection->send_executeCallback(param1Value.int_value(), jsonReturnStr);
+		}
+	}
 }
 
 void PluginJsHandler::JS_START_WEBSERVER(const json11::Json &params, std::string &out_jsonReturn)
@@ -1232,6 +1254,13 @@ void PluginJsHandler::JS_GET_CURRENT_SCENE(const json11::Json &params, std::stri
 		mainWindow,
 		[mainWindow, &out_jsonReturn]() {
 			OBSSourceAutoRelease current_scene_source = obs_frontend_get_current_scene();
+
+			if (current_scene_source == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Empty current scene."}})).dump();
+				return;
+			}
+
 			auto rawName = obs_source_get_name(current_scene_source);
 			out_jsonReturn = Json(Json::object({{"name", rawName ? rawName : ""}})).dump();
 		},
@@ -1902,6 +1931,14 @@ void PluginJsHandler::JS_OBS_SOURCE_CREATE(const Json &params, std::string &out_
 				return;
 			}
 
+			OBSSourceAutoRelease scene = obs_frontend_get_current_scene();
+
+			if (scene == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Empty current scene."}})).dump();
+				return;
+			}
+
 			obs_data_t *settings = obs_data_create_from_json(settings_jsonStr.c_str());
 			obs_data_t *hotkeys = obs_data_create_from_json(hotkey_data_jsonStr.c_str());
 
@@ -1925,8 +1962,7 @@ void PluginJsHandler::JS_OBS_SOURCE_CREATE(const Json &params, std::string &out_
 
 			out_jsonReturn = jsonReturnValue.dump();
 			obs_data_release(settingsSource);
-						
-			OBSSourceAutoRelease scene = obs_frontend_get_current_scene();
+
 			obs_scene_t *scene_obj = obs_scene_from_source(scene);
 
 			if (obs_scene_find_source(scene_obj, name.c_str()))
