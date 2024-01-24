@@ -1,7 +1,25 @@
+/******************************************************************************
+ Copyright (C) 2014 by John R. Bradley <jrb@turrettech.com>
+ Copyright (C) 2023 by Lain Bailey <lain@obsproject.com>
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 2 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ ******************************************************************************/
 
 #include "cef-headers.hpp"
-#include "BrowserApp.h"
+#include "browser-app.hpp"
 
+#ifdef _WIN32
 #include <windows.h>
 #include <string>
 #include <thread>
@@ -78,8 +96,21 @@ int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		thread_initialized = true;
 	}
 
-	int ret = CefExecuteProcess(mainArgs, &BrowserApp::instance(), NULL);
+#else
+int main(int argc, char *argv[])
+{
+#if defined(__APPLE__) && !defined(ENABLE_BROWSER_LEGACY)
+	CefScopedLibraryLoader library_loader;
+	if (!library_loader.LoadInHelper())
+		return 1;
+#endif
+	CefMainArgs mainArgs(argc, argv);
+#endif
+	CefRefPtr<BrowserApp> mainApp(new BrowserApp());
 
+	int ret = CefExecuteProcess(mainArgs, mainApp.get(), NULL);
+
+#ifdef _WIN32
 	/* chromium browser subprocesses actually have TerminateProcess called
 	 * on them for whatever reason, so it's unlikely this code will ever
 	 * get called, but better to be safe than sorry */
@@ -88,9 +119,10 @@ int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		SetEvent(shutdown_event);
 		shutdown_check.join();
 	}
-
 	if (shutdown_event)
+	{
 		CloseHandle(shutdown_event);
-
+	}
+#endif
 	return ret;
 }
