@@ -5,7 +5,7 @@
 #include <QApplication>
 #include <QThread>
 #include <QToolTip>
-#include "GrpcBrowserWindow.h"
+#include "GrpcBrowser.h"
 #include "JavascriptApi.h"
 #include "SlBrowser.h"
 #include "WindowsFunctions.h"
@@ -83,6 +83,91 @@ void BrowserClient::OnBeforeContextMenu(CefRefPtr<CefBrowser>, CefRefPtr<CefFram
 	model->Clear();
 }
 
+/*static*/
+json11::Json convertCefValueToJSON(CefRefPtr<CefValue> value)
+{
+	switch (value->GetType())
+	{
+	case VTYPE_NULL:
+		return nullptr;
+
+	case VTYPE_BOOL:
+		return value->GetBool();
+
+	case VTYPE_INT:
+		return value->GetInt();
+
+	case VTYPE_DOUBLE:
+		return value->GetDouble();
+
+	case VTYPE_STRING:
+		return value->GetString().ToString();
+
+	case VTYPE_LIST: {
+		const auto &list = value->GetList();
+		std::vector<json11::Json> jsonList;
+		for (size_t i = 0; i < list->GetSize(); ++i)
+		{
+			jsonList.push_back(convertCefValueToJSON(list->GetValue(i)));
+		}
+		return jsonList;
+	}
+
+	case VTYPE_DICTIONARY: {
+		const auto &dict = value->GetDictionary();
+		std::map<std::string, json11::Json> jsonMap;
+		CefDictionaryValue::KeyList keys;
+		dict->GetKeys(keys);
+		for (const auto &key : keys)
+		{
+			jsonMap[key] = convertCefValueToJSON(dict->GetValue(key));
+		}
+		return jsonMap;
+	}
+
+	default:
+		return nullptr;
+	}
+}
+
+/*static*/
+std::string BrowserClient::cefListValueToJSONString(CefRefPtr<CefListValue> listValue)
+{
+	std::map<std::string, json11::Json> jsonMap;
+	for (size_t i = 0; i < listValue->GetSize(); ++i)
+	{
+		// Convert index to string key like "param1", "param2", ...
+		std::string key = "param" + std::to_string(i + 1);
+		jsonMap[key] = convertCefValueToJSON(listValue->GetValue(i));
+	}
+
+	std::string json_str;
+	json_str = json11::Json(jsonMap).dump();
+	return json_str;
+}
+
+void BrowserClient::RegisterCallback(const int functionId, CefRefPtr<CefBrowser> browser)
+{
+	std::lock_guard<std::recursive_mutex> grd(m_recursiveMutex);
+	m_callbackDictionary[functionId] = browser;
+}
+
+CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
+{
+	std::lock_guard<std::recursive_mutex> grd(m_recursiveMutex);
+
+	auto itr = m_callbackDictionary.find(functionId);
+
+	if (itr != m_callbackDictionary.end())
+	{
+		CefRefPtr<CefBrowser> browser = itr->second;
+		m_callbackDictionary.erase(itr);
+		return browser;
+	}
+
+	return nullptr;
+}
+
 bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
 {
 	const std::string &name = message->GetName();
@@ -91,20 +176,10 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 	if (!valid())
 		return false;
 
-	if (name == "OnContextCreated")
-	{
-		// Tell the proxy process the port that the plugin is listening on
-		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("GrpcPort");
-		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
-		execute_args->SetInt(0, SlBrowser::instance().m_pluginListenPort);
-		SendBrowserProcessMessage(browser, PID_RENDERER, msg);
-		return true;
-	}
+	int funcid = input_args->GetInt(0);
 
 	if (JavascriptApi::isBrowserFunctionName(name))
 	{
-		int funcid = input_args->GetInt(0);
-
 		std::string jsonOutput = "{}";
 
 		std::vector <CefRefPtr<CefValue>> argsWithoutFunc;
@@ -173,12 +248,23 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		}
 		}
 
-		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("BrowserWindowCallback");
+		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
 		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
 		execute_args->SetInt(0, funcid);
 		execute_args->SetString(1, jsonOutput);
 
 		SendBrowserProcessMessage(browser, PID_RENDERER, msg);
+	}
+	else
+	{
+		RegisterCallback(funcid, browser);
+
+		if (!GrpcBrowser::instance().getClient()->send_js_api(name, cefListValueToJSONString(input_args)))
+		{
+			// todo; handle
+			abort();
+			return false;
+		}
 	}
 
 
