@@ -67,11 +67,21 @@ public:
 
 	IMPLEMENT_REFCOUNTING(BrowserClient);
 
+public:
+	CefRefPtr<CefBrowser> PopCallback(const int functionId);
+	void RegisterCallback(const int functionId, CefRefPtr<CefBrowser> browser);
+
+public:
+	static std::string cefListValueToJSONString(CefRefPtr<CefListValue> listValue);
+
 private:
 	void UpdateExtraTexture();
 	bool valid() const;
 
 	bool m_reroute_audio = true;
+
+	std::recursive_mutex m_recursiveMutex;
+	std::map<int, CefRefPtr<CefBrowser>> m_callbackDictionary;
 
 	CefRefPtr<CefBrowser> m_Browser;
 };
