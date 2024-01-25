@@ -116,8 +116,7 @@ function CreateJsonFile($folder, $branchName) {
 	$Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
 	$Env:AWS_DEFAULT_REGION = "us-west-2"
 	
-	try {
-		
+	try {		
 		aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
 		
 		if ($LASTEXITCODE -ne 0)
@@ -133,7 +132,7 @@ function CreateJsonFile($folder, $branchName) {
 		if ($LASTEXITCODE -ne 0)
 			throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
 			
-        cfcli -d streamlabs.com purge $zipFilePath
+		cfcli -d streamlabs.com purge $zipFilePath
 		
 		if ($LASTEXITCODE -ne 0)
 			throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
