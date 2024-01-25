@@ -58,6 +58,10 @@ foreach ($branchName in $branchNames) {
 			
 		try {
 			aws s3 cp $installerUrl $destination --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+			
+			if ($LASTEXITCODE -ne 0)
+				throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+			
 			$installerResult = $true
 		} catch {
 			Write-Host "Failed to copy or delete the installer file for $branchName"
@@ -113,13 +117,29 @@ function CreateJsonFile($folder, $branchName) {
 	$Env:AWS_DEFAULT_REGION = "us-west-2"
 	
 	try {
+		
 		aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+		
+		if ($LASTEXITCODE -ne 0)
+			throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+		
 		aws s3 cp $zipFilePath s3://slobs-cdn.streamlabs.com/obsplugin/package/	--acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
-        cfcli -d streamlabs.com purge $jsonFilePath
+        
+		if ($LASTEXITCODE -ne 0)
+			throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+		
+		cfcli -d streamlabs.com purge $jsonFilePath
+		
+		if ($LASTEXITCODE -ne 0)
+			throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
+			
         cfcli -d streamlabs.com purge $zipFilePath
+		
+		if ($LASTEXITCODE -ne 0)
+			throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
 	}
 	catch {
-		Write-Host "S3Upload: Error: $_"
+		Write-Host "Error: $_"
 		throw
 	}
 }
