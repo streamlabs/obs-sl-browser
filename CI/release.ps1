@@ -36,19 +36,19 @@ $branchInstallerUrls = @{}
 
 # Iterate through each branch
 foreach ($branchName in $branchNames) {
-    # Fetch head commit SHA for the branch
+	# Fetch head commit SHA for the branch
 	git fetch origin $branchName
 	$commitSha = git rev-parse FETCH_HEAD
-
-    # URL for the zip file
-    $zipUrl = "https://slobs-cdn.streamlabs.com/obsplugin/intermediary_packages/slplugin-$branchName-$commitSha-signed.zip"
-
-    # Directory for downloading and unzipping
-    $downloadDir = ".\.ReleaseTemp\$branchName\"
-    if (-not (Test-Path $downloadDir)) { New-Item -ItemType Directory -Path $downloadDir -Force }
-
-    # Download and check zip file
-    $zipResult = CheckAndDownloadZip $zipUrl $downloadDir $branchName
+	
+	# URL for the zip file
+	$zipUrl = "https://slobs-cdn.streamlabs.com/obsplugin/intermediary_packages/slplugin-$branchName-$commitSha-signed.zip"
+	
+	# Directory for downloading and unzipping
+	$downloadDir = ".\.ReleaseTemp\$branchName\"
+	if (-not (Test-Path $downloadDir)) { New-Item -ItemType Directory -Path $downloadDir -Force }
+	
+	# Download and check zip file
+	$zipResult = CheckAndDownloadZip $zipUrl $downloadDir $branchName
 	
 	if ($zipResult){
 		# Check the installer by copying it over into /package/
