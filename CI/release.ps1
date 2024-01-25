@@ -108,15 +108,15 @@ function CreateJsonFile($folder, $branchName) {
 	Write-Host $zipFilePath
 	
 	# Local environment variables, even if there are system ones with the same name, these are used for the cmd below
-	##$Env:AWS_ACCESS_KEY_ID = $Env:AWS_RELEASE_ACCESS_KEY_ID
-	##$Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
-	##$Env:AWS_DEFAULT_REGION = "us-west-2"
+	$Env:AWS_ACCESS_KEY_ID = $Env:AWS_RELEASE_ACCESS_KEY_ID
+	$Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
+	$Env:AWS_DEFAULT_REGION = "us-west-2"
 	
 	try {
-		##aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
-		##aws s3 cp $zipFilePath s3://slobs-cdn.streamlabs.com/obsplugin/package/	--acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
-        ##cfcli -d streamlabs.com purge $jsonFilePath
-        ##cfcli -d streamlabs.com purge $zipFilePath
+		aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+		aws s3 cp $zipFilePath s3://slobs-cdn.streamlabs.com/obsplugin/package/	--acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+        cfcli -d streamlabs.com purge $jsonFilePath
+        cfcli -d streamlabs.com purge $zipFilePath
 	}
 	catch {
 		Write-Host "S3Upload: Error: $_"
