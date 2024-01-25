@@ -56,10 +56,15 @@ foreach ($branchName in $branchNames) {
 		$destination = "s3://slobs-cdn.streamlabs.com/obsplugin/package/slplugin-$branchName-$commitSha-signed.exe"    
 		$installerResult = $false
 			
+		# Local environment variables, even if there are system ones with the same name, these are used for the cmd below
+		$Env:AWS_ACCESS_KEY_ID = $Env:AWS_RELEASE_ACCESS_KEY_ID
+		$Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
+		$Env:AWS_DEFAULT_REGION = "us-west-2"
+	
 		try {			
 			Write-Host "Running aws s3 cp $installerUrl $destination"
 			
-			aws s3 cp $installerUrl $destination --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate" --debug
+			aws s3 cp $installerUrl $destination --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
 			
 			if ($LASTEXITCODE -ne 0) {
 				throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
