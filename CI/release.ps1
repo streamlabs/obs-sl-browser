@@ -9,7 +9,7 @@ $branchNames = $jsonContent.obsversions.PSObject.Properties.Value
 $allBranchesReady = $false
 
 # Function to check and download files
-function CheckAndDownloadFile($url, $folder, $branchName) {
+function CheckAndDownloadZip($url, $folder, $branchName) {
     $filePath = Join-Path $folder (Split-Path -Leaf $url)
     try {
         # Overwrite the file if it already exists
@@ -31,24 +31,48 @@ function CheckAndDownloadFile($url, $folder, $branchName) {
 # Variable to track successful branches
 $successfulBranches = 0
 
+# URL's for each branch's installer
+$branchInstallerUrls = @{}
+
 # Iterate through each branch
 foreach ($branchName in $branchNames) {
-    # Fetch head commit SHA for the branch
+	# Fetch head commit SHA for the branch
 	git fetch origin $branchName
 	$commitSha = git rev-parse FETCH_HEAD
+	
+	# URL for the zip file
+	$zipUrl = "https://slobs-cdn.streamlabs.com/obsplugin/intermediary_packages/slplugin-$branchName-$commitSha-signed.zip"
+	
+	# Directory for downloading and unzipping
+	$downloadDir = ".\.ReleaseTemp\$branchName\"
+	if (-not (Test-Path $downloadDir)) { New-Item -ItemType Directory -Path $downloadDir -Force }
+	
+	# Download and check zip file
+	$zipResult = CheckAndDownloadZip $zipUrl $downloadDir $branchName
 
-    # URL for the zip file
-    $zipUrl = "https://slobs-cdn.streamlabs.com/obsplugin/intermediary_packages/slplugin-$branchName-$commitSha-signed.zip"
+	if ($zipResult){
+		# Check the installer by copying it over into /package/
+		$installerUrl = "s3://slobs-cdn.streamlabs.com/obsplugin/intermediary_packages/slplugin-$branchName-$commitSha-signed.exe"
+		$destination = "s3://slobs-cdn.streamlabs.com/obsplugin/package/slplugin-$branchName-$commitSha-signed.exe"    
+		$installerResult = $false
+			
+		try {
+			aws s3 cp $installerUrl $destination --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+			
+			if ($LASTEXITCODE -ne 0)
+				throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+			
+			$installerResult = $true
+		} catch {
+			Write-Host "Failed to copy or delete the installer file for $branchName"
+		}
 
-    # Directory for downloading and unzipping
-    $downloadDir = ".\.ReleaseTemp\$branchName\"
-    if (-not (Test-Path $downloadDir)) { New-Item -ItemType Directory -Path $downloadDir -Force }
-
-    # Check and download file
-    $result = CheckAndDownloadFile $zipUrl $downloadDir $branchName
-    if ($result) { 
-		$successfulBranches++
-        Write-Host "$branchName is ready."
+		# Check if both operations were successful
+		if ($installerResult) { 
+			$successfulBranches++
+			$branchInstallerUrls[$branchName] = "https://slobs-cdn.streamlabs.com/obsplugin/package/slplugin-$branchName-$commitSha-signed.exe"
+			Write-Host "$branchName is ready."
+		}
 	}
 }
 
@@ -71,6 +95,7 @@ function CreateJsonFile($folder, $branchName) {
 
     $jsonContent = @{}
     $jsonContent.package = $zipFile.Name
+    $jsonContent.installer = $branchInstallerUrls[$branchName]
     $jsonContent.files = $filesInBranch | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
         $subPath = $_.FullName.Substring($_.FullName.IndexOf("$branchName\$branchName") + $branchName.Length * 2 + 2)
         @{
@@ -93,12 +118,27 @@ function CreateJsonFile($folder, $branchName) {
 	
 	try {
 		aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+		
+		if ($LASTEXITCODE -ne 0)
+			throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+		
 		aws s3 cp $zipFilePath s3://slobs-cdn.streamlabs.com/obsplugin/package/	--acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
-        cfcli -d streamlabs.com purge $jsonFilePath
-        cfcli -d streamlabs.com purge $zipFilePath
+        
+		if ($LASTEXITCODE -ne 0)
+			throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+		
+		cfcli -d streamlabs.com purge $jsonFilePath
+		
+		if ($LASTEXITCODE -ne 0)
+			throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
+			
+		cfcli -d streamlabs.com purge $zipFilePath
+		
+		if ($LASTEXITCODE -ne 0)
+			throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
 	}
 	catch {
-		Write-Host "S3Upload: Error: $_"
+		Write-Host "Error: $_"
 		throw
 	}
 }
