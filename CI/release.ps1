@@ -49,7 +49,7 @@ foreach ($branchName in $branchNames) {
 	
 	# Download and check zip file
 	$zipResult = CheckAndDownloadZip $zipUrl $downloadDir $branchName
-	
+
 	if ($zipResult){
 		# Check the installer by copying it over into /package/
 		$installerUrl = "s3://slobs-cdn.streamlabs.com/obsplugin/intermediary_packages/slplugin-$branchName-$commitSha-signed.exe"
