@@ -57,7 +57,7 @@ foreach ($branchName in $branchNames) {
 		$installerResult = $false
 			
 		try {
-			aws s3 cp $installerUrl $destination --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+			aws s3 cp $installerUrl $destination --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate" --debug
 			
 			if ($LASTEXITCODE -ne 0) {
 				throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
