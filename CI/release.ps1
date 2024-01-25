@@ -91,7 +91,7 @@ function CreateJsonFile($folder, $branchName) {
 
     $jsonContent = @{}
     $jsonContent.package = $zipFile.Name
-	$jsonContent.installer = $branchInstallerUrls[$branchName]
+    $jsonContent.installer = $branchInstallerUrls[$branchName]
     $jsonContent.files = $filesInBranch | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
         $subPath = $_.FullName.Substring($_.FullName.IndexOf("$branchName\$branchName") + $branchName.Length * 2 + 2)
         @{
