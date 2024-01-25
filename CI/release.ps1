@@ -56,7 +56,9 @@ foreach ($branchName in $branchNames) {
 		$destination = "s3://slobs-cdn.streamlabs.com/obsplugin/package/slplugin-$branchName-$commitSha-signed.exe"    
 		$installerResult = $false
 			
-		try {
+		try {			
+			Write-Host "Running aws s3 cp $installerUrl $destination"
+			
 			aws s3 cp $installerUrl $destination --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate" --debug
 			
 			if ($LASTEXITCODE -ne 0) {
