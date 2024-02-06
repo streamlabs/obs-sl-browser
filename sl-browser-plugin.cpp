@@ -14,6 +14,7 @@
 #include "WebServer.h"
 #include "ConsoleToggle.h"
 #include "CrashHandler.h"
+#include "QtGuiModifications.h"
 
 #include <QMainWindow>
 #include <QMenuBar>
@@ -94,6 +95,7 @@ void obs_module_post_load(void)
 	* Plugin begnis
 	*/
 
+	QtGuiModifications::instance();
 	PluginJsHandler::instance().start();
 
 	auto chooseProxyPort = []() {
