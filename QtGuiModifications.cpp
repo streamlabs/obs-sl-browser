@@ -36,8 +36,6 @@ QtGuiModifications::~QtGuiModifications() {}
 
 void QtGuiModifications::init()
 {
-	MessageBoxA(NULL, "Hey", "Hey", 0);
-
 	/**
 	* GUI Button
 	*/
