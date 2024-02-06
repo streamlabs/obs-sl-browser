@@ -32,7 +32,10 @@ QtGuiModifications::QtGuiModifications()
 	init();
 }
 
-QtGuiModifications::~QtGuiModifications() {}
+QtGuiModifications::~QtGuiModifications()
+{
+
+}
 
 void QtGuiModifications::init()
 {
@@ -111,6 +114,12 @@ void QtGuiModifications::init()
 		nullptr);
 
 	obs_hotkey_enable_callback_rerouting(true);
+
+	/**
+	* Start async thread
+	*/
+
+	m_workerThread = std::thread(&QtGuiModifications::workerThread, this);
 }
 
 void QtGuiModifications::clickStreamButton()
@@ -143,4 +152,31 @@ void QtGuiModifications::copyStylesOfObsButton()
 	m_sl_streamButton->setEnabled(true);
 	m_sl_streamButton->setStyleSheet(m_obs_streamButton->styleSheet());
 	m_sl_streamButton->setMenu(m_obs_streamButton->menu());
+}
+
+void QtGuiModifications::stop()
+{
+	m_closing = true;
+
+	if (m_workerThread.joinable())
+		m_workerThread.join();
+}
+
+void QtGuiModifications::workerThread()
+{
+	while (!m_closing)
+	{
+		QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+		// This code is executed in the context of the QMainWindow's thread.
+		QMetaObject::invokeMethod(
+			mainWindow,
+			[mainWindow]() {
+				QtGuiModifications::instance().copyStylesOfObsButton();
+			},
+			Qt::BlockingQueuedConnection);
+
+		// Tick every 100ms, cheap and will look responsive
+		::Sleep(100);
+	}
 }

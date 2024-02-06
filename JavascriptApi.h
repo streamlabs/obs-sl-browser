@@ -170,7 +170,7 @@ public:
 			//		NOTE: You receive this message when the button is literally pressed, during a stream the button changes to "Stop Stream"
 			//			Which means you are informed of clicks, not the meaning of the click
 			//		NOTE: When this value is assigned to a non-null value, the Start Stream button will only execute your javascript. To actually go through with starting the stream, you msut do that.
-			//			You have the ability to invoke "clicks" on that button. Therefore, if the button is ready for "Start Stream", invoking a click does that. If read for a "Stop Stream" press, it does just that.
+			//			You have the ability to invoke "clicks" on that button. Therefore, if the button is ready for "Start Stream", invoking a click does that. If ready for a "Stop Stream" press, it does just that.
 			//			You should be able to infer the state of button by obs functions for checking if a stream is active, etc
 			//
 			//	This specific function, which just assigns a value, always returns back a 'success' json, its return value not important
@@ -183,6 +183,8 @@ public:
 			//			(the button cannot be pressed if popups are locking up the GUI)
 			// 
 			//	Note that the "Start Stream" button is always the same button regardless of the stream running, the GUI text changes but it's always the same object even when it swaps to "Stop Streaming"
+			//
+			//	NOTE: the "Start Stream" button in OBS sometimes throws a popup, and this function wont call back that popup is done
 			{"qt_click_stream_button", JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON},
 			
 			/***
