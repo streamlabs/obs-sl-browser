@@ -9,6 +9,7 @@
 // Windows
 #include <ShlObj.h>
 #include <shellapi.h>
+#include <Psapi.h>
 
 // Stl
 #include <chrono>
@@ -252,21 +253,25 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 		return std::string(value);
 	};
 
+
 	auto getDefaultBrowserPath = [&]()
 	{
+		std::string browser = getRegistryValue(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice", "ProgId");
+
 		// Get the name of the default browser
-		std::string browserName = getRegistryValue(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice", "ProgId");
-		if (browserName.empty())
+		if (browser.empty())
 			return std::string();
 
 		// Get the path of the browser executable
-		std::string browserPathKey = "SOFTWARE\\Classes\\" + browserName + "\\shell\\open\\command";
+		std::string browserPathKey = "SOFTWARE\\Classes\\" + browser + "\\shell\\open\\command";
 		return getRegistryValue(HKEY_LOCAL_MACHINE, browserPathKey, "");
 	};
 	
 	const auto &param2Value = params["param2"];
 	std::string url = param2Value.string_value();
 	std::string browserCommand = getDefaultBrowserPath();
+
+	blog(LOG_ERROR, "test: %s", browserCommand.c_str());
 
 	if (browserCommand.empty())
 	{
@@ -288,6 +293,81 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 		browserCommand = "\"" + browserCommand + "\" \"" + url + "\"";
 
 	WinExec(browserCommand.c_str(), SW_SHOWDEFAULT);
+
+	/**
+	* Now look for the browser process and bring the top most Z to front (the page should be in that instance of it)
+	*/
+
+	auto extractPathAndName = [](const std::string &command)
+	{
+		size_t firstQuote = command.find('\"');
+		size_t secondQuote = command.find('\"', firstQuote + 1);
+		std::string path = command.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+		size_t lastSlash = path.find_last_of("\\/");
+		std::string name = path.substr(lastSlash + 1);
+		return std::pair<std::string, std::string>{path, name};
+	};
+
+	auto lpcwstrToStr = [](LPCWSTR wideStr)
+	{
+		int len = WideCharToMultiByte(CP_UTF8, 0, wideStr, -1, nullptr, 0, nullptr, nullptr);
+		std::vector<char> vec(len);
+		WideCharToMultiByte(CP_UTF8, 0, wideStr, -1, &vec[0], len, nullptr, nullptr);
+		return std::string(vec.begin(), vec.end() - 1); // Exclude null terminator
+	};
+
+	// Lambda to get the full path of a process given its ID
+	auto getProcessPathById = [&](DWORD processId) -> std::string
+	{
+		std::string processPath;
+		HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
+		if (hProcess != NULL)
+		{
+			WCHAR pathBuffer[MAX_PATH];
+			if (GetModuleFileNameEx(hProcess, NULL, pathBuffer, MAX_PATH))
+				processPath = lpcwstrToStr(pathBuffer);
+
+			CloseHandle(hProcess);
+		}
+
+		return processPath;
+	};
+
+	std::string browserPath = extractPathAndName(browserCommand).first;
+
+	// Variables to track the topmost window's process ID
+	DWORD topMostProcessId = 0;
+	HWND topMostWindow = NULL;
+
+	// Lambda to enumerate windows and find the topmost window of the target process
+	// The enumeration order of windows by EnumWindows is deterministic and follows the Z order of windows on the desktop, not random.
+	auto enumWindowsCallback = [&](HWND hwnd, LPARAM lParam) -> BOOL
+	{
+		DWORD processId;
+		GetWindowThreadProcessId(hwnd, &processId);
+		std::string currentProcessPath = getProcessPathById(processId);
+
+		if (currentProcessPath == browserPath && IsWindowVisible(hwnd) && !IsIconic(hwnd))
+		{
+			topMostProcessId = processId;
+			topMostWindow = hwnd;
+			return FALSE; 
+		}
+
+		// Continue enumeration
+		return TRUE; 
+	};
+
+	// Search
+	EnumWindows(
+		[](HWND hwnd, LPARAM lParam) -> BOOL {
+			auto &callback = *reinterpret_cast<decltype(enumWindowsCallback) *>(lParam);
+			return callback(hwnd, lParam);
+		},
+		reinterpret_cast<LPARAM>(&enumWindowsCallback));
+
+	if (topMostWindow != NULL)
+		WindowsFunctions::ForceForegroundWindow(topMostWindow);
 }
 
 void PluginJsHandler::JS_GET_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn)
