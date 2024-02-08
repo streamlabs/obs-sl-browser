@@ -132,7 +132,7 @@ function CreateJsonFile($folder, $branchName) {
 	$Env:AWS_DEFAULT_REGION = "us-west-2"
 	
 	try {
-		aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/meta --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+		aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/meta/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
 		
 		if ($LASTEXITCODE -ne 0) {
 			throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
