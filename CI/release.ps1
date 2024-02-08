@@ -99,7 +99,9 @@ if ($allBranchesReady) {
 
 # Function to create JSON file for each branch
 function CreateJsonFile($folder, $branchName) {
-    $jsonFilePath = Join-Path $folder "rev$revNumberOutgoing_$branchName.json"
+    Write-Host "revNumberOutgoing: $revNumberOutgoing"
+    Write-Host "branchName: $branchName"
+    $jsonFilePath = Join-Path $folder "rev${revNumberOutgoing}_${branchName}.json"
     $zipFile = Get-ChildItem -Path $folder -Filter "*.zip"
     $branchFolderPath = Join-Path $folder $branchName
     $filesInBranch = Get-ChildItem -Path $branchFolderPath -Recurse
