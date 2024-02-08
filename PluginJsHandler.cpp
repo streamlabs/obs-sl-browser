@@ -271,8 +271,6 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 	std::string url = param2Value.string_value();
 	std::string browserCommand = getDefaultBrowserPath();
 
-	blog(LOG_ERROR, "test: %s", browserCommand.c_str());
-
 	if (browserCommand.empty())
 	{
 		// Just use ShellExecuteExA if there was an issue getting path to their default browser
