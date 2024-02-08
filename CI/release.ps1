@@ -5,8 +5,10 @@ $urlJsonObsVersions = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.c
 $jsonContent = Invoke-RestMethod -Uri $urlJsonObsVersions
 $branchNames = $jsonContent.obsversions.PSObject.Properties.Value
 
-# Boolean flag, initially set to false
+$successfulBranches = 0
 $allBranchesReady = $false
+$revNumberOutgoing = 0
+$branchInstallerUrls = @{}
 
 # Function to check and download files
 # The purpose of the zip is to easily have the files for each seperate version so that json metadata can be made
@@ -28,12 +30,6 @@ function CheckAndDownloadZip($url, $folder, $branchName) {
     }
     return $true
 }
-
-# Variable to track successful branches
-$successfulBranches = 0
-
-# URL's for each branch's installer
-$branchInstallerUrls = @{}
 
 # Iterate through each branch
 foreach ($branchName in $branchNames) {
@@ -103,7 +99,7 @@ if ($allBranchesReady) {
 
 # Function to create JSON file for each branch
 function CreateJsonFile($folder, $branchName) {
-    $jsonFilePath = Join-Path $folder "rev$revNumberGoing_$branchName.json"
+    $jsonFilePath = Join-Path $folder "rev$revNumberOutgoing_$branchName.json"
     $zipFile = Get-ChildItem -Path $folder -Filter "*.zip"
     $branchFolderPath = Join-Path $folder $branchName
     $filesInBranch = Get-ChildItem -Path $branchFolderPath -Recurse
@@ -163,16 +159,6 @@ function CreateJsonFile($folder, $branchName) {
 }
 
 if ($allBranchesReady) {
-
-    foreach ($branchName in $branchNames) {
-		$downloadDir = ".\.ReleaseTemp\$branchName\"
-		Write-Host "Creating json file created for $branchName..."
-		CreateJsonFile $downloadDir $branchName
-	}	
-
-	if ($LASTEXITCODE -ne 0) {
-		throw "Problem publishing new metadata for each version, not publishing new publish.josn"
-	}
 	
 	Write-Host "Formatting the next meta_publish.json file..."
 	
@@ -204,6 +190,16 @@ if ($allBranchesReady) {
 	}
 	catch {
 		throw "Error: An error occurred. Details: $($_.Exception.Message)"
+	}
+	
+    foreach ($branchName in $branchNames) {
+		$downloadDir = ".\.ReleaseTemp\$branchName\"
+		Write-Host "Creating json file created for $branchName..."
+		CreateJsonFile $downloadDir $branchName
+	}	
+
+	if ($LASTEXITCODE -ne 0) {
+		throw "Problem publishing new metadata for each version, not publishing new publish.josn"
 	}
 		
 	Write-Host "Uploading meta_publish.json file..."
