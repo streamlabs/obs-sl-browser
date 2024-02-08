@@ -147,12 +147,11 @@ try {
 	$Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
 	$Env:AWS_DEFAULT_REGION = "us-west-2"
 	
-	try {
-		aws s3 cp $jsonFilePath https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
-		
-		if ($LASTEXITCODE -ne 0) {
-			throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
-		}
+	aws s3 cp $jsonFilePath https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+	
+	if ($LASTEXITCODE -ne 0) {
+		throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+	}
 }
 catch {
     throw "Error: An error occurred during revision updating. Details: $($_.Exception.Message)"
