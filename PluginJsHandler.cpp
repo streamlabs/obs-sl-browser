@@ -294,6 +294,9 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 
 	WinExec(browserCommand.c_str(), SW_SHOWDEFAULT);
 
+	// Time for it to open
+	::Sleep(1000);
+
 	/**
 	* Now look for the browser process and bring the top most Z to front (the page should be in that instance of it)
 	*/
@@ -335,12 +338,7 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 
 	std::string browserPath = extractPathAndName(browserCommand).first;
 
-	// Variables to track the topmost window's process ID
-	DWORD topMostProcessId = 0;
-	HWND topMostWindow = NULL;
-
-	// Lambda to enumerate windows and find the topmost window of the target process
-	// The enumeration order of windows by EnumWindows is deterministic and follows the Z order of windows on the desktop, not random.
+	// Bring all visible windows of that process to top
 	auto enumWindowsCallback = [&](HWND hwnd, LPARAM lParam) -> BOOL
 	{
 		DWORD processId;
@@ -348,13 +346,8 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 		std::string currentProcessPath = getProcessPathById(processId);
 
 		if (currentProcessPath == browserPath && IsWindowVisible(hwnd) && !IsIconic(hwnd))
-		{
-			topMostProcessId = processId;
-			topMostWindow = hwnd;
-			return FALSE; 
-		}
+			WindowsFunctions::ForceForegroundWindow(hwnd);
 
-		// Continue enumeration
 		return TRUE; 
 	};
 
@@ -365,9 +358,6 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 			return callback(hwnd, lParam);
 		},
 		reinterpret_cast<LPARAM>(&enumWindowsCallback));
-
-	if (topMostWindow != NULL)
-		WindowsFunctions::ForceForegroundWindow(topMostWindow);
 }
 
 void PluginJsHandler::JS_GET_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn)
