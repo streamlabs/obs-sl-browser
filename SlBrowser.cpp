@@ -120,6 +120,28 @@ void SlBrowser::CreateCefBrowser(int arg)
 
 void SlBrowser::browserInit()
 {
+	std::string version;
+	std::string githubRevision;
+	std::string revision;
+
+#ifdef SL_OBS_VERSION
+	version = SL_OBS_VERSION;
+#else
+	version = "debug";
+#endif
+
+#ifdef GITHUB_REVISION
+	githubRevision = GITHUB_REVISION;
+#else
+	githubRevision = "debug";
+#endif
+
+#ifdef SL_REVISION
+	revision = SL_REVISION;
+#else
+	revision = "debug";
+#endif
+
 	TCHAR moduleFileName[MAX_PATH]{};
 	GetModuleFileName(NULL, moduleFileName, MAX_PATH);
 	std::filesystem::path fsPath(moduleFileName);
@@ -133,10 +155,19 @@ void SlBrowser::browserInit()
 	settings.log_severity = LOGSEVERITY_VERBOSE;
 
 	CefString(&settings.user_agent_product) = "Streamlabs";
-
-	// TODO
 	CefString(&settings.locale) = "en-US";
 	CefString(&settings.accept_language_list) = "en-US,en";
+
+	// Value that will be inserted as the product portion of the default
+	// User-Agent string. If empty the Chromium product version will be used. If
+	// |userAgent| is specified this value will be ignored. Also configurable
+	// using the "user-agent-product" command-line switch.
+	std::stringstream prod_ver;
+	prod_ver << "Chrome/";
+	prod_ver << std::to_string(cef_version_info(4)) << "." << std::to_string(cef_version_info(5)) << "." << std::to_string(cef_version_info(6)) << "." << std::to_string(cef_version_info(7));
+	prod_ver << " SLABS/";
+	prod_ver << version << "." << githubRevision;
+	CefString(&settings.user_agent_product) = prod_ver.str();
 
 	settings.persist_user_preferences = 1;
 

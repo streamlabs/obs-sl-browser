@@ -4,7 +4,7 @@ param(
 )
 
 Write-Output "Workspace is $github_workspace"
-Write-Output "Revision is $revision"
+Write-Output "Github revision is $revision"
 
 $slRevision = 0
 
@@ -17,6 +17,7 @@ try {
 	$jsonContent = Get-Content -Path $filepathJsonPublish -Raw | ConvertFrom-Json
 	
 	$slRevision = $jsonContent.next_rev
+	Write-Output "Streamlabs revision is $slRevision"
 }
 catch {
 	throw "Error: An error occurred. Details: $($_.Exception.Message)"
@@ -141,3 +142,61 @@ Write-Output "Archive created: $archiveFileName"
 
 # Move the 7z archive to the $github_workspace directory
 Move-Item -Path $archiveFileName -Destination "${github_workspace}\"
+
+# Add information to the revision library
+$slRevision = 0
+
+try {
+    # Download data for revisions
+    $urlJsonObsVersions = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
+    $filepathJsonPublish = ".\meta_publish.json"
+    Invoke-WebRequest -Uri $urlJsonObsVersions -OutFile $filepathJsonPublish
+    $jsonContent = Get-Content -Path $filepathJsonPublish -Raw | ConvertFrom-Json
+    
+    $slRevision = $jsonContent.next_rev
+    Write-Output "Streamlabs revision is $slRevision"
+    
+    # Attempt to download existing revision builds JSON
+    $urlJsonRevisionBuilds = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/revision_builds.json"
+    $filepathJsonRevisionBuilds = ".\revision_builds.json"
+    
+    try {
+        Invoke-WebRequest -Uri $urlJsonRevisionBuilds -OutFile $filepathJsonRevisionBuilds
+    }
+    catch {
+        # If download fails, assume file does not exist and create a new JSON array
+        Set-Content -Path $filepathJsonRevisionBuilds -Value "[]"
+    }
+
+    # Load or initialize the revision builds JSON
+    $revisionBuilds = Get-Content -Path $filepathJsonRevisionBuilds -Raw | ConvertFrom-Json
+    
+    # Prepare the new entry
+    $newEntry = @{
+        "rev" = $slRevision
+        "date" = (Get-Date -UFormat %s)
+        "gitrev" = $revision
+    }
+
+    # Check if the entry already exists (based on rev and gitrev)
+    $exists = $false
+    foreach ($entry in $revisionBuilds) {
+        if ($entry.rev -eq $newEntry.rev -and $entry.gitrev -eq $newEntry.gitrev) {
+            $exists = $true
+            break
+        }
+    }
+    
+    # If the entry does not exist, add it
+    if (-not $exists) {
+        $revisionBuilds += $newEntry
+    }
+    
+    # Save the updated JSON back to the file
+    $revisionBuilds | ConvertTo-Json -Depth 100 | Set-Content -Path $filepathJsonRevisionBuilds
+    
+    Write-Output "Revision builds updated successfully."
+}
+catch {
+    throw "Error: An error occurred. Details: $($_.Exception.Message)"
+}
