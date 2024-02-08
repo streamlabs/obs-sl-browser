@@ -20,6 +20,8 @@ $cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser 
 $cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser-plugin PRIVATE SL_OBS_VERSION=""\)', "target_compile_definitions(sl-browser-plugin PRIVATE SL_OBS_VERSION=`"$($env:SL_OBS_VERSION)`")"
 $cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser PRIVATE GITHUB_REVISION=""\)', "target_compile_definitions(sl-browser PRIVATE GITHUB_REVISION=`"${revision}`")"
 $cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser-plugin PRIVATE GITHUB_REVISION=""\)', "target_compile_definitions(sl-browser-plugin PRIVATE GITHUB_REVISION=`"${revision}`")"
+$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser PRIVATE SL_REVISION=""\)', "target_compile_definitions(sl-browser PRIVATE SL_REVISION=`"${revision}`")"
+$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser-plugin PRIVATE SL_REVISION=""\)', "target_compile_definitions(sl-browser-plugin PRIVATE SL_REVISION=`"${revision}`")"
 
 # Write the updated content back to CMakeLists.txt
 Set-Content -Path .\CMakeLists.txt -Value $cmakeContent
