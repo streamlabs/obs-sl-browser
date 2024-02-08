@@ -52,7 +52,7 @@ add_executable(sl-browser WIN32)
 
 #target_compile_definitions(sl-browser PRIVATE SL_OBS_VERSION="")
 #target_compile_definitions(sl-browser PRIVATE GITHUB_REVISION="")
-#target_compile_definitions(sl-browser-plugin PRIVATE SL_REVISION="")
+#target_compile_definitions(sl-browser PRIVATE SL_REVISION="")
 target_compile_options(sl-browser PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
 target_link_options(sl-browser PRIVATE /NODEFAULTLIB:msvcrt)
 
