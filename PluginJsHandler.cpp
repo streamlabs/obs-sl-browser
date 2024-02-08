@@ -295,7 +295,7 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 	WinExec(browserCommand.c_str(), SW_SHOWDEFAULT);
 
 	// Time for it to open
-	::Sleep(1000);
+	::Sleep(500);
 
 	/**
 	* Now look for the browser process and bring the top most Z to front (the page should be in that instance of it)
@@ -338,7 +338,7 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 
 	std::string browserPath = extractPathAndName(browserCommand).first;
 
-	// Bring all visible windows of that process to top
+	// Bring topmost browser to top
 	auto enumWindowsCallback = [&](HWND hwnd, LPARAM lParam) -> BOOL
 	{
 		DWORD processId;
@@ -346,7 +346,11 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 		std::string currentProcessPath = getProcessPathById(processId);
 
 		if (currentProcessPath == browserPath && IsWindowVisible(hwnd) && !IsIconic(hwnd))
+		{
+			// Bring top, return false to stop
 			WindowsFunctions::ForceForegroundWindow(hwnd);
+			return FALSE;
+		}
 
 		return TRUE; 
 	};
