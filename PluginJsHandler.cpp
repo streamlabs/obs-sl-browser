@@ -1,4 +1,5 @@
 #include "PluginJsHandler.h"
+#include "QtGuiModifications.h"
 
 // Local
 #include "JavascriptApi.h"
@@ -199,6 +200,8 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_RESTART_OBS: JS_RESTART_OBS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_GET_IS_OBS_STREAMING: JS_GET_IS_OBS_STREAMING(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SAVE_SL_BROWSER_DOCKS: JS_SAVE_SL_BROWSER_DOCKS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_QT_SET_JS_ON_CLICK_STREAM: JS_QT_SET_JS_ON_CLICK_STREAM(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON: JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(jsonParams, jsonReturnStr); break;		
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -734,6 +737,37 @@ void PluginJsHandler::JS_DOCK_NEW_BROWSER_DOCK(const json11::Json &params, std::
 			//obs_frontend_add_dock_by_id(objectName.c_str(), title.c_str(), nullptr);
 		},
 		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(const Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+	out_jsonReturn = Json(Json::object{{"status", "failure"}}).dump();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, &out_jsonReturn]() {
+			if (QApplication::activeModalWidget())
+			{
+				out_jsonReturn = Json(Json::object{{"error", "activeModalWidget"}}).dump();
+			}
+			else
+			{
+				QtGuiModifications::instance().clickStreamButton();
+				out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+
+}
+
+void PluginJsHandler::JS_QT_SET_JS_ON_CLICK_STREAM(const Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string jsstr = param2Value.string_value();
+
+	QtGuiModifications::instance().setJavascriptToCallOnStreamClick(jsstr);
+	out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 }
 
 void PluginJsHandler::JS_GET_MAIN_WINDOW_GEOMETRY(const Json &params, std::string &out_jsonReturn)
