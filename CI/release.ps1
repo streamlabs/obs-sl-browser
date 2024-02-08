@@ -1,5 +1,5 @@
 # URL to the JSON data for known OBS versions 
-$urlJsonObsVersions = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/obsversions.json"
+$urlJsonObsVersions = "https://slobs-cdn.streamlabs.com/obsplugin/obsversions.json"
 
 # Fetch the JSON content
 $jsonContent = Invoke-RestMethod -Uri $urlJsonObsVersions
@@ -109,6 +109,7 @@ function CreateJsonFile($folder, $branchName) {
     $jsonContent = @{}
     $jsonContent.package = $zipFile.Name
     $jsonContent.installer = $branchInstallerUrls[$branchName]
+    $jsonContent.revision = $revNumberOutgoing
     $jsonContent.files = $filesInBranch | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
         $subPath = $_.FullName.Substring($_.FullName.IndexOf("$branchName\$branchName") + $branchName.Length * 2 + 2)
         @{

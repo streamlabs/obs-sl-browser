@@ -6,11 +6,12 @@ param(
 Write-Output "Workspace is $github_workspace"
 Write-Output "Github revision is $revision"
 
+# Get the revision we're using
 $slRevision = 0
 
 try {
 	# Download data for revisions
-	$urlJsonObsVersions = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
+	$urlJsonObsVersions = "https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
 
 	$filepathJsonPublish = ".\meta_publish.json"
 	Invoke-WebRequest -Uri $urlJsonObsVersions -OutFile $filepathJsonPublish
@@ -23,6 +24,23 @@ catch {
 	throw "Error: An error occurred. Details: $($_.Exception.Message)"
 }
 
+# Save in the bucket which revision was used
+$Env:AWS_ACCESS_KEY_ID = $Env:AWS_RELEASE_ACCESS_KEY_ID
+$Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
+$Env:AWS_DEFAULT_REGION = "us-west-2"
+
+$revisionFilePath = Join-Path -Path $github_workspace -ChildPath "${revision}.json"=
+$newJsonContent = @{ rev = $slRevision } | ConvertTo-Json
+$newJsonContent | Out-File -FilePath $revisionFilePath
+Write-Output "New JSON file created at $revisionFilePath with content: $newJsonContent"
+
+aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/meta_sha/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+
+if ($LASTEXITCODE -ne 0) {
+	throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+}
+
+# Begin
 $env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\cmake"
 $env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
 $env:gRPC_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\grpc"
@@ -117,7 +135,6 @@ while ((Get-Date) - $startTime -lt $maxDuration -and $lastExitCode -ne 0) {
 if ($lastExitCode -ne 0) {
     throw "Symbol processing script exited with error code $lastExitCode"
 }
-
 
 # Define the output file name for the 7z archive
 Write-Output "-- 7z"
