@@ -34,7 +34,7 @@ $newJsonContent = @{ rev = $slRevision } | ConvertTo-Json
 $newJsonContent | Out-File -FilePath $revisionFilePath
 Write-Output "New JSON file created at $revisionFilePath with content: $newJsonContent"
 
-aws s3 cp $jsonFilePath s3://slobs-cdn.streamlabs.com/obsplugin/meta_sha/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+aws s3 cp $revisionFilePath s3://slobs-cdn.streamlabs.com/obsplugin/meta_sha/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
 
 if ($LASTEXITCODE -ne 0) {
 	throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
