@@ -29,7 +29,7 @@ $Env:AWS_ACCESS_KEY_ID = $Env:AWS_RELEASE_ACCESS_KEY_ID
 $Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
 $Env:AWS_DEFAULT_REGION = "us-west-2"
 
-$revisionFilePath = Join-Path -Path $github_workspace -ChildPath "${revision}.json"=
+$revisionFilePath = Join-Path -Path $github_workspace -ChildPath "${revision}.json"
 $newJsonContent = @{ rev = $slRevision } | ConvertTo-Json
 $newJsonContent | Out-File -FilePath $revisionFilePath
 Write-Output "New JSON file created at $revisionFilePath with content: $newJsonContent"
