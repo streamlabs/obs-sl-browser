@@ -55,6 +55,7 @@ foreach ($branchName in $branchNames) {
 		# Check the installer by copying it over into /package/
 		$installerUrl = "s3://slobs-cdn.streamlabs.com/obsplugin/intermediary_packages/slplugin-$branchName-$commitSha-signed.exe"
 		$destination = "s3://slobs-cdn.streamlabs.com/obsplugin/package/slplugin-$branchName-$commitSha-signed.exe"    
+		$destinationUrl = "https://slobs-cdn.slobs-cdn.streamlabs.com/obsplugin/package/slplugin-$branchName-$commitSha-signed.exe"    
 		$installerResult = $false
 			
 		# Local environment variables, even if there are system ones with the same name, these are used for the cmd below
@@ -69,6 +70,12 @@ foreach ($branchName in $branchNames) {
 			
 			if ($LASTEXITCODE -ne 0) {
 				throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+			}
+			
+			cfcli -d streamlabs.com purge --url $destinationUrl
+			
+			if ($LASTEXITCODE -ne 0)  {
+				throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
 			}
 			
 			$installerResult = $true
@@ -137,13 +144,13 @@ function CreateJsonFile($folder, $branchName) {
 			throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
 		}
 		
-		cfcli -d streamlabs.com purge $jsonFilePath
+		cfcli -d streamlabs.com purge --url $("https://slobs-cdn.streamlabs.com/obsplugin/package/" + [System.IO.Path]::GetFileName($jsonFilePath))
 		
 		if ($LASTEXITCODE -ne 0) {
 			throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
 		}
 		
-		cfcli -d streamlabs.com purge $zipFilePath
+		cfcli -d streamlabs.com purge --url $("https://slobs-cdn.streamlabs.com/obsplugin/package/" + [System.IO.Path]::GetFileName($zipFilePath))
 		
 		if ($LASTEXITCODE -ne 0)  {
 			throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
@@ -167,14 +174,14 @@ if ($allBranchesReady) {
 		throw "Problem publishing new metadata for each version, not publishing new publish.josn"
 	}
 	
-	Write-Host "Formatting the next publish.json file..."
+	Write-Host "Formatting the next meta_publish.json file..."
 	
 	try {
 		# URL to the JSON data for revisions
-		$urlJsonObsVersions = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/publish.json"
+		$urlJsonObsVersions = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
 
 		# Download the JSON
-		$filepathJsonPublish = ".\publish.json"
+		$filepathJsonPublish = ".\meta_publish.json"
 		Invoke-WebRequest -Uri $urlJsonObsVersions -OutFile $filepathJsonPublish
 
 		# Read and parse the JSON file
@@ -199,10 +206,10 @@ if ($allBranchesReady) {
 		throw "Error: An error occurred. Details: $($_.Exception.Message)"
 	}
 		
-	Write-Host "Uploading publish.json file..."
-	aws s3 cp $filepathJsonPublish s3://slobs-cdn.streamlabs.com/obsplugin/publish.json --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+	Write-Host "Uploading meta_publish.json file..."
+	aws s3 cp $filepathJsonPublish s3://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
 			
 	if ($LASTEXITCODE -ne 0) {
-		throw "On trying to upload publish.json, AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+		throw "On trying to upload meta_publish.json, AWS CLI returned a non-zero exit code: $LASTEXITCODE"
 	}
 }
