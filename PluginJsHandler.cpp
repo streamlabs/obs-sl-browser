@@ -379,9 +379,9 @@ void PluginJsHandler::JS_CLEAR_AUTH_TOKEN(const json11::Json &params, std::strin
 void PluginJsHandler::JS_SL_VERSION_INFO(const json11::Json &params, std::string &out_jsonReturn)
 {
 #ifdef GITHUB_REVISION
-	out_jsonReturn = Json(Json::object{{"branch", SL_OBS_VERSION}, {"git_sha", GITHUB_REVISION}}).dump();
+	out_jsonReturn = Json(Json::object{{"branch", SL_OBS_VERSION}, {"git_sha", GITHUB_REVISION}, {"rev", SL_REVISION}}).dump();
 #else
-	out_jsonReturn = Json(Json::object{{"branch", "debug"}, {"git_sha", "debug"}}).dump();
+	out_jsonReturn = Json(Json::object{{"branch", "debug"}, {"git_sha", "debug"}, {"rev", "debug"}}).dump();
 #endif
 }
 
