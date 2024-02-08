@@ -4,24 +4,7 @@ param(
 )
 
 Write-Output "Workspace is $github_workspace"
-Write-Output "Github revision is $revision"
-
-$slRevision = 0
-
-try {
-	# Download data for revisions
-	$urlJsonObsVersions = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
-
-	$filepathJsonPublish = ".\meta_publish.json"
-	Invoke-WebRequest -Uri $urlJsonObsVersions -OutFile $filepathJsonPublish
-	$jsonContent = Get-Content -Path $filepathJsonPublish -Raw | ConvertFrom-Json
-	
-	$slRevision = $jsonContent.next_rev
-	Write-Output "Streamlabs revision is $slRevision"
-}
-catch {
-	throw "Error: An error occurred. Details: $($_.Exception.Message)"
-}
+Write-Output "Revision is $revision"
 
 $env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\cmake"
 $env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
@@ -37,8 +20,6 @@ $cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser 
 $cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser-plugin PRIVATE SL_OBS_VERSION=""\)', "target_compile_definitions(sl-browser-plugin PRIVATE SL_OBS_VERSION=`"$($env:SL_OBS_VERSION)`")"
 $cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser PRIVATE GITHUB_REVISION=""\)', "target_compile_definitions(sl-browser PRIVATE GITHUB_REVISION=`"${revision}`")"
 $cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser-plugin PRIVATE GITHUB_REVISION=""\)', "target_compile_definitions(sl-browser-plugin PRIVATE GITHUB_REVISION=`"${revision}`")"
-$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser PRIVATE SL_REVISION=""\)', "target_compile_definitions(sl-browser PRIVATE SL_REVISION=`"${revision}`")"
-$cmakeContent = $cmakeContent -replace '#target_compile_definitions\(sl-browser-plugin PRIVATE SL_REVISION=""\)', "target_compile_definitions(sl-browser-plugin PRIVATE SL_REVISION=`"${slRevision}`")"
 
 # Write the updated content back to CMakeLists.txt
 Set-Content -Path .\CMakeLists.txt -Value $cmakeContent
