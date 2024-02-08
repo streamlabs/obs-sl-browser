@@ -166,7 +166,7 @@ void SlBrowser::browserInit()
 	prod_ver << "Chrome/";
 	prod_ver << std::to_string(cef_version_info(4)) << "." << std::to_string(cef_version_info(5)) << "." << std::to_string(cef_version_info(6)) << "." << std::to_string(cef_version_info(7));
 	prod_ver << " SLABS/";
-	prod_ver << version << "." << githubRevision;
+	prod_ver << revision << "." << version << "." << githubRevision;
 	CefString(&settings.user_agent_product) = prod_ver.str();
 
 	settings.persist_user_preferences = 1;
