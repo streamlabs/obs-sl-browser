@@ -101,6 +101,8 @@ private:
 	void JS_RESTART_OBS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_IS_OBS_STREAMING(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SAVE_SL_BROWSER_DOCKS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_QT_SET_JS_ON_CLICK_STREAM(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(const json11::Json &params, std::string &out_jsonReturn);
 
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;

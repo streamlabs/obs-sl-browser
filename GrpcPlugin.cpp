@@ -44,6 +44,21 @@ bool grpc_plugin_objClient::send_executeCallback(const int functionId, const std
 	return true;
 }
 
+bool grpc_plugin_objClient::send_executeJavascript(const std::string& codeStr)
+{
+	grpc_run_javascriptOnBrowser request;
+	request.set_str(codeStr.c_str());
+
+	grpc_empty_Reply reply;
+	grpc::ClientContext context;
+	grpc::Status status = stub_->com_grpc_run_javascriptOnBrowser(&context, request, &reply);
+
+	if (!status.ok())
+		return m_connected = false;
+
+	return true;
+}
+
 bool grpc_plugin_objClient::send_windowToggleVisibility()
 {
 	grpc_window_toggleVisibility request;
@@ -90,7 +105,6 @@ bool GrpcPlugin::startServer(int32_t listenPort)
 bool GrpcPlugin::connectToClient(int32_t portNumber)
 {
 	m_clientObj = std::make_unique<grpc_plugin_objClient>(grpc::CreateChannel("localhost:" + std::to_string(portNumber), grpc::InsecureChannelCredentials()));
-
 	return m_clientObj != nullptr;
 }
 
