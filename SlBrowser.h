@@ -11,7 +11,7 @@ public:
 	void run(int argc, char *argv[]);
 
 	static void CreateCefBrowser(int arg);
-	static const char *getDefaultUrl() { return "https://obs-plugin.streamlabs.dev"; }
+	static const char *getDefaultUrl() { return "https://obs-plugin.streamlabs.com"; }
 
 	bool getSavedHiddenState() const;
 	void saveHiddenState(const bool b) const;
