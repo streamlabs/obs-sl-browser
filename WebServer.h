@@ -15,6 +15,7 @@ public:
 	const std::string getErr() const { return m_err; }
 	std::string getToken();
 	void clearToken();
+	bool isAlreadyStarted() { return m_launching || m_running; }
 
 public:
 	static WebServer& instance()
