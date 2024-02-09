@@ -137,6 +137,7 @@ private:
 		std::string payload;
 		std::string version;
 		std::string githubRevision;
+		std::string revision;
 
 		#ifdef SL_OBS_VERSION
 			version = SL_OBS_VERSION;
@@ -148,6 +149,12 @@ private:
 			githubRevision = GITHUB_REVISION;
 		#else
 			githubRevision = "debug";
+		#endif
+
+		#ifdef SL_REVISION
+			revision = SL_REVISION;
+		#else
+			revision = "debug";
 		#endif
 
 		// Read .dmp file content
@@ -191,8 +198,9 @@ private:
 		// Construct tags payload
 		payload += "Content-Disposition: form-data; name=\"sentry\"\r\n";
 		payload += "\r\n";
-		payload += "{\"release\":\"" + version + "\", \"tags\":{\"gitrev\":\"" + githubRevision + "\"}}\r\n";
+		payload += "{\"release\":\"" + version + "\", \"tags\":{\"gitrev\":\"" + githubRevision + "\", \"revision\":\"" + revision + "\"}}\r\n";
 		payload += "--BOUNDARY--\r\n";
+
 
 		// Ship it
 		WindowsFunctions::HTTPRequest(uri, method, headers, &httpCode, timeoutMS, response, payload, "application/json");
