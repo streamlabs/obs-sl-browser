@@ -41,20 +41,6 @@ RequestExecutionLevel admin  ; Request admin rights
 BrandingText "Streamlabs Plugin for OBS" 
 !insertmacro MUI_PAGE_FINISH
 
-Var installDir
-
-; Call the function to stop and remove the service before the installation
-Section "PreInstall" SEC00
-    
-    ; Get InstallDir from cmd line
-    ${GetOptions} $CMDLINE "/p" $installDir
-
-    ; Check if $installDir has a value, if so, set it as $INSTDIR
-    StrCmp $installDir "" skip
-    StrCpy $INSTDIR $installDir
-    skip:
-    
-SectionEnd
 
 ; Define the sections of the installer
 Section "MainSection" SEC01    
