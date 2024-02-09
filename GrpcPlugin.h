@@ -14,6 +14,7 @@ public:
 	grpc_plugin_objClient(std::shared_ptr<grpc::Channel> channel);
 
 	bool send_executeCallback(const int functionId, const std::string &jsonStr);
+	bool send_executeJavascript(const std::string &codeStr);
 	bool send_windowToggleVisibility();
 
 private:
