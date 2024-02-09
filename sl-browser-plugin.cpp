@@ -14,6 +14,7 @@
 #include "WebServer.h"
 #include "ConsoleToggle.h"
 #include "CrashHandler.h"
+#include "QtGuiModifications.h"
 
 #include <QMainWindow>
 #include <QMenuBar>
@@ -94,6 +95,7 @@ void obs_module_post_load(void)
 	* Plugin begnis
 	*/
 
+	QtGuiModifications::instance();
 	PluginJsHandler::instance().start();
 
 	auto chooseProxyPort = []() {
@@ -189,11 +191,13 @@ void obs_module_unload(void)
 	// Might be fine to just kill it, tbd
 	// ;
 
+	// JS handler needs to be stopped before Grpc or crash
 	PluginJsHandler::instance().stop();
 	GrpcPlugin::instance().stop();
 	WebServer::instance().stop();
+	QtGuiModifications::instance().stop();
 
-	// Terminates the process (it shouldn't exist)
+	// Terminates the browser process (it shouldn't exist)
 	TerminateProcess(g_browserProcessInfo.hProcess, EXIT_SUCCESS);
 	CloseHandle(g_browserProcessInfo.hProcess);
 	CloseHandle(g_browserProcessInfo.hThread);

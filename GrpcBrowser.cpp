@@ -30,6 +30,24 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 		return grpc::Status::OK;
 	}
 
+	grpc::Status com_grpc_run_javascriptOnBrowser(grpc::ServerContext *context, const grpc_run_javascriptOnBrowser *request, grpc_empty_Reply *response) override
+	{
+		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeJavascript");
+		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
+		execute_args->SetString(0, request->str());
+
+		if (auto ptr = SlBrowser::instance().browserClient->GetMostRecentRenderKnown())
+		{
+			SendBrowserProcessMessage(ptr, PID_RENDERER, msg);
+		}
+		else
+		{
+			printf("com_grpc_run_javascriptOnBrowser failed to a suitable browser for function");
+		}
+
+		return grpc::Status::OK;
+	}
+
 	grpc::Status com_grpc_window_toggleVisibility(grpc::ServerContext *context, const grpc_window_toggleVisibility *request, grpc_empty_Reply *response) override
 	{
 		// If hidden
@@ -52,7 +70,7 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 			WindowsFunctions::ForceForegroundWindow(hwnd);
 		}
 
-		SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_widget->isHidden());		  	
+		SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_widget->isHidden());
 		return grpc::Status::OK;
 	}
 };
@@ -115,7 +133,6 @@ bool GrpcBrowser::startServer(int32_t listenPort)
 bool GrpcBrowser::connectToClient(int32_t portNumber)
 {
 	m_clientObj = std::make_unique<grpc_proxy_objClient>(grpc::CreateChannel("localhost:" + std::to_string(portNumber), grpc::InsecureChannelCredentials()));
-
 	return m_clientObj != nullptr;
 }
 
