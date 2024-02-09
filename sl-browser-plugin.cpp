@@ -34,7 +34,7 @@ MODULE_EXPORT const char *obs_module_description(void)
 bool obs_module_load(void)
 {
 #ifdef GITHUB_REVISION
-	blog(LOG_INFO, "%s module git sha is %s for OBS %s", obs_module_description(), std::string(GITHUB_REVISION).c_str(), std::string(SL_OBS_VERSION).c_str());
+	blog(LOG_INFO, "%s module git sha is %s for OBS %s, revision %s", obs_module_description(), std::string(GITHUB_REVISION).c_str(), std::string(SL_OBS_VERSION).c_str(), std::string(SL_REVISION).c_str());
 #else
 	blog(LOG_INFO, "%s module is a debug build, version information unknown.", obs_module_description());
 #endif
@@ -187,18 +187,14 @@ void obs_module_post_load(void)
 
 void obs_module_unload(void)
 {
-	// Tell process to shut down and wait?
-	// Might be fine to just kill it, tbd
-	// ;
+	// Terminates the browser process (it shouldn't exist)
+	::TerminateProcess(g_browserProcessInfo.hProcess, EXIT_SUCCESS);
+	::CloseHandle(g_browserProcessInfo.hProcess);
+	::CloseHandle(g_browserProcessInfo.hThread);
 
 	// JS handler needs to be stopped before Grpc or crash
 	PluginJsHandler::instance().stop();
 	GrpcPlugin::instance().stop();
 	WebServer::instance().stop();
 	QtGuiModifications::instance().stop();
-
-	// Terminates the browser process (it shouldn't exist)
-	TerminateProcess(g_browserProcessInfo.hProcess, EXIT_SUCCESS);
-	CloseHandle(g_browserProcessInfo.hProcess);
-	CloseHandle(g_browserProcessInfo.hThread);
 }
