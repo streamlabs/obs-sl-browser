@@ -68,6 +68,7 @@ public:
 	IMPLEMENT_REFCOUNTING(BrowserClient);
 
 public:
+	CefRefPtr<CefBrowser> GetMostRecentRenderKnown();
 	CefRefPtr<CefBrowser> PopCallback(const int functionId);
 	void RegisterCallback(const int functionId, CefRefPtr<CefBrowser> browser);
 
@@ -84,4 +85,5 @@ private:
 	std::map<int, CefRefPtr<CefBrowser>> m_callbackDictionary;
 
 	CefRefPtr<CefBrowser> m_Browser;
+	CefRefPtr<CefBrowser> m_MostRecentRenderKnowOf = nullptr;
 };

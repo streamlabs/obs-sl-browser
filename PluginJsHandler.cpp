@@ -1,4 +1,5 @@
 #include "PluginJsHandler.h"
+#include "QtGuiModifications.h"
 
 // Local
 #include "JavascriptApi.h"
@@ -9,6 +10,7 @@
 // Windows
 #include <ShlObj.h>
 #include <shellapi.h>
+#include <Psapi.h>
 
 // Stl
 #include <chrono>
@@ -198,6 +200,8 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_RESTART_OBS: JS_RESTART_OBS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_GET_IS_OBS_STREAMING: JS_GET_IS_OBS_STREAMING(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SAVE_SL_BROWSER_DOCKS: JS_SAVE_SL_BROWSER_DOCKS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_QT_SET_JS_ON_CLICK_STREAM: JS_QT_SET_JS_ON_CLICK_STREAM(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON: JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(jsonParams, jsonReturnStr); break;		
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -252,15 +256,17 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 		return std::string(value);
 	};
 
+
 	auto getDefaultBrowserPath = [&]()
 	{
+		std::string browser = getRegistryValue(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice", "ProgId");
+
 		// Get the name of the default browser
-		std::string browserName = getRegistryValue(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice", "ProgId");
-		if (browserName.empty())
+		if (browser.empty())
 			return std::string();
 
 		// Get the path of the browser executable
-		std::string browserPathKey = "SOFTWARE\\Classes\\" + browserName + "\\shell\\open\\command";
+		std::string browserPathKey = "SOFTWARE\\Classes\\" + browser + "\\shell\\open\\command";
 		return getRegistryValue(HKEY_LOCAL_MACHINE, browserPathKey, "");
 	};
 	
@@ -288,6 +294,75 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 		browserCommand = "\"" + browserCommand + "\" \"" + url + "\"";
 
 	WinExec(browserCommand.c_str(), SW_SHOWDEFAULT);
+
+	// Time for it to open
+	::Sleep(500);
+
+	/**
+	* Now look for the browser process and bring the top most Z to front (the page should be in that instance of it)
+	*/
+
+	auto extractPathAndName = [](const std::string &command)
+	{
+		size_t firstQuote = command.find('\"');
+		size_t secondQuote = command.find('\"', firstQuote + 1);
+		std::string path = command.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+		size_t lastSlash = path.find_last_of("\\/");
+		std::string name = path.substr(lastSlash + 1);
+		return std::pair<std::string, std::string>{path, name};
+	};
+
+	auto lpcwstrToStr = [](LPCWSTR wideStr)
+	{
+		int len = WideCharToMultiByte(CP_UTF8, 0, wideStr, -1, nullptr, 0, nullptr, nullptr);
+		std::vector<char> vec(len);
+		WideCharToMultiByte(CP_UTF8, 0, wideStr, -1, &vec[0], len, nullptr, nullptr);
+		return std::string(vec.begin(), vec.end() - 1); // Exclude null terminator
+	};
+
+	// Lambda to get the full path of a process given its ID
+	auto getProcessPathById = [&](DWORD processId) -> std::string
+	{
+		std::string processPath;
+		HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
+		if (hProcess != NULL)
+		{
+			WCHAR pathBuffer[MAX_PATH];
+			if (GetModuleFileNameEx(hProcess, NULL, pathBuffer, MAX_PATH))
+				processPath = lpcwstrToStr(pathBuffer);
+
+			CloseHandle(hProcess);
+		}
+
+		return processPath;
+	};
+
+	std::string browserPath = extractPathAndName(browserCommand).first;
+
+	// Bring topmost browser to top
+	auto enumWindowsCallback = [&](HWND hwnd, LPARAM lParam) -> BOOL
+	{
+		DWORD processId;
+		GetWindowThreadProcessId(hwnd, &processId);
+		std::string currentProcessPath = getProcessPathById(processId);
+
+		if (currentProcessPath == browserPath && IsWindowVisible(hwnd) && !IsIconic(hwnd))
+		{
+			// Bring top, return false to stop
+			WindowsFunctions::ForceForegroundWindow(hwnd);
+			return FALSE;
+		}
+
+		return TRUE; 
+	};
+
+	// Search
+	EnumWindows(
+		[](HWND hwnd, LPARAM lParam) -> BOOL {
+			auto &callback = *reinterpret_cast<decltype(enumWindowsCallback) *>(lParam);
+			return callback(hwnd, lParam);
+		},
+		reinterpret_cast<LPARAM>(&enumWindowsCallback));
 }
 
 void PluginJsHandler::JS_GET_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn)
@@ -304,9 +379,9 @@ void PluginJsHandler::JS_CLEAR_AUTH_TOKEN(const json11::Json &params, std::strin
 void PluginJsHandler::JS_SL_VERSION_INFO(const json11::Json &params, std::string &out_jsonReturn)
 {
 #ifdef GITHUB_REVISION
-	out_jsonReturn = Json(Json::object{{"branch", SL_OBS_VERSION}, {"git_sha", GITHUB_REVISION}}).dump();
+	out_jsonReturn = Json(Json::object{{"branch", SL_OBS_VERSION}, {"git_sha", GITHUB_REVISION}, {"rev", SL_REVISION}}).dump();
 #else
-	out_jsonReturn = Json(Json::object{{"branch", "debug"}, {"git_sha", "debug"}}).dump();
+	out_jsonReturn = Json(Json::object{{"branch", "debug"}, {"git_sha", "debug"}, {"rev", "debug"}}).dump();
 #endif
 }
 
@@ -662,6 +737,37 @@ void PluginJsHandler::JS_DOCK_NEW_BROWSER_DOCK(const json11::Json &params, std::
 			//obs_frontend_add_dock_by_id(objectName.c_str(), title.c_str(), nullptr);
 		},
 		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(const Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+	out_jsonReturn = Json(Json::object{{"status", "failure"}}).dump();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, &out_jsonReturn]() {
+			if (QApplication::activeModalWidget())
+			{
+				out_jsonReturn = Json(Json::object{{"error", "activeModalWidget"}}).dump();
+			}
+			else
+			{
+				QtGuiModifications::instance().clickStreamButton();
+				out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+
+}
+
+void PluginJsHandler::JS_QT_SET_JS_ON_CLICK_STREAM(const Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	std::string jsstr = param2Value.string_value();
+
+	QtGuiModifications::instance().setJavascriptToCallOnStreamClick(jsstr);
+	out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 }
 
 void PluginJsHandler::JS_GET_MAIN_WINDOW_GEOMETRY(const Json &params, std::string &out_jsonReturn)
