@@ -432,6 +432,8 @@ public:
 			//	'expectedReferer' is for example, '/?secret_token=', equates to 'http://localhost:port/?secret_token=', aka the referring uri that the webserver is will pluck the token from
 			//	'redirectUrl' is where you want them to be redirected to whenever accessing 'http://localhost:port'
 			//		Example arg1 = { "port": 12345 }
+			//
+			//	NOTE: If already started, simply returns the port.
 			{"web_startServer", JS_START_WEBSERVER},
 
 			// .(@function(arg1))
