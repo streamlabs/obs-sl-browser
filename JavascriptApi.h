@@ -454,7 +454,7 @@ public:
 			*/
 
 			// .(@function(arg1))
-			//		Example arg1 = { "branch": '29.1.0', "git_sha": 'abcdefg...' }
+			//		Example arg1 = { "branch": '29.1.0', "git_sha": 'abcdefg...', "rev": '10' }
 			{"sl_getVersionInfo", JS_SL_VERSION_INFO},
 
 		};

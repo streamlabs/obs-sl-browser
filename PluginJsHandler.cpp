@@ -221,6 +221,12 @@ void PluginJsHandler::JS_START_WEBSERVER(const json11::Json &params, std::string
 	WebServer::instance().setExpectedReferer(param3Value.string_value());
 	WebServer::instance().setRedirectUrl(param4Value.string_value());
 
+	if (WebServer::instance().isAlreadyStarted())
+	{
+		out_jsonReturn = Json(Json::object{{"port", WebServer::instance().getPort()}}).dump();
+		return;
+	}
+
 	if (!WebServer::instance().start(param2Value.int_value()))
 	{
 		out_jsonReturn = Json(Json::object{{"error", WebServer::instance().getErr()}}).dump();
