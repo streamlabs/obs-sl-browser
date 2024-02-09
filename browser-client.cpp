@@ -146,10 +146,17 @@ std::string BrowserClient::cefListValueToJSONString(CefRefPtr<CefListValue> list
 	return json_str;
 }
 
+CefRefPtr<CefBrowser> BrowserClient::GetMostRecentRenderKnown()
+{
+	std::lock_guard<std::recursive_mutex> grd(m_recursiveMutex);
+	return m_MostRecentRenderKnowOf;
+}
+
 void BrowserClient::RegisterCallback(const int functionId, CefRefPtr<CefBrowser> browser)
 {
 	std::lock_guard<std::recursive_mutex> grd(m_recursiveMutex);
 	m_callbackDictionary[functionId] = browser;
+	m_MostRecentRenderKnowOf = browser;
 }
 
 CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
