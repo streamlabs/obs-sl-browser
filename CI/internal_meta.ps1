@@ -87,13 +87,11 @@ $Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False
 $Env:AWS_ACCESS_KEY_ID = $Env:AWS_RELEASE_ACCESS_KEY_ID
 $Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
 $Env:AWS_DEFAULT_REGION = "us-west-2"
+	
+Write-Host "Uploading to AWS"
 
-try {			
-	Write-Host "Uploading to AWS"
-	
-	aws s3 cp "$PWD\internal_meta.json" s3://slobs-cdn.streamlabs.com/obsplugin/meta/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
-	
-	if ($LASTEXITCODE -ne 0) {
-		throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
-	}
+aws s3 cp "$PWD\internal_meta.json" s3://slobs-cdn.streamlabs.com/obsplugin/meta/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+
+if ($LASTEXITCODE -ne 0) {
+	throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
 }
