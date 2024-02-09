@@ -88,6 +88,12 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 		}
 	}
 
+	if (message->GetName() == "executeJavascript")
+	{
+		CefRefPtr<CefListValue> arguments = message->GetArgumentList();
+		browser->GetMainFrame()->ExecuteJavaScript(arguments->GetString(0), browser->GetMainFrame()->GetURL(), 0); 
+	}
+
 	return true;
 }
 
