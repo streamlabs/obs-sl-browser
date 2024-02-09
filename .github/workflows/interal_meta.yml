@@ -19,6 +19,9 @@ jobs:
             ReleaseConfig: RelWithDebInfo
     env:
       OS_TAG: "win64"
-    steps:         
+    steps:      
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        
       - name: Run script
         run: powershell -File ./ci/internal_meta.ps1
