@@ -196,5 +196,4 @@ void obs_module_unload(void)
 	PluginJsHandler::instance().stop();
 	GrpcPlugin::instance().stop();
 	WebServer::instance().stop();
-	QtGuiModifications::instance().stop();
 }
