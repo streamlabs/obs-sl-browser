@@ -4,13 +4,16 @@ on:
   workflow_dispatch:
 
 env:
+  SL_OBS_VERSION: ${{ github.ref_name }}
+  SLGenerator: Visual Studio 17 2022
   AWS_RELEASE_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
   AWS_RELEASE_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
     
 jobs:
-  win64:
-    name: 'Windows 64-bit'
+  publish:
+    name: 'Publish Internal Meta'
     runs-on: windows-latest
+    environment: Release
     strategy:
       matrix:
         ReleaseName: [release]
@@ -19,13 +22,13 @@ jobs:
             ReleaseConfig: RelWithDebInfo
     env:
       OS_TAG: "win64"
-    steps:      
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v2
 
       - name: Install Cloudflare CLI
         run: npm install -g cloudflare-cli
-        
+                 
       - name: Run script
         env:
           CF_API_EMAIL: ${{ secrets.CLOUDFLARE_AUTH_EMAIL }}
