@@ -1,3 +1,8 @@
+# Local environment variables, even if there are system ones with the same name, these are used for the cmd below
+$Env:AWS_ACCESS_KEY_ID = $Env:AWS_RELEASE_ACCESS_KEY_ID
+$Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
+$Env:AWS_DEFAULT_REGION = "us-west-2"
+
 Write-Host "Formatting the next meta_publish.json to increment next_rev..."
 
 try {
