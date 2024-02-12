@@ -429,9 +429,11 @@ public:
 			// .(@function(arg1), port, expectedReferer, redirectUrl)
 			//	Only one can exist at a time (do we need multiple? lmk)
 			//	'port', ie http://localhost:port, if you assign port 0 then the OS will choose one (value is returned in function arg1)
-			//	'expectedReferer' is for example, '/?secret_token=', equates to 'http://localhost:port/?secret_token=', aka the referring uri that the webserver is will pluck the token from
+			//	'expectedReferer' is the prefix you want chopped off leading to the token. If the you set this to "/?" and the incoming HTTP request is "GET /?success=true HTTP/1.1", you get back "success=true" - you get everything up to " HTTP/1.1" in that example. 
 			//	'redirectUrl' is where you want them to be redirected to whenever accessing 'http://localhost:port'
 			//		Example arg1 = { "port": 12345 }
+			//
+			//	NOTE: Calling this while it's running will simply update new 'expectedReferer' and 'redirectUrl' values and return the port again.
 			{"web_startServer", JS_START_WEBSERVER},
 
 			// .(@function(arg1))
