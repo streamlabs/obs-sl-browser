@@ -1,4 +1,4 @@
-name: 'Create Internal Meta'
+name: 'Clear Publish Cache'
 
 on:
   workflow_dispatch:
@@ -33,4 +33,4 @@ jobs:
         env:
           CF_API_EMAIL: ${{ secrets.CLOUDFLARE_AUTH_EMAIL }}
           CF_API_KEY: ${{ secrets.CLOUDFLARE_AUTH_KEY }}
-        run: powershell -File ./ci/internal_meta.ps1
+        run: powershell -File ./ci/clear_publish_cache.ps1
