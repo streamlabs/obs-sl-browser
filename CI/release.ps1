@@ -51,7 +51,7 @@ foreach ($branchName in $branchNames) {
 		# Check the installer by copying it over into /package/
 		$installerUrl = "s3://slobs-cdn.streamlabs.com/obsplugin/intermediary_packages/slplugin-$branchName-$commitSha-signed.exe"
 		$destination = "s3://slobs-cdn.streamlabs.com/obsplugin/package/slplugin-$branchName-$commitSha-signed.exe"    
-		$destinationUrl = "https://slobs-cdn.slobs-cdn.streamlabs.com/obsplugin/package/slplugin-$branchName-$commitSha-signed.exe"    
+		$destinationUrl = "https://slobs-cdn.streamlabs.com/obsplugin/package/slplugin-$branchName-$commitSha-signed.exe"    
 		$installerResult = $false
 			
 		# Local environment variables, even if there are system ones with the same name, these are used for the cmd below
