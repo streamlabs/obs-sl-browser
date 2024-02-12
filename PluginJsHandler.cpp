@@ -2168,6 +2168,7 @@ LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 			{
 				::Sleep(100);
 				PluginJsHandler::instance().saveSlabsBrowserDocks();
+				QtGuiModifications::instance().stop();
 				finishedSaving = true;
 				::PostMessage(hwnd, WM_CLOSE, 0, 0);
 			};
