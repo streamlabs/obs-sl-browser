@@ -22,7 +22,7 @@ try {
 	$updatedJson | Out-File -FilePath $filepathJsonPublish
 	
 	Write-Host "Uploading $filepathJsonPublish file..."
-	aws s3 cp $filepathJsonPublish s3://slobs-cdn.streamlabs.com/obsplugin --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
+	aws s3 cp $filepathJsonPublish s3://slobs-cdn.streamlabs.com/obsplugin/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
 		
 	if ($LASTEXITCODE -ne 0) {
 		throw "On trying to upload meta_publish.json, AWS CLI returned a non-zero exit code: $LASTEXITCODE"
