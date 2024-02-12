@@ -21,7 +21,6 @@ public:
 	void setUploadTitle(const std::string &msg) { m_uploadTitle = msg; }
 	void setErrorMsg(const std::string &msg) { m_errorMessage = msg; }
 	void setErrorTitle(const std::string &msg) { m_errorTitle = msg; }
-	void setNormalCrashHandler(std::function<void()> func) { m_normalCrashHandler = func; }
 	void setSentryUri(const std::string &uri) { m_sentryURI = uri; }
 	void addLogfilePath(const std::string &path) { m_logfilePaths.push_back(path); }
 
@@ -33,18 +32,16 @@ public:
 	}
 
 private:
-	CrashHandler()
-	{
-		::SetUnhandledExceptionFilter(unhandledHandler);
-	}
-
 	std::string m_errorTitle;
 	std::string m_errorMessage;
 	std::string m_uploadTitle;
 	std::string m_uploadMessage;
 	std::string m_sentryURI;
 	std::vector<std::string> m_logfilePaths;
-	std::function<void()> m_normalCrashHandler;
+	LPTOP_LEVEL_EXCEPTION_FILTER m_normalCrashHandler = nullptr;
+
+private:
+	CrashHandler() { m_normalCrashHandler = ::SetUnhandledExceptionFilter(unhandledHandler); }
 
 private:
 	static void makeMinidump(EXCEPTION_POINTERS *e)
@@ -218,6 +215,8 @@ private:
 
 	static LONG CALLBACK unhandledHandler(EXCEPTION_POINTERS* e)
 	{
+		::MessageBoxA(0, "a", "a", 0);
+
 		instance().m_exceptionPointers = e;
 
 		// Override exit function
@@ -249,7 +248,9 @@ private:
 			    }
 		    }
 
-		    instance().m_normalCrashHandler();
+		    // If not handled, call the previous filter if it exists
+		    if (instance().m_normalCrashHandler != nullptr)
+			    instance().m_normalCrashHandler(e);
 		}
 
 		// Run ours if haven't yet

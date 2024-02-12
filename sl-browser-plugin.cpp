@@ -51,20 +51,17 @@ void obs_module_post_load(void)
 	*/
 
 	blog(LOG_INFO, "Starting %s plugin...", obs_module_description());
-
-	static auto normalCrash = []() { bcrash(""); };
-
-	CrashHandler::instance().setNormalCrashHandler(normalCrash);
+			
 	CrashHandler::instance().setUploadTitle("OBS has crashed!");
 	CrashHandler::instance().setUploadMsg("Would you like to upload a detailed report to Streamlabs for further review?");
 	CrashHandler::instance().setSentryUri("https://o114354.ingest.sentry.io/api/4506154577756160/minidump/?sentry_key=9860cbedfdebf06a6f209d004b921add");
-
+	
 	// Path to OBS log file, find the most recently updated log file
 	std::string logdir = os_get_config_path_ptr("obs-studio/logs/");
 	std::filesystem::directory_iterator dir_it(logdir);
 	std::filesystem::path latest_file;
 	auto latest_time = std::filesystem::file_time_type::min();
-
+	
 	// Find the most recently updated file
 	for (const auto &entry : dir_it)
 	{
@@ -78,19 +75,21 @@ void obs_module_post_load(void)
 			}
 		}
 	}
-
+	
 	CrashHandler::instance().addLogfilePath(latest_file.string());
 		
 	// Path to CEF log file, find the most recently updated log file
 	char cache_path[MAX_PATH];
 	std::string cache_pathStdStr;
-
+	
 	if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, cache_path)))
 		cache_pathStdStr = std::string(cache_path) + "\\StreamlabsOBS_CEF_Cache";
-
+	
 	if (!cache_pathStdStr.empty())
 		CrashHandler::instance().addLogfilePath(cache_pathStdStr + "\\cef.log");
-		
+
+	*((unsigned int *)0) = 0xDEAD;
+
 	/***
 	* Plugin begnis
 	*/
