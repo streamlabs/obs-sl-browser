@@ -2,6 +2,8 @@ param(
     [string]$token
 )
 
+Write-Output "Starting increment_next_rev..."
+
 # Repository details
 $owner = "stream-labs"
 $repo = "obs-sl-browser"
@@ -29,3 +31,6 @@ try {
 } catch {
 	throw "Error triggering workflow: $_"
 }
+
+Write-Output "Success."
+exit 0
