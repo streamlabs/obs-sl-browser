@@ -167,7 +167,7 @@ if ($allBranchesReady) {
 	
 	try {
 		# URL to the JSON data for revisions
-		$urlJsonObsVersions = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
+		$urlJsonObsVersions = "https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
 
 		# Download the JSON
 		$filepathJsonPublish = ".\meta_publish.json"
@@ -210,5 +210,11 @@ if ($allBranchesReady) {
 			
 	if ($LASTEXITCODE -ne 0) {
 		throw "On trying to upload meta_publish.json, AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+	}
+		
+	cfcli -d streamlabs.com purge --url "https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
+	
+	if ($LASTEXITCODE -ne 0)  {
+		throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
 	}
 }
