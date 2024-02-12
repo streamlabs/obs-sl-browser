@@ -88,8 +88,6 @@ void obs_module_post_load(void)
 	if (!cache_pathStdStr.empty())
 		CrashHandler::instance().addLogfilePath(cache_pathStdStr + "\\cef.log");
 
-	*((unsigned int *)0) = 0xDEAD;
-
 	/***
 	* Plugin begnis
 	*/

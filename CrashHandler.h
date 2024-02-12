@@ -215,8 +215,6 @@ private:
 
 	static LONG CALLBACK unhandledHandler(EXCEPTION_POINTERS* e)
 	{
-		::MessageBoxA(0, "a", "a", 0);
-
 		instance().m_exceptionPointers = e;
 
 		// Override exit function
