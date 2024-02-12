@@ -20,20 +20,23 @@ if ($LASTEXITCODE -ne 0) {
     throw "start_increment_next_rev.ps1 failed: $LASTEXITCODE"
 }
 
-# Function to check the next_rev value
-function Check-NextRevIncrement {
-	$currentJsonContent = Invoke-WebRequest -Uri $urlMetaPublish | ConvertFrom-Json
-	$currentRev = $currentJsonContent.next_rev
-	return $currentRev -gt $initialRev
-}
-
 # Wait for the next_rev value to be incremented
 $checkPassed = $false
 
 do {
 	Write-Output "Checking for next_rev increment..."
+
+	try {
+		$currentJsonContent = Get-Content -Path $filepathJsonPublish -Raw | ConvertFrom-Json
+		Write-Output $currentJsonContent
+		$currentRev = $currentJsonContent.next_rev
+		$checkPassed = $currentRev -gt $initialRev
+	}
+	catch {
+		Write-Output "Erroring checking for next_rev, $_"
+	}
+
 	Start-Sleep -Seconds 5
-	$checkPassed = Check-NextRevIncrement
 }
 while (-not $checkPassed)
 
