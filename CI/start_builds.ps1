@@ -12,7 +12,7 @@ try {
 	$initialJsonContent = Get-Content -Path $filepathJsonPublish -Raw | ConvertFrom-Json
 	$initialRev = $initialJsonContent.next_rev
 	
-	.\start_increment_next_rev.ps1 $token
+	./ci/start_increment_next_rev.ps1 $token
 	
 	if ($LASTEXITCODE -ne 0) {
 	    throw "start_increment_next_rev.ps1 failed: $LASTEXITCODE"
@@ -38,7 +38,7 @@ try {
 	Write-Output "The next_rev value has been incremented successfully."	
 }
 catch {
-	throw "Error incrementing next rev."
+	throw "Error incrementing next rev: $_"
 }
 
 # URL to the JSON data

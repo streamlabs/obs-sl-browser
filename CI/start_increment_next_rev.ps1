@@ -2,13 +2,11 @@ param(
     [string]$token
 )
 
-Write-Host "Processing branch: $branchName"
-	
 # Repository details
 $owner = "stream-labs"
 $repo = "obs-sl-browser"
 $workflowFileName = "increment_next_rev.yml"
-$branch = "$branchName"
+$branch = "main"
 
 # GitHub API URL for triggering the workflow
 $apiUrl = "https://api.github.com/repos/$owner/$repo/actions/workflows/$workflowFileName/dispatches"
