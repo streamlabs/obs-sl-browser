@@ -9,7 +9,7 @@ param(
 $urlMetaPublish = "https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
 
 # Read and parse the initial JSON file
-$filepathJsonPublish = ".\meta_publish.json"
+$filepathJsonPublish = "$env:TEMP\meta_publish.json"
 Invoke-WebRequest -Uri $urlMetaPublish -OutFile $filepathJsonPublish
 $initialJsonContent = Get-Content -Path $filepathJsonPublish -Raw | ConvertFrom-Json
 $initialRev = $initialJsonContent.next_rev
@@ -27,9 +27,11 @@ do {
 	Write-Output "Checking for next_rev increment..."
 
 	try {
-		$currentJsonContent = Get-Content -Path $filepathJsonPublish -Raw | ConvertFrom-Json
-		Write-Output $currentJsonContent
-		$currentRev = $currentJsonContent.next_rev
+		$tempjson = "$env:TEMP\temp.json"
+		Invoke-WebRequest -Uri $urlMetaPublish -OutFile $tempjson
+		$tempjsonContent = Get-Content -Path $tempjson -Raw | ConvertFrom-Json
+		Write-Output $tempjsonContent
+		$currentRev = $tempjsonContent.next_rev
 		$checkPassed = $currentRev -gt $initialRev
 	}
 	catch {
