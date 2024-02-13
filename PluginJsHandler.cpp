@@ -40,6 +40,9 @@ PluginJsHandler::PluginJsHandler() {}
 PluginJsHandler::~PluginJsHandler()
 {
 	stop();
+
+	if (m_restartApp)
+		QProcess::startDetached(*m_restartProgramStr, *m_restartArguments);
 }
 
 std::wstring PluginJsHandler::getDownloadsDir() const
@@ -2149,157 +2152,6 @@ void PluginJsHandler::JS_OBS_SOURCE_DESTROY(const Json &params, std::string &out
 		Qt::BlockingQueuedConnection);
 }
 
-/***
-* Save/Load
-**/
-
-// Handle the close event here before Qt sees it
-LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-	static bool finishedSaving = false;
-	static bool doOnce = false;
-
-	// Intercept WM_CLOSE with our own logic
-	if (uMsg == WM_CLOSE && !finishedSaving)
-	{
-		if (!doOnce)
-		{
-			auto perform = [](HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-			{
-				::Sleep(100);
-				PluginJsHandler::instance().saveSlabsBrowserDocks();
-				QtGuiModifications::instance().stop();
-				finishedSaving = true;
-				::PostMessage(hwnd, WM_CLOSE, 0, 0);
-			};
-
-			std::thread(perform, hwnd, uMsg, wParam, lParam).detach();
-		}
-
-		doOnce = true;
-		return 0;
-	}
-
-	// Allow normal messaging
-	WNDPROC origWndProc = (WNDPROC)GetWindowLongPtr(hwnd, GWLP_USERDATA);
-	return CallWindowProc(origWndProc, hwnd, uMsg, wParam, lParam);
-}
-
-void PluginJsHandler::saveSlabsBrowserDocks()
-{
-	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-
-	QMetaObject::invokeMethod(
-		mainWindow,
-		[mainWindow, this]() {
-			Json::array jarray;
-			QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-			QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
-
-			foreach(QDockWidget * dock, docks)
-			{
-				if (dock->property("isSlabs").isValid())
-				{
-					QCefWidgetInternal *widget = (QCefWidgetInternal *)dock->widget();
-
-					std::string url;
-
-					if (widget->cefBrowser != nullptr)
-						url = widget->cefBrowser->GetMainFrame()->GetURL();
-
-					Json::object obj{
-						{"title", dock->windowTitle().toStdString()},
-						{"url", url},
-						{"objectName", dock->objectName().toStdString()},
-					};
-
-					jarray.push_back(obj);
-				}
-			}
-
-			std::string output = Json(jarray).dump();
-			config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsBrowserDocks", output.c_str());
-		},
-		Qt::BlockingQueuedConnection);
-}
-
-void PluginJsHandler::loadFonts()
-{
-	auto fontsDir = getFontsDir();
-
-	if (fontsDir.empty())
-		return;
-
-	try
-	{
-		for (const auto &itr : std::filesystem::directory_iterator(fontsDir))
-		{
-			if (itr.path().extension() == ".ttf")
-			{
-				const std::string &filepath = itr.path().generic_u8string();
-
-				if (WindowsFunctions::InstallFont(filepath.c_str()))
-				{
-					if (QFontDatabase::addApplicationFont(filepath.c_str()) == -1)
-						blog(LOG_ERROR, "Streamlabs - QFontDatabase::addApplicationFont %s", filepath.c_str());
-				}
-				else
-				{
-					blog(LOG_ERROR, "Streamlabs - AddFontResourceA %s", filepath.c_str());
-				}
-			}
-		}
-	}
-	catch (const std::filesystem::filesystem_error&)
-	{
-
-	}
-}
-
-void PluginJsHandler::loadSlabsBrowserDocks()
-{
-	// This is to intercept the shutdown event so that we can save it before OBS does anything
-	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-	WNDPROC origWndProc = (WNDPROC)SetWindowLongPtr(reinterpret_cast<HWND>(mainWindow->winId()), GWLP_WNDPROC, (LONG_PTR)HandleWndProc);
-	SetWindowLongPtr(reinterpret_cast<HWND>(mainWindow->winId()), GWLP_USERDATA, (LONG_PTR)origWndProc);
-
-	const char *jsonStr = config_get_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsBrowserDocks");
-
-	std::string err;
-	Json json = Json::parse(jsonStr, err);
-
-	if (!err.empty())
-		return;
-
-	Json::array array = json.array_items();
-
-	for (Json &item : array)
-	{
-		std::string title = item["title"].string_value();
-		std::string url = item["url"].string_value();
-		std::string objectName = item["objectName"].string_value();
-
-		static QCef *qcef = obs_browser_init_panel();
-
-		QDockWidget *dock = new QDockWidget(mainWindow);
-		QCefWidget *browser = qcef->create_widget(dock, url, nullptr);
-		dock->setWidget(browser);
-		dock->setWindowTitle(title.c_str());
-		dock->setObjectName(objectName.c_str());
-		dock->setProperty("isSlabs", true);
-		dock->setObjectName(objectName.c_str());
-
-		// obs_frontend_add_dock and keep the pointer to it
-		dock->setProperty("actionptr", (uint64_t)obs_frontend_add_dock(dock));
-
-		dock->resize(460, 600);
-		dock->setMinimumSize(80, 80);
-		dock->setWindowTitle(title.c_str());
-		dock->setAllowedAreas(Qt::AllDockWidgetAreas);
-		dock->setWidget(browser);
-	}
-}
-
 void PluginJsHandler::JS_GET_SCENE_COLLECTIONS(const json11::Json& params, std::string& out_jsonReturn)
 {
 	char **scene_collections = obs_frontend_get_scene_collections();
@@ -3061,17 +2913,15 @@ void PluginJsHandler::JS_SCENE_GET_SOURCES(const json11::Json &params, std::stri
 
 void PluginJsHandler::JS_RESTART_OBS(const json11::Json& params, std::string& out_jsonReturn)
 {
-	// OBS30 and later uses this to know if a shutdown was graceful, we need to trick it by deleteing this file (it has no extension)
-	CHAR appDataPath[MAX_PATH];
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
-	if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_APPDATA, NULL, 0, appDataPath)))
+	if (HWND hwnd = reinterpret_cast<HWND>(mainWindow->winId()))
 	{
-		std::string safeModeFilePath = std::string(appDataPath) + "\\obs-studio\\safe_mode";
-		DeleteFileA(safeModeFilePath.c_str());
+		m_restartApp = true;
+		m_restartProgramStr = std::make_unique<QString>(qApp->arguments()[0]);
+		m_restartArguments = std::make_unique<QStringList>(qApp->arguments());
+		PostMessage(hwnd, WM_CLOSE, 0, 0);
 	}
-
-	QProcess::startDetached(qApp->arguments()[0], qApp->arguments());
-	WindowsFunctions::KillProcess(::GetCurrentProcessId());
 }
 
 void PluginJsHandler::JS_ENUM_SCENES(const json11::Json &params, std::string &out_jsonReturn)
@@ -3158,4 +3008,157 @@ void PluginJsHandler::JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::
 			}
 		},
 		Qt::BlockingQueuedConnection);
+}
+
+/***
+* Save/Load
+**/
+
+// Handle the close event here before Qt sees it
+LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+	static bool finishedSaving = false;
+	static bool doOnce = false;
+
+	// Intercept WM_CLOSE with our own logic
+	if (uMsg == WM_CLOSE && !finishedSaving)
+	{
+		if (!doOnce)
+		{
+			auto perform = [](HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+				::Sleep(100);
+				PluginJsHandler::instance().onWmClose();
+				finishedSaving = true;
+				::PostMessage(hwnd, WM_CLOSE, 0, 0);
+			};
+
+			std::thread(perform, hwnd, uMsg, wParam, lParam).detach();
+		}
+
+		doOnce = true;
+		return 0;
+	}
+
+	// Allow normal messaging
+	WNDPROC origWndProc = (WNDPROC)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+	return CallWindowProc(origWndProc, hwnd, uMsg, wParam, lParam);
+}
+
+void PluginJsHandler::onWmClose()
+{
+	QtGuiModifications::instance().stop();
+	PluginJsHandler::instance().saveSlabsBrowserDocks();
+}
+
+void PluginJsHandler::saveSlabsBrowserDocks()
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, this]() {
+			Json::array jarray;
+			QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+			QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
+
+			foreach(QDockWidget * dock, docks)
+			{
+				if (dock->property("isSlabs").isValid())
+				{
+					QCefWidgetInternal *widget = (QCefWidgetInternal *)dock->widget();
+
+					std::string url;
+
+					if (widget->cefBrowser != nullptr)
+						url = widget->cefBrowser->GetMainFrame()->GetURL();
+
+					Json::object obj{
+						{"title", dock->windowTitle().toStdString()},
+						{"url", url},
+						{"objectName", dock->objectName().toStdString()},
+					};
+
+					jarray.push_back(obj);
+				}
+			}
+
+			std::string output = Json(jarray).dump();
+			config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsBrowserDocks", output.c_str());
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::loadFonts()
+{
+	auto fontsDir = getFontsDir();
+
+	if (fontsDir.empty())
+		return;
+
+	try
+	{
+		for (const auto &itr : std::filesystem::directory_iterator(fontsDir))
+		{
+			if (itr.path().extension() == ".ttf")
+			{
+				const std::string &filepath = itr.path().generic_u8string();
+
+				if (WindowsFunctions::InstallFont(filepath.c_str()))
+				{
+					if (QFontDatabase::addApplicationFont(filepath.c_str()) == -1)
+						blog(LOG_ERROR, "Streamlabs - QFontDatabase::addApplicationFont %s", filepath.c_str());
+				}
+				else
+				{
+					blog(LOG_ERROR, "Streamlabs - AddFontResourceA %s", filepath.c_str());
+				}
+			}
+		}
+	}
+	catch (const std::filesystem::filesystem_error &)
+	{}
+}
+
+void PluginJsHandler::loadSlabsBrowserDocks()
+{
+	// This is to intercept the shutdown event so that we can save it before OBS does anything
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+	WNDPROC origWndProc = (WNDPROC)SetWindowLongPtr(reinterpret_cast<HWND>(mainWindow->winId()), GWLP_WNDPROC, (LONG_PTR)HandleWndProc);
+	SetWindowLongPtr(reinterpret_cast<HWND>(mainWindow->winId()), GWLP_USERDATA, (LONG_PTR)origWndProc);
+
+	const char *jsonStr = config_get_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsBrowserDocks");
+
+	std::string err;
+	Json json = Json::parse(jsonStr, err);
+
+	if (!err.empty())
+		return;
+
+	Json::array array = json.array_items();
+
+	for (Json &item : array)
+	{
+		std::string title = item["title"].string_value();
+		std::string url = item["url"].string_value();
+		std::string objectName = item["objectName"].string_value();
+
+		static QCef *qcef = obs_browser_init_panel();
+
+		QDockWidget *dock = new QDockWidget(mainWindow);
+		QCefWidget *browser = qcef->create_widget(dock, url, nullptr);
+		dock->setWidget(browser);
+		dock->setWindowTitle(title.c_str());
+		dock->setObjectName(objectName.c_str());
+		dock->setProperty("isSlabs", true);
+		dock->setObjectName(objectName.c_str());
+
+		// obs_frontend_add_dock and keep the pointer to it
+		dock->setProperty("actionptr", (uint64_t)obs_frontend_add_dock(dock));
+
+		dock->resize(460, 600);
+		dock->setMinimumSize(80, 80);
+		dock->setWindowTitle(title.c_str());
+		dock->setAllowedAreas(Qt::AllDockWidgetAreas);
+		dock->setWidget(browser);
+	}
 }
