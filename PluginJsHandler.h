@@ -5,6 +5,8 @@
 #include <vector>
 #include <obs.h>
 
+#include <QStringList>
+
 #include <json11/json11.hpp>
 
 class PluginJsHandler
@@ -17,6 +19,7 @@ public:
 	void loadSlabsBrowserDocks();
 	void saveSlabsBrowserDocks();
 	void loadFonts();
+	void onWmClose();
 
 public:
 	static PluginJsHandler &instance()
@@ -111,4 +114,9 @@ private:
 	std::atomic<bool> m_running = false;
 	std::vector<std::pair<std::string, std::string>> m_queudRequests;
 	std::thread m_workerThread;
+
+	bool m_restartApp = false;
+
+	std::unique_ptr<QString> m_restartProgramStr;
+	std::unique_ptr<QStringList> m_restartArguments;
 };
