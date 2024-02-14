@@ -60,11 +60,11 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 				SlBrowser::instance().setMainLoadingInProgress(true);
 				SlBrowser::instance().m_browser->GetMainFrame()->LoadURL(SlBrowser::getDefaultUrl());
 			}
+
+			// Swap hidden state
+			SlBrowser::instance().m_widget->setHidden(!SlBrowser::instance().m_widget->isHidden());
 		}
-
-		SlBrowser::instance().m_widget->setHidden(!SlBrowser::instance().m_widget->isHidden());
-
-		if (!SlBrowser::instance().m_widget->isHidden())
+		else
 		{
 			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
 			WindowsFunctions::ForceForegroundWindow(hwnd);
