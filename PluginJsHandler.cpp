@@ -899,44 +899,7 @@ void PluginJsHandler::JS_DOCK_SETTITLE(const json11::Json &params, std::string &
 
 void PluginJsHandler::JS_DOCK_RENAME(const json11::Json &params, std::string &out_jsonReturn)
 {
-	const auto &param2Value = params["param2"];
-	const auto &param3Value = params["param3"];
-
-	std::string objectName = param2Value.string_value();
-	std::string newName = param3Value.string_value();
-
-	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-
-	// An error for now, if we succeed this is overwritten
-	out_jsonReturn = Json(Json::object({{"error", "Did not find dock with objectName: " + objectName}})).dump();
-
-	// This code is executed in the context of the QMainWindow's thread.
-	QMetaObject::invokeMethod(
-		mainWindow,
-		[mainWindow, newName, objectName, &out_jsonReturn]() {
-			QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
-
-			// Check for match against the new name
-			foreach(QDockWidget * dock, docks)
-			{
-				if (dock->objectName().toStdString() == newName)
-				{
-					out_jsonReturn = Json(Json::object({{"error", "Dock with that already exists: " + objectName}})).dump();
-					return;
-				}
-			}
-
-			foreach(QDockWidget * dock, docks)
-			{
-				if (dock->objectName().toStdString() == objectName)
-				{
-					dock->setObjectName(newName.c_str());
-					out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
-					return;
-				}
-			}
-		},
-		Qt::BlockingQueuedConnection);
+	out_jsonReturn = Json(Json::object({{"error", "deprecated"}})).dump();
 }
 
 void PluginJsHandler::JS_DESTROY_DOCK(const Json &params, std::string &out_jsonReturn)
