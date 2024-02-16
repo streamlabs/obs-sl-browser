@@ -144,11 +144,13 @@ public:
 			{"dock_swap", JS_DOCK_SWAP},
 
 			// .(@function(arg1), @objectName, @newName)
-			//	Renames a dock's objectName, which must be unique and not match any other existing
+			//	Sets a dock's objectName
+			//	!! DEPRECATED !!
+			//		Not functional after OBS30, deprecated on all of our versions as of Feb 2024.
 			{"dock_rename", JS_DOCK_RENAME},
 
 			// .(@function(arg1), @objectName, @newTitle)
-			//	Renames a dock's objectName, which must be unique and not match any other existing
+			//	Sets a dock's windowTitle
 			{"dock_setTitle", JS_DOCK_SETTITLE},
 
 			// .(@function(arg1)
