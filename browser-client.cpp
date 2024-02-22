@@ -262,6 +262,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			}
 
 			SlBrowser::instance().m_widget->setHidden(argsWithoutFunc[0]->GetBool());
+			SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_widget->isHidden());
 			break;
 		}
 		}
