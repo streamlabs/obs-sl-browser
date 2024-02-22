@@ -78,7 +78,9 @@ void SlBrowser::run(int argc, char *argv[])
 	m_widget->setWindowTitle("Streamlabs");
 	m_widget->setMinimumSize(320, 240);
 	m_widget->resize(1280, 720);
-	m_widget->show();
+
+	// We have to show before creating CEF because it needs the HWND, and the HWND is not made until the QtWidget is shown at least once
+	m_widget->showMinimized();
 
 	CefPostTask(TID_UI, base::BindOnce(&CreateCefBrowser, 5));
 
@@ -87,6 +89,8 @@ void SlBrowser::run(int argc, char *argv[])
 
 	if (SlBrowser::getSavedHiddenState())
 		m_widget->hide();
+	else
+		m_widget->showNormal();
 
 	// Run Qt Application
 	int result = a.exec();
