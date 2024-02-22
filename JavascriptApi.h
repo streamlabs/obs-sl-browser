@@ -485,7 +485,7 @@ public:
 			// .(@function(arg1), x, y)`
 			{"qt_setWindowPosition", JS_QT_SET_WINDOW_POSITION},
 
-			// .(@function(arg1), x, y)`
+			// .(@function(arg1), bool)`
 			{"qt_setAllowHideBrowser", JS_QT_SET_ALLOW_HIDE_BROWSER},
 		};
 
