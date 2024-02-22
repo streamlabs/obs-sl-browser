@@ -263,6 +263,13 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 
 			SlBrowser::instance().m_widget->setHidden(argsWithoutFunc[0]->GetBool());
 			SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_widget->isHidden());
+
+			if (!SlBrowser::instance().m_widget->isHidden())
+			{
+				HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
+				WindowsFunctions::ForceForegroundWindow(hwnd);
+			}
+
 			break;
 		}
 		}
