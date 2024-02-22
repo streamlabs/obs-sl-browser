@@ -198,7 +198,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		// Put this into a sub function if it gets bigger
 		switch (JavascriptApi::getFunctionId(name))
 		{
-		case JavascriptApi::JS_QT_RESIZE_BROWSER:
+		case JavascriptApi::JS_BROWSER_RESIZE_BROWSER:
 		{
 			if (argsWithoutFunc.size() < 2)
 			{
@@ -218,7 +218,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			SlBrowser::instance().m_widget->resize(w, h);
 			break;
 		}
-		case JavascriptApi::JS_QT_BRING_FRONT:
+		case JavascriptApi::JS_BROWSER_BRING_FRONT:
 		{
 			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
 
@@ -228,7 +228,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			WindowsFunctions::ForceForegroundWindow(hwnd);
 			break;
 		}
-		case JavascriptApi::JS_QT_SET_WINDOW_POSITION:
+		case JavascriptApi::JS_BROWSER_SET_WINDOW_POSITION:
 		{
 			if (argsWithoutFunc.size() < 2)
 			{
@@ -242,7 +242,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			SlBrowser::instance().m_widget->move(x, y);
 			break;
 		}
-		case JavascriptApi::JS_QT_SET_ALLOW_HIDE_BROWSER:
+		case JavascriptApi::JS_BROWSER_SET_ALLOW_HIDE_BROWSER:
 		{
 			if (argsWithoutFunc.size() < 1)
 			{
@@ -251,6 +251,17 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			}
 
 			SlBrowser::instance().m_allowHideBrowser = argsWithoutFunc[0]->GetBool();
+			break;
+		}
+		case JavascriptApi::JS_BROWSER_SET_HIDDEN_STATE:
+		{
+			if (argsWithoutFunc.size() < 1)
+			{
+				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+				break;
+			}
+
+			SlBrowser::instance().m_widget->setHidden(argsWithoutFunc[0]->GetBool());
 			break;
 		}
 		}
