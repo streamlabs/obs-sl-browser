@@ -64,7 +64,8 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 			// Swap hidden state
 			SlBrowser::instance().m_widget->setHidden(!SlBrowser::instance().m_widget->isHidden());
 		}
-		else
+
+		if (!SlBrowser::instance().m_widget->isHidden())
 		{
 			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
 			WindowsFunctions::ForceForegroundWindow(hwnd);
