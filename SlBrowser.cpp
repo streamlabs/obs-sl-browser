@@ -262,7 +262,7 @@ bool SlBrowser::getSavedHiddenState() const
 	wchar_t ch;
 	file >> ch;
 
-	return ch == L'0';
+	return ch == L'1';
 }
 
 void SlBrowser::saveHiddenState(const bool b) const
