@@ -68,12 +68,12 @@ public:
 		JS_GET_SCALE,
 		JS_GET_SOURCE_DIMENSIONS,
 		JS_GET_CANVAS_DIMENSIONS,
-		JS_QT_RESIZE_BROWSER,
+		JS_BROWSER_RESIZE_BROWSER,
 		JS_OBS_BRING_FRONT,
-		JS_QT_BRING_FRONT,
-		JS_QT_SET_WINDOW_POSITION,
+		JS_BROWSER_BRING_FRONT,
+		JS_BROWSER_SET_WINDOW_POSITION,
 		JS_OBS_TOGGLE_HIDE_SELF,
-		JS_QT_SET_ALLOW_HIDE_BROWSER,
+		JS_BROWSER_SET_ALLOW_HIDE_BROWSER,
 		JS_OBS_ADD_TRANSITION,
 		JS_OBS_SET_CURRENT_TRANSITION,
 		JS_OBS_REMOVE_TRANSITION,
@@ -86,6 +86,7 @@ public:
 		JS_SAVE_SL_BROWSER_DOCKS,
 		JS_QT_SET_JS_ON_CLICK_STREAM,
 		JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON,
+		JS_BROWSER_SET_HIDDEN_STATE,
 	};
 
 public:
@@ -459,6 +460,7 @@ public:
 
 			// .(@function(arg1))
 			//		Example arg1 = { "branch": '29.1.0', "git_sha": 'abcdefg...', "rev": '10' }
+			//	DEV NOTE: THIS FUNCTION CAN NEVER BE RENAMED !!
 			{"sl_getVersionInfo", JS_SL_VERSION_INFO},
 
 		};
@@ -473,20 +475,25 @@ public:
 		static std::map<std::string, JSFuncs> names =
 		{
 			/**
-			* Qt
+			* Browser Window
 			*/
 			
 			// .(@function(arg1), x, y)`
-			{"qt_resizeBrowser", JS_QT_RESIZE_BROWSER},
+			{"browser_resizeBrowser", JS_BROWSER_RESIZE_BROWSER},
 
 			// .(@function(arg1))`
-			{"qt_bringToFront", JS_QT_BRING_FRONT},
+			//	DEV NOTE: THIS FUNCTION CAN NEVER BE RENAMED !!
+			{"browser_bringToFront", JS_BROWSER_BRING_FRONT},
 
 			// .(@function(arg1), x, y)`
-			{"qt_setWindowPosition", JS_QT_SET_WINDOW_POSITION},
+			{"browser_setWindowPosition", JS_BROWSER_SET_WINDOW_POSITION},
 
-			// .(@function(arg1), x, y)`
-			{"qt_setAllowHideBrowser", JS_QT_SET_ALLOW_HIDE_BROWSER},
+			// .(@function(arg1), bool)`
+			{"browser_setAllowHideBrowser", JS_BROWSER_SET_ALLOW_HIDE_BROWSER},
+
+			// .(@function(arg1), bool)`
+			//	DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
+			{"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
 		};
 
 		return names;
