@@ -165,7 +165,8 @@ if ($allBranchesReady) {
 		$urlJsonObsVersions = "https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
 
 		# Download the JSON
-		$filepathJsonPublish = ".\meta_publish.json"
+		$currentDirectory = [System.IO.Path]::GetDirectoryName($MyInvocation.MyCommand.Path)
+		$filepathJsonPublish = "$currentDirectory\meta_publish.json"
 		Invoke-WebRequest -Uri $urlJsonObsVersions -OutFile $filepathJsonPublish
 
 		# Read and parse the JSON file
@@ -181,10 +182,9 @@ if ($allBranchesReady) {
 
 		# Convert the updated object back to JSON
 		$updatedJson = $jsonContent | ConvertTo-Json
-
-		# Save the updated JSON back to the same file
-		Write-Output $updatedJson
-		$updatedJson | Out-File -FilePath $filepathJsonPublish	
+		
+		$utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False
+		[System.IO.File]::WriteAllText($filepathJsonPublish, $updatedJson, $utf8NoBomEncoding)
 	}
 	catch {
 		throw "Error: An error occurred. Details: $($_.Exception.Message)"
