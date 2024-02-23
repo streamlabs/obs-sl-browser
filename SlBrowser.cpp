@@ -106,8 +106,15 @@ void SlBrowser::CreateCefBrowser(int arg)
 
 	CefString url = SlBrowser::getDefaultUrl();
 
+	// Adjust for possible DPI 
+	int realWidth = app.m_widget->width();
+	int realHeight = app.m_widget->height();
+	qreal scaleFactor = app.m_widget->devicePixelRatioF();
+	realWidth = static_cast<int>(realWidth * scaleFactor);
+	realHeight = static_cast<int>(realHeight * scaleFactor);
+
 	// Now set the parent of the CEF browser to the QWidget
-	window_info.SetAsChild((HWND)app.m_widget->winId(), CefRect(0, 0, app.m_widget->width(), app.m_widget->height()));
+	window_info.SetAsChild((HWND)app.m_widget->winId(), CefRect(0, 0, realWidth, realHeight));
 	app.m_browser = CefBrowserHost::CreateBrowserSync(window_info, app.browserClient.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), nullptr);
 
 	auto bringToTop = [] {
@@ -271,7 +278,14 @@ bool SlBrowser::getSavedHiddenState() const
 
 void SlBrowser::saveHiddenState(const bool b) const
 {
-	std::wstring filePath = getCacheDir() + L"\\window_state.txt";
+	namespace fs = std::filesystem;
+
+	std::wstring cacheDir = getCacheDir();
+
+	if (!fs::exists(cacheDir))
+		fs::create_directories(cacheDir);
+
+	std::wstring filePath = cacheDir + L"\\window_state.txt";
 	std::wofstream file(filePath, std::ios::trunc);
 
 	if (file.is_open())
