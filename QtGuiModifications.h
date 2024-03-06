@@ -20,8 +20,10 @@ public:
 
 public:
 	void stop();
-	void clickStreamButton();
+	void outsideInvokeClickStreamButton();
 	void setJavascriptToCallOnStreamClick(const std::string& str);
+
+	static void handle_obs_frontend_event(enum obs_frontend_event event, void *data);
 
 private:
 	QtGuiModifications();
@@ -39,6 +41,7 @@ private:
 	std::string m_jsToCallOnStreamClick = "";
 	std::recursive_mutex m_mutex;
 	std::thread m_workerThread;
+	std::string m_streamKeyCache;
 
 	bool m_closing = false;
 };
