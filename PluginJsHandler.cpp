@@ -762,7 +762,7 @@ void PluginJsHandler::JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(const Json &params, st
 			}
 			else
 			{
-				QtGuiModifications::instance().clickStreamButton();
+				QtGuiModifications::instance().outsideInvokeClickStreamButton();
 				out_jsonReturn = Json(Json::object{{"status", "success"}}).dump();
 			}
 		},
@@ -2971,6 +2971,16 @@ void PluginJsHandler::JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::
 			}
 		},
 		Qt::BlockingQueuedConnection);
+}
+
+/***
+* OBS Callbacks
+**/
+
+/*static*/
+void PluginJsHandler::handle_obs_frontend_event(obs_frontend_event event, void *data)
+{
+
 }
 
 /***

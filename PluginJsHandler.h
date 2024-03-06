@@ -21,6 +21,8 @@ public:
 	void loadFonts();
 	void onWmClose();
 
+	static void handle_obs_frontend_event(enum obs_frontend_event event, void *data);
+
 public:
 	static PluginJsHandler &instance()
 	{
