@@ -95,6 +95,9 @@ void obs_module_post_load(void)
 	QtGuiModifications::instance();
 	PluginJsHandler::instance().start();
 
+	obs_frontend_add_event_callback(PluginJsHandler::instance().handle_obs_frontend_event, nullptr);
+	obs_frontend_add_event_callback(QtGuiModifications::instance().handle_obs_frontend_event, nullptr);
+
 	auto chooseProxyPort = []() {
 		int32_t result = 0;
 		struct sockaddr_in local;

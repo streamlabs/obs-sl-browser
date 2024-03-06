@@ -122,8 +122,16 @@ void QtGuiModifications::init()
 	m_workerThread = std::thread(&QtGuiModifications::workerThread, this);
 }
 
-void QtGuiModifications::clickStreamButton()
+void QtGuiModifications::outsideInvokeClickStreamButton()
 {
+	m_streamKeyCache.clear();
+
+	obs_service_t *service = obs_frontend_get_streaming_service();
+	OBSDataAutoRelease settings = obs_service_get_settings(service);
+
+	if (const char *key = obs_data_get_string(settings, "key"))
+		m_streamKeyCache = key;
+
 	QtGuiModifications::instance().m_obs_streamButton->click();
 }
 
@@ -131,6 +139,28 @@ void QtGuiModifications::setJavascriptToCallOnStreamClick(const std::string &str
 {
 	std::lock_guard<std::recursive_mutex> grd(m_mutex);
 	m_jsToCallOnStreamClick = str;
+}
+
+/*static*/
+void QtGuiModifications::handle_obs_frontend_event(obs_frontend_event event, void *data)
+{
+	switch (event)
+	{
+	case OBS_FRONTEND_EVENT_STREAMING_STARTING:
+	{
+		if (!QtGuiModifications::instance().m_streamKeyCache.empty())
+		{
+			obs_service_t *service = obs_frontend_get_streaming_service();
+			OBSDataAutoRelease settings = obs_service_get_settings(service);
+			obs_data_set_string(settings, "key", QtGuiModifications::instance().m_streamKeyCache.c_str());
+			obs_service_update(service, settings);
+
+			QtGuiModifications::instance().m_streamKeyCache.clear();
+		}
+
+		break;
+	}
+	}
 }
 
 void QtGuiModifications::onStartStreamingRequest()
