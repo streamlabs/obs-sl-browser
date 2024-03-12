@@ -6,6 +6,7 @@
 #include "GrpcPlugin.h"
 #include "WebServer.h"
 #include "WindowsFunctions.h"
+#include "SlBrowserDock.h"
 
 // Windows
 #include <ShlObj.h>
@@ -35,7 +36,12 @@
 
 using namespace json11;
 
-PluginJsHandler::PluginJsHandler() {}
+PluginJsHandler::PluginJsHandler() {
+AllocConsole();
+freopen("conin$","r",stdin);
+freopen("conout$","w",stdout);
+freopen("conout$","w",stderr);
+printf("Debugging Window:\n");}
 
 PluginJsHandler::~PluginJsHandler()
 {
@@ -507,8 +513,14 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 					isSlabs = true;
 					QCefWidgetInternal *widget = (QCefWidgetInternal *)dock->widget();
 
-					if (widget->cefBrowser != nullptr)
-						url = widget->cefBrowser->GetMainFrame()->GetURL();
+					if (auto browser = widget->cefBrowser)
+					{
+						if (auto mainframe = browser->GetMainFrame())
+							url = mainframe->GetURL();
+					}
+
+					if (url.empty())
+						printf("Empty...\n");
 				}
 
 				// Create a Json object for this dock widget and add it to the panelInfo vector
@@ -668,10 +680,13 @@ void PluginJsHandler::JS_DOCK_EXECUTEJAVASCRIPT(const Json &params, std::string 
 				{
 					QCefWidgetInternal *widget = (QCefWidgetInternal *)dock->widget();
 
-					if (widget->cefBrowser != nullptr)
+					if (auto browser = widget->cefBrowser)
 					{
-						widget->cefBrowser->GetMainFrame()->ExecuteJavaScript(javascriptcode.c_str(), widget->cefBrowser->GetMainFrame()->GetURL(), 0);
-						out_jsonReturn = Json(Json::object{{"status", "Found dock and ran ExecuteJavaScript on " + widget->cefBrowser->GetMainFrame()->GetURL().ToString()}}).dump();
+						if (auto mainframe = browser->GetMainFrame())
+						{
+							mainframe->ExecuteJavaScript(javascriptcode.c_str(), mainframe->GetURL(), 0);
+							out_jsonReturn = Json(Json::object{{"status", "Found dock and ran ExecuteJavaScript on " + mainframe->GetURL().ToString()}}).dump();
+						}
 					}
 
 					break;
@@ -724,7 +739,7 @@ void PluginJsHandler::JS_DOCK_NEW_BROWSER_DOCK(const json11::Json &params, std::
 
 			static QCef *qcef = obs_browser_init_panel();
 
-			QDockWidget *dock = new QDockWidget(mainWindow);
+			SlBrowserDock *dock = new SlBrowserDock(mainWindow);
 			QCefWidget *browser = qcef->create_widget(dock, url, nullptr);
 			dock->setWidget(browser);
 			dock->setWindowTitle(title.c_str());
@@ -3040,10 +3055,19 @@ void PluginJsHandler::saveSlabsBrowserDocks()
 				{
 					QCefWidgetInternal *widget = (QCefWidgetInternal *)dock->widget();
 
-					std::string url;
+					std::string url = "http://localhost:0/";
 
-					if (widget->cefBrowser != nullptr)
-						url = widget->cefBrowser->GetMainFrame()->GetURL();
+					if (auto browser = widget->cefBrowser)
+					{
+						if (auto mainframe = browser->GetMainFrame())
+							url = mainframe->GetURL();
+						else							
+							blog(LOG_ERROR, "Found null GetMainFrame while saving slabs browser docks");
+					}
+					else
+					{
+						blog(LOG_ERROR, "Found null cefBrowser while saving slabs browser docks");
+					}
 
 					Json::object obj{
 						{"title", dock->windowTitle().toStdString()},
@@ -3116,8 +3140,8 @@ void PluginJsHandler::loadSlabsBrowserDocks()
 		std::string objectName = item["objectName"].string_value();
 
 		static QCef *qcef = obs_browser_init_panel();
-
-		QDockWidget *dock = new QDockWidget(mainWindow);
+				
+		SlBrowserDock *dock = new SlBrowserDock(mainWindow);
 		QCefWidget *browser = qcef->create_widget(dock, url, nullptr);
 		dock->setWidget(browser);
 		dock->setWindowTitle(title.c_str());
@@ -3133,5 +3157,7 @@ void PluginJsHandler::loadSlabsBrowserDocks()
 		dock->setWindowTitle(title.c_str());
 		dock->setAllowedAreas(Qt::AllDockWidgetAreas);
 		dock->setWidget(browser);
+		
+		//dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
 	}
 }
