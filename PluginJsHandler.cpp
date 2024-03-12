@@ -36,12 +36,7 @@
 
 using namespace json11;
 
-PluginJsHandler::PluginJsHandler() {
-AllocConsole();
-freopen("conin$","r",stdin);
-freopen("conout$","w",stdout);
-freopen("conout$","w",stderr);
-printf("Debugging Window:\n");}
+PluginJsHandler::PluginJsHandler() {}
 
 PluginJsHandler::~PluginJsHandler()
 {
@@ -518,9 +513,6 @@ void PluginJsHandler::JS_QUERY_DOCKS(const Json &params, std::string &out_jsonRe
 						if (auto mainframe = browser->GetMainFrame())
 							url = mainframe->GetURL();
 					}
-
-					if (url.empty())
-						printf("Empty...\n");
 				}
 
 				// Create a Json object for this dock widget and add it to the panelInfo vector
