@@ -125,6 +125,8 @@ target_sources(
     PluginJsHandler.cpp
     QtGuiModifications.cpp
     WebServer.cpp
+    WebServer.cpp
+    SlBrowserDock.cpp
     deps/json11/json11.cpp
     deps/minizip/ioapi.c
     deps/minizip/iowin32.c
@@ -134,7 +136,7 @@ target_sources(
     ${papi_proto_srcs}
     ${papi_grpc_srcs}
 )
-    
+
 target_link_libraries(sl-browser-plugin PRIVATE Detours::Detours)
 target_link_libraries(sl-browser-plugin PRIVATE ZLIB::ZLIB)
 target_link_libraries(sl-browser-plugin PRIVATE Qt::Widgets)
