@@ -84,33 +84,29 @@ Rename-Item -Path ".\obs-studio" -NewName $revision
 cd $revision
 git submodule update --init --recursive
 
-# Add new line to CMakeLists.txt in obs-studio\plugins
+# Add to top of CMakeLists.txt in obs-studio\plugins
 $cmakeListsPath = ".\plugins\CMakeLists.txt"
 $addSubdirectoryLine = "add_subdirectory(obs-sl-browser)"
-Add-Content -Path $cmakeListsPath -Value $addSubdirectoryLine
+$cmakeListsContent = Get-Content -Path $cmakeListsPath
+$cmakeListsContent = $cmakeListsContent[0], $addSubdirectoryLine, $cmakeListsContent[1..($cmakeListsContent.Length - 1)]
+Set-Content -Path $cmakeListsPath -Value $cmakeListsContent
 
 # Move obs-sl-browser folder into obs-studio\plugins
 Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Recurse
 
 # Build
-try {
-    .\CI\build-windows.ps1 -ErrorAction Stop
-}
-catch {
-    # Handle the error
-    Write-Host "Error: $_"
-    exit 1
-}
-if ($LASTEXITCODE -ne 0) {
-    throw "Build failed with exit code ${LastExitCode}"
-}
-	
+cmake --preset windows-x64
+cmake --build --preset windows-x64
+
 # Copy platforms folder to plugin release fodler
-Copy-Item -Path ".\build64\rundir\RelWithDebInfo\bin\64bit\platforms" -Destination ".\build64\plugins\obs-sl-browser\RelWithDebInfo" -Recurse
+Copy-Item -Path ".\build_x64\rundir\RelWithDebInfo\bin\64bit\platforms" -Destination ".\build_x64\plugins\obs-sl-browser\RelWithDebInfo" -Recurse
+
+# Move back up
+cd ..\
+$currentDirFullPath = (Get-Location).Path
 
 # Clone symbols store scripts
 Write-Output "-- Symbols"
-cd ..\
 git clone --recursive --branch "no-http-source" https://github.com/stream-labs/symsrv-scripts.git
 
 # Run symbols (re-try for 5 minutes)
@@ -122,7 +118,7 @@ $maxDuration = New-TimeSpan -Minutes 5
 $lastExitCode = 1
 
 while ((Get-Date) - $startTime -lt $maxDuration -and $lastExitCode -ne 0) {
-    .\main.ps1 -localSourceDir "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"
+    .\main.ps1 -localSourceDir "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 
     # Update the last exit code
     $lastExitCode = $LastExitCode
@@ -138,7 +134,7 @@ if ($lastExitCode -ne 0) {
 
 # Define the output file name for the 7z archive
 Write-Output "-- 7z"
-$pathToArchive = "${github_workspace}\..\${revision}\build64\plugins\obs-sl-browser\RelWithDebInfo"
+$pathToArchive = "${github_workspace}\..\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 Write-Output $pathToArchive
 
 # Check if the path exists
