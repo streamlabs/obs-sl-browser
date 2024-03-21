@@ -3070,42 +3070,16 @@ void PluginJsHandler::saveSlabsBrowserDocks()
 					jarray.push_back(obj);
 				}
 			}
+			
+			// Byte data
+			config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsDockState", mainWindow->saveState().toBase64().constData());
 
+			// Json data
 			std::string output = Json(jarray).dump();
 			config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsBrowserDocks", output.c_str());
+
 		},
 		Qt::BlockingQueuedConnection);
-}
-
-void PluginJsHandler::loadFonts()
-{
-	auto fontsDir = getFontsDir();
-
-	if (fontsDir.empty())
-		return;
-
-	try
-	{
-		for (const auto &itr : std::filesystem::directory_iterator(fontsDir))
-		{
-			if (itr.path().extension() == ".ttf")
-			{
-				const std::string &filepath = itr.path().generic_u8string();
-
-				if (WindowsFunctions::InstallFont(filepath.c_str()))
-				{
-					if (QFontDatabase::addApplicationFont(filepath.c_str()) == -1)
-						blog(LOG_ERROR, "Streamlabs - QFontDatabase::addApplicationFont %s", filepath.c_str());
-				}
-				else
-				{
-					blog(LOG_ERROR, "Streamlabs - AddFontResourceA %s", filepath.c_str());
-				}
-			}
-		}
-	}
-	catch (const std::filesystem::filesystem_error &)
-	{}
 }
 
 void PluginJsHandler::loadSlabsBrowserDocks()
@@ -3152,4 +3126,42 @@ void PluginJsHandler::loadSlabsBrowserDocks()
 		
 		//dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
 	}
+
+	// Byte data
+	if (const char *dockStateStr = config_get_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsDockState"))
+	{
+		QByteArray dockState = QByteArray::fromBase64(QByteArray(dockStateStr));
+		mainWindow->restoreState(dockState);
+	}
+}
+
+void PluginJsHandler::loadFonts()
+{
+	auto fontsDir = getFontsDir();
+
+	if (fontsDir.empty())
+		return;
+
+	try
+	{
+		for (const auto &itr : std::filesystem::directory_iterator(fontsDir))
+		{
+			if (itr.path().extension() == ".ttf")
+			{
+				const std::string &filepath = itr.path().generic_u8string();
+
+				if (WindowsFunctions::InstallFont(filepath.c_str()))
+				{
+					if (QFontDatabase::addApplicationFont(filepath.c_str()) == -1)
+						blog(LOG_ERROR, "Streamlabs - QFontDatabase::addApplicationFont %s", filepath.c_str());
+				}
+				else
+				{
+					blog(LOG_ERROR, "Streamlabs - AddFontResourceA %s", filepath.c_str());
+				}
+			}
+		}
+	}
+	catch (const std::filesystem::filesystem_error &)
+	{}
 }
