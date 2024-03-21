@@ -3071,9 +3071,6 @@ void PluginJsHandler::saveSlabsBrowserDocks()
 				}
 			}
 			
-			// Byte data
-			config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsDockState", mainWindow->saveState().toBase64().constData());
-
 			// Json data
 			std::string output = Json(jarray).dump();
 			config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsBrowserDocks", output.c_str());
@@ -3082,6 +3079,10 @@ void PluginJsHandler::saveSlabsBrowserDocks()
 		Qt::BlockingQueuedConnection);
 }
 
+// March 21st, 2024
+//	Note, OBS loads the module before loading "DockState" and doing qt restoreState
+//	OBS also saves all docks, even ours, into "DockState" on its own
+//	So we don't worry about that because its doing it for us
 void PluginJsHandler::loadSlabsBrowserDocks()
 {
 	// This is to intercept the shutdown event so that we can save it before OBS does anything
@@ -3125,13 +3126,6 @@ void PluginJsHandler::loadSlabsBrowserDocks()
 		dock->setWidget(browser);
 		
 		//dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
-	}
-
-	// Byte data
-	if (const char *dockStateStr = config_get_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsDockState"))
-	{
-		QByteArray dockState = QByteArray::fromBase64(QByteArray(dockStateStr));
-		mainWindow->restoreState(dockState);
 	}
 }
 
