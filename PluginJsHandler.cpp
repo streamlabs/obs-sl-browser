@@ -3071,9 +3071,6 @@ void PluginJsHandler::saveSlabsBrowserDocks()
 				}
 			}
 			
-			// Byte data
-			config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsDockState", mainWindow->saveState().toBase64().constData());
-
 			// Json data
 			std::string output = Json(jarray).dump();
 			config_set_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsBrowserDocks", output.c_str());
@@ -3125,13 +3122,6 @@ void PluginJsHandler::loadSlabsBrowserDocks()
 		dock->setWidget(browser);
 		
 		//dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
-	}
-
-	// Byte data
-	if (const char *dockStateStr = config_get_string(obs_frontend_get_global_config(), "BasicWindow", "SlabsDockState"))
-	{
-		QByteArray dockState = QByteArray::fromBase64(QByteArray(dockStateStr));
-		mainWindow->restoreState(dockState);
 	}
 }
 
