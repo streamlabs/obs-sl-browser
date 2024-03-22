@@ -1,0 +1,2 @@
+The version of Qt bundled with OBS 29.0.0 does not match what is available from the git branch 29.0.0
+Linking against 29.0.1 works and so obs.ver has been set to 29.0.1
