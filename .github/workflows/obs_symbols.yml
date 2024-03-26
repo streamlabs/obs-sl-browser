@@ -19,6 +19,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
          
-      - name: Run obs symbol 30.1.0
-        run: powershell -File ./ci/obs_symbols.ps1 "${{ github.workspace }}" "https://cdn-fastly.obsproject.com/downloads/OBS-Studio-30.1-Full-Installer-x64.exe"
+      - name: Run obs symbol 30.1.1
+        run: powershell -File ./ci/obs_symbols.ps1 "${{ github.workspace }}" "https://cdn-fastly.obsproject.com/downloads/OBS-Studio-30.1.1-Full-Installer-x64.exe"
          
