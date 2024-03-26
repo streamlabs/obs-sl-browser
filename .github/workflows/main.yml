@@ -5,7 +5,6 @@ on:
 
 env:
   SL_OBS_VERSION: ${{ github.ref_name }}
-  SLGenerator: Visual Studio 17 2022
   GRPC_VERSION: v1.58.0
   AWS_SYMB_ACCESS_KEY_ID: ${{secrets.AWS_SYMB_ACCESS_KEY_ID}}
   AWS_SYMB_SECRET_ACCESS_KEY: ${{secrets.AWS_SYMB_SECRET_ACCESS_KEY}}
@@ -16,7 +15,7 @@ env:
 jobs:
   win64:
     name: 'Windows 64-bit'
-    runs-on: windows-2022
+    runs-on: windows-2019
     strategy:
       matrix:
         ReleaseName: [release]
