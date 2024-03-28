@@ -43,6 +43,8 @@ SlBrowser::~SlBrowser() {}
 
 void SlBrowser::run(int argc, char *argv[])
 {
+	QCoreApplication::addLibraryPath("../../bin/64bit/");
+
 	SpawnConsoleToggle();
 
 	if (argc < 4)
@@ -67,7 +69,7 @@ void SlBrowser::run(int argc, char *argv[])
 		printf("sl-proxy: failed to connected to plugin's grpc server, GetLastError = %d\n", GetLastError());
 		return;
 	}
-
+	
 	QApplication a(argc, argv);
 
 	// Create CEF Browser
