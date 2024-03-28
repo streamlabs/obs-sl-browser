@@ -58,7 +58,12 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 			{
 				// Attempt load default URL again
 				SlBrowser::instance().setMainLoadingInProgress(true);
-				SlBrowser::instance().m_browser->GetMainFrame()->LoadURL(SlBrowser::getDefaultUrl());
+
+				if (auto browser = SlBrowser::instance().m_browser)
+				{
+					if (auto frame = SlBrowser::instance().m_browser->GetMainFrame())
+						frame->LoadURL(SlBrowser::getDefaultUrl());
+				}
 			}
 
 			// Swap hidden state
