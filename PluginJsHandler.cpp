@@ -896,7 +896,7 @@ void PluginJsHandler::JS_DOCK_SETTITLE(const json11::Json &params, std::string &
 					QAction *action = reinterpret_cast<QAction *>(dock->property("actionptr").toULongLong());
 					action->setText(newTitle.c_str());
 					dock->setWindowTitle(newTitle.c_str());
-					out_jsonReturn = Json(Json::object({{"error", "success"}})).dump();
+					out_jsonReturn = Json(Json::object({{"status", "success"}})).dump();
 					break;
 				}
 			}
