@@ -104,9 +104,6 @@ catch {
 if ($LASTEXITCODE -ne 0) {
     throw "Build failed with exit code ${LastExitCode}"
 }
-	
-# Copy platforms folder to plugin release fodler
-Copy-Item -Path ".\build64\rundir\RelWithDebInfo\bin\64bit\platforms" -Destination ".\build64\plugins\obs-sl-browser\RelWithDebInfo" -Recurse
 
 # Clone symbols store scripts
 Write-Output "-- Symbols"
