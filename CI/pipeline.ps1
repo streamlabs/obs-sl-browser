@@ -98,9 +98,6 @@ Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Rec
 cmake --preset windows-x64
 cmake --build --preset windows-x64
 
-# Copy platforms folder to plugin release fodler
-Copy-Item -Path ".\build_x64\rundir\RelWithDebInfo\bin\64bit\platforms" -Destination ".\build_x64\plugins\obs-sl-browser\RelWithDebInfo" -Recurse
-
 # Move back up
 cd ..\
 $currentDirFullPath = (Get-Location).Path
