@@ -129,9 +129,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		return;
 	}
 
-#ifdef GITHUB_REVISION
-	blog(LOG_INFO, "executeApiRequest (start) %s\n", funcName.c_str());
-#else
+#ifndef GITHUB_REVISION
 	blog(LOG_INFO, "executeApiRequest (start) %s: %s\n", funcName.c_str(), params.c_str());
 #endif
 
@@ -213,9 +211,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
-#ifdef GITHUB_REVISION
-	blog(LOG_INFO, "executeApiRequest (finish) %s\n", funcName.c_str());
-#else
+#ifndef GITHUB_REVISION
 	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), params.c_str());
 #endif
 
