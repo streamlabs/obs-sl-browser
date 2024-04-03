@@ -25,6 +25,9 @@ jobs:
     env:
       OS_TAG: "win64"
     steps:
+      - name: Run change cmake script
+        run: powershell -File ./ci/cmake_path.ps1
+        
       - name: Checkout repository
         uses: actions/checkout@v2
          
