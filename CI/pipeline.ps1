@@ -3,16 +3,18 @@ param(
     [string]$revision
 )
 
-Write-Output "Test 5 is $github_workspace"
+Write-Output "Test 12 is $github_workspace"
 Write-Output "Workspace is $github_workspace"
 Write-Output "Github revision is $revision"
-Write-Output "${github_workspace}\ci\tools\cmake\bin"
+Write-Output "${github_workspace}\tools\cmake\bin"
 
 # Workaround - Use our version of CMake
 $currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Process)
 $pathArray = $currentPath -split ";"
 $filteredPathArray = $pathArray -notmatch '\\CMake\\'
 $customCMakePath = "${github_workspace}\tools\cmake\bin"
+Write-Output "Setting cmake path to..."
+Write-Output $customCMakePath
 $newPath = $customCMakePath + ";" + ($filteredPathArray -join ";")
 [Environment]::SetEnvironmentVariable("PATH", $newPath, [EnvironmentVariableTarget]::Process)
 Write-Output "Cmake version..."
