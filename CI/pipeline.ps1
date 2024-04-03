@@ -10,14 +10,11 @@ Write-Output "${github_workspace}\ci\tools\cmake\bin"
 
 # Workaround - Use our version of CMake
 $currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Process)
-Write-Output $currentPath
-Write-Output "Becomes..."
 $pathArray = $currentPath -split ";"
 $filteredPathArray = $pathArray -notmatch '\\CMake\\'
 $customCMakePath = "${github_workspace}\ci\tools\cmake\bin"
 $newPath = $customCMakePath + ";" + ($filteredPathArray -join ";")
 [Environment]::SetEnvironmentVariable("PATH", $newPath, [EnvironmentVariableTarget]::Process)
-Write-Output $newPath
 Write-Output "Cmake version..."
 cmake --version
 
