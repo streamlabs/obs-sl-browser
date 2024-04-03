@@ -5,6 +5,9 @@ param(
 
 Write-Output "Workspace is $github_workspace"
 Write-Output "Github revision is $revision"
+Write-Output "Cmake version..."
+
+cmake --version
 
 # Get the revision we're using
 $slRevision = 0
