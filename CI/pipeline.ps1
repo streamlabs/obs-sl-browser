@@ -6,6 +6,8 @@ param(
 Write-Output "Workspace is $github_workspace"
 Write-Output "Github revision is $revision"
 
+Write-Output "${github_workspace}\ci\tools\cmake\bin"
+
 # Workaround - Use our version of CMake
 $currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Process)
 Write-Output $currentPath
