@@ -3,7 +3,7 @@ param(
     [string]$revision
 )
 
-Write-Output "Test is $github_workspace"
+Write-Output "Test 5 is $github_workspace"
 Write-Output "Workspace is $github_workspace"
 Write-Output "Github revision is $revision"
 Write-Output "${github_workspace}\ci\tools\cmake\bin"
