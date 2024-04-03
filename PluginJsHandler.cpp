@@ -129,7 +129,11 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		return;
 	}
 
+#ifdef GITHUB_REVISION
+	blog(LOG_INFO, "executeApiRequest (start) %s\n", funcName.c_str());
+#else
 	blog(LOG_INFO, "executeApiRequest (start) %s: %s\n", funcName.c_str(), params.c_str());
+#endif
 
 	std::string jsonReturnStr;
 
@@ -209,7 +213,11 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
-	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
+#ifdef GITHUB_REVISION
+	blog(LOG_INFO, "executeApiRequest (finish) %s\n", funcName.c_str());
+#else
+	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), params.c_str());
+#endif
 
 	// We're done, send callback
 	if (param1Value.int_value() > 0)
