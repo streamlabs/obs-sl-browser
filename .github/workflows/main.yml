@@ -24,10 +24,15 @@ jobs:
             ReleaseConfig: RelWithDebInfo
     env:
       OS_TAG: "win64"
-    steps:        
+    steps:
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v1.14
+        with:
+          cmake-version: '3.28.x'
+        
       - name: Checkout repository
         uses: actions/checkout@v2
-                 
+         
       - name: Run build script
         run: powershell -File ./ci/pipeline.ps1 "${{ github.workspace }}" "${{ github.sha }}"
         
