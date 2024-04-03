@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "CMAKE-PROPERTIES" "7" "Mar 21, 2024" "3.29.0" "CMake"
+.TH "CMAKE-PROPERTIES" "7" "Mar 20, 2024" "3.28.4" "CMake"
 .SH NAME
 cmake-properties \- CMake Properties Reference
 .SH PROPERTIES OF GLOBAL SCOPE
@@ -1792,28 +1792,6 @@ Per\-configuration output name for
 .sp
 This is the configuration\-specific version of the
 \fI\%ARCHIVE_OUTPUT_NAME\fP target property.
-.SS AUTOGEN_BETTER_GRAPH_MULTI_CONFIG
-.sp
-New in version 3.29.
-
-.sp
-\fBAUTOGEN_BETTER_GRAPH_MULTI_CONFIG\fP is a boolean property that can be set
-on a target to have better dependency graph for multi\-configuration generators.
-When this property is enabled, \fBCMake\fP will generate more per\-config targets.
-Thus, the dependency graph will be more accurate for multi\-configuration
-generators and some recompilations will be avoided.
-.sp
-If the Qt version is 6.8 or newer, this property is enabled by default.
-If the Qt version is older than 6.8, this property is disabled by default.
-Consult the Qt documentation to check if the property can be enabled for older
-Qt versions.
-.sp
-See the \fI\%cmake\-qt(7)\fP manual for more information on using CMake
-with Qt.
-.sp
-This property is initialized by the
-\fI\%CMAKE_AUTOGEN_BETTER_GRAPH_MULTI_CONFIG\fP variable if it is set when
-a target is created.
 .SS AUTOGEN_BUILD_DIR
 .sp
 New in version 3.9.
@@ -1833,62 +1811,26 @@ By default \fBAUTOGEN_BUILD_DIR\fP is unset.
 .sp
 See the \fI\%cmake\-qt(7)\fP manual for more information on using CMake
 with Qt.
-.SS AUTOGEN_COMMAND_LINE_LENGTH_MAX
-.sp
-New in version 3.29.
-
-.sp
-Command line length limit for autogen targets, i.e. \fBmoc\fP or \fBuic\fP,
-that triggers the use of response files on Windows instead of passing all
-arguments to the command line.
-.INDENT 0.0
-.IP \(bu 2
-An empty (or unset) value sets the limit to 32000
-.IP \(bu 2
-A positive non zero integer value sets the exact command line length
-limit.
-.UNINDENT
-.sp
-By default \fBAUTOGEN_COMMAND_LINE_LENGTH_MAX\fP is initialized from
-\fI\%CMAKE_AUTOGEN_COMMAND_LINE_LENGTH_MAX\fP\&.
-.sp
-See the \fI\%cmake\-qt(7)\fP manual for more information on using CMake
-with Qt.
 .SS AUTOGEN_ORIGIN_DEPENDS
 .sp
 New in version 3.14.
 
 .sp
 Switch for forwarding origin target dependencies to the corresponding
-\fI\%The <ORIGIN>_autogen target\fP target.
-.INDENT 0.0
-.INDENT 3.5
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-If Qt 5.15 or later is used and the generator is either \fI\%Ninja\fP
-or \fI\%Makefile Generators\fP, origin target dependencies are forwarded to
-the \fI\%The <ORIGIN>_autogen_timestamp_deps target\fP target instead of
-\fI\%The <ORIGIN>_autogen target\fP
-.UNINDENT
-.UNINDENT
-.UNINDENT
-.UNINDENT
+\fB_autogen\fP target.
 .sp
 Targets which have their \fI\%AUTOMOC\fP or \fI\%AUTOUIC\fP property
-\fBON\fP have a corresponding \fI\%The <ORIGIN>_autogen target\fP target which generates
-\fBmoc\fP and \fBuic\fP files.  As this \fI\%The <ORIGIN>_autogen target\fP target is created at
+\fBON\fP have a corresponding \fB_autogen\fP target which generates
+\fBmoc\fP and \fBuic\fP files.  As this \fB_autogen\fP target is created at
 generate\-time, it is not possible to define dependencies of it using
-e.g.  \fI\%add_dependencies()\fP\&.  Instead the \fBAUTOGEN_ORIGIN_DEPENDS\fP
-target property decides whether the origin target dependencies should be
-forwarded to the \fI\%The <ORIGIN>_autogen target\fP target or not.
+e.g.  \fI\%add_dependencies()\fP\&.  Instead the
+\fBAUTOGEN_ORIGIN_DEPENDS\fP target property decides whether the origin
+target dependencies should be forwarded to the \fB_autogen\fP target or not.
 .sp
 By default \fBAUTOGEN_ORIGIN_DEPENDS\fP is initialized from
 \fI\%CMAKE_AUTOGEN_ORIGIN_DEPENDS\fP which is \fBON\fP by default.
 .sp
-In total the dependencies of the \fI\%The <ORIGIN>_autogen target\fP target are composed
-from
+In total the dependencies of the \fB_autogen\fP target are composed from
 .INDENT 0.0
 .IP \(bu 2
 forwarded origin target dependencies
@@ -1899,21 +1841,17 @@ additional user defined dependencies from \fI\%AUTOGEN_TARGET_DEPENDS\fP
 .sp
 See the \fI\%cmake\-qt(7)\fP manual for more information on using CMake
 with Qt.
+.SS Note
 .sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
 Disabling \fBAUTOGEN_ORIGIN_DEPENDS\fP is useful to avoid building of
-origin target dependencies when building the \fI\%The <ORIGIN>_autogen target\fP target
-only. This is especially interesting when a
+origin target dependencies when building the \fB_autogen\fP target only.
+This is especially interesting when a
 \fI\%global autogen target\fP is enabled.
 .sp
-When the \fI\%The <ORIGIN>_autogen target\fP target doesn\(aqt require all the origin target\(aqs
+When the \fB_autogen\fP target doesn\(aqt require all the origin target\(aqs
 dependencies, and \fBAUTOGEN_ORIGIN_DEPENDS\fP is disabled, it might be
 necessary to extend \fI\%AUTOGEN_TARGET_DEPENDS\fP to add missing
 dependencies.
-.UNINDENT
-.UNINDENT
 .SS AUTOGEN_PARALLEL
 .sp
 New in version 3.11.
@@ -1922,9 +1860,9 @@ New in version 3.11.
 Number of parallel \fBmoc\fP or \fBuic\fP processes to start when using
 \fI\%AUTOMOC\fP and \fI\%AUTOUIC\fP\&.
 .sp
-The custom \fI\%The <ORIGIN>_autogen target\fP target starts a number of threads of which
+The custom \fB<origin>_autogen\fP target starts a number of threads of which
 each one parses a source file and on demand starts a \fBmoc\fP or \fBuic\fP
-process. \fBAUTOGEN_PARALLEL\fP controls how many parallel threads
+process.  \fBAUTOGEN_PARALLEL\fP controls how many parallel threads
 (and therefore \fBmoc\fP or \fBuic\fP processes) are started.
 .INDENT 0.0
 .IP \(bu 2
@@ -1943,34 +1881,18 @@ See the \fI\%cmake\-qt(7)\fP manual for more information on using CMake
 with Qt.
 .SS AUTOGEN_TARGET_DEPENDS
 .sp
-Additional target dependencies of the corresponding \fI\%The <ORIGIN>_autogen target\fP
-target.
-.INDENT 0.0
-.INDENT 3.5
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-If Qt 5.15 or later is used and the generator is either \fI\%Ninja\fP
-or \fI\%Makefile Generators\fP, additional target dependencies are added to
-the \fI\%The <ORIGIN>_autogen_timestamp_deps target\fP target instead of the
-\fI\%The <ORIGIN>_autogen target\fP target.
-.UNINDENT
-.UNINDENT
-.UNINDENT
-.UNINDENT
+Additional target dependencies of the corresponding \fB_autogen\fP target.
 .sp
 Targets which have their \fI\%AUTOMOC\fP or \fI\%AUTOUIC\fP property
-\fBON\fP have a corresponding \fI\%The <ORIGIN>_autogen target\fP  target which generates
-\fBmoc\fP and \fBuic\fP files.  As this \fI\%The <ORIGIN>_autogen target\fP  target is created
-at generate\-time, it is not possible to define dependencies of it using e.g.
-\fI\%add_dependencies()\fP\&.  Instead the \fBAUTOGEN_TARGET_DEPENDS\fP target
-property can be set to a \fI\%;\-list\fP of additional
-dependencies for the \fI\%The <ORIGIN>_autogen target\fP  target. Dependencies can be target
-names or file names.
+\fBON\fP have a corresponding \fB_autogen\fP target which generates
+\fBmoc\fP and \fBuic\fP files.  As this \fB_autogen\fP target is created at
+generate\-time, it is not possible to define dependencies of it using
+e.g.  \fI\%add_dependencies()\fP\&.  Instead the
+\fBAUTOGEN_TARGET_DEPENDS\fP target property can be set to a
+\fI\%;\-list\fP of additional dependencies for the
+\fB_autogen\fP target.  Dependencies can be target names or file names.
 .sp
-In total the dependencies of the \fI\%The <ORIGIN>_autogen target\fP  target are composed
-from
+In total the dependencies of the \fB_autogen\fP target are composed from
 .INDENT 0.0
 .IP \(bu 2
 forwarded origin target dependencies
@@ -2020,9 +1942,9 @@ a target is created.
 .sp
 Should the target be processed with auto\-moc (for Qt projects).
 .sp
-\fBAUTOMOC\fP is a boolean specifying whether CMake will handle the Qt \fBmoc\fP
-preprocessor automatically, i.e.  without having to use commands like
-\fI\%QT4_WRAP_CPP()\fP, \fI\%qt5_wrap_cpp()\fP, etc.
+\fBAUTOMOC\fP is a boolean specifying whether CMake will handle the Qt
+\fBmoc\fP preprocessor automatically, i.e.  without having to use commands like
+\fI\%QT4_WRAP_CPP()\fP, \fBQT5_WRAP_CPP()\fP, etc.
 Currently, Qt versions 4 to 6 are supported.
 .sp
 This property is initialized by the value of the \fI\%CMAKE_AUTOMOC\fP
@@ -2285,16 +2207,12 @@ e.g.  in MSVS.
 .sp
 \fI\%CMAKE_GLOBAL_AUTOGEN_TARGET\fP:
 A global \fBautogen\fP target, that depends on all \fBAUTOMOC\fP or
-\fI\%AUTOUIC\fP generated \fI\%The <ORIGIN>_autogen target\fP targets in the project,
+\fI\%AUTOUIC\fP generated \fB<ORIGIN>_autogen\fP targets in the project,
 will be generated when this variable is \fBON\fP\&.
 .sp
 \fI\%AUTOGEN_PARALLEL\fP:
 This target property controls the number of \fBmoc\fP or \fBuic\fP processes to
 start in parallel during builds.
-.sp
-\fI\%AUTOGEN_COMMAND_LINE_LENGTH_MAX\fP:
-This target property controls the limit when to use response files for
-\fBmoc\fP or \fBuic\fP processes on Windows.
 .sp
 See the \fI\%cmake\-qt(7)\fP manual for more information on using CMake
 with Qt.
@@ -2356,14 +2274,14 @@ file gets rebuilt even when the source file itself doesn\(aqt change.
 .sp
 If any of the extracted files is \fI\%GENERATED\fP or if it is not in the
 target\(aqs sources, then it might be necessary to add it to the
-\fI\%The <ORIGIN>_autogen target\fP target  dependencies.
+\fB_autogen\fP target  dependencies.
 See \fI\%AUTOGEN_TARGET_DEPENDS\fP for reference.
 .sp
 By default \fBAUTOMOC_DEPEND_FILTERS\fP is initialized from
 \fI\%CMAKE_AUTOMOC_DEPEND_FILTERS\fP, which is empty by default.
 .sp
-From Qt 5.15.0 on this variable is ignored as \fBmoc\fP is able to output the
-correct dependencies.
+From Qt 5.15.0 on this variable is ignored as moc is able to output the correct
+dependencies.
 .sp
 See the \fI\%cmake\-qt(7)\fP manual for more information on using CMake
 with Qt.
@@ -2658,7 +2576,7 @@ Should the target be processed with auto\-rcc (for Qt projects).
 .sp
 \fBAUTORCC\fP is a boolean specifying whether CMake will handle
 the Qt \fBrcc\fP code generator automatically, i.e. without having to use
-commands like \fI\%QT4_ADD_RESOURCES()\fP, \fI\%qt5_add_resources()\fP,
+commands like \fI\%QT4_ADD_RESOURCES()\fP, \fBQT5_ADD_RESOURCES()\fP,
 etc.  Currently, Qt versions 4 to 6 are supported.
 .sp
 When this property is \fBON\fP, CMake will handle \fB\&.qrc\fP files added
@@ -2764,7 +2682,7 @@ Should the target be processed with auto\-uic (for Qt projects).
 .sp
 \fBAUTOUIC\fP is a boolean specifying whether CMake will handle
 the Qt \fBuic\fP code generator automatically, i.e. without having to use
-commands like \fI\%QT4_WRAP_UI()\fP, \fI\%qt5_wrap_ui()\fP, etc.
+commands like \fI\%QT4_WRAP_UI()\fP, \fBQT5_WRAP_UI()\fP, etc.
 Currently, Qt versions 4 to 6 are supported.
 .sp
 This property is initialized by the value of the \fI\%CMAKE_AUTOUIC\fP
@@ -2839,16 +2757,12 @@ e.g.  in MSVS.
 .sp
 \fI\%CMAKE_GLOBAL_AUTOGEN_TARGET\fP:
 A global \fBautogen\fP target, that depends on all \fI\%AUTOMOC\fP or
-\fBAUTOUIC\fP generated \fI\%The <ORIGIN>_autogen target\fP targets in the project,
+\fBAUTOUIC\fP generated \fB<ORIGIN>_autogen\fP targets in the project,
 will be generated when this variable is \fBON\fP\&.
 .sp
 \fI\%AUTOGEN_PARALLEL\fP:
 This target property controls the number of \fBmoc\fP or \fBuic\fP processes to
 start in parallel during builds.
-.sp
-\fI\%AUTOGEN_COMMAND_LINE_LENGTH_MAX\fP:
-This target property controls the limit when to use response files for
-\fBmoc\fP or \fBuic\fP processes on Windows.
 .sp
 See the \fI\%cmake\-qt(7)\fP manual for more information on using CMake
 with Qt.
@@ -3553,10 +3467,6 @@ for built target system executables.
 .sp
 New in version 3.15: If this property contains a \fI\%semicolon\-separated list\fP, then the first value is the command and remaining values are its
 arguments.
-
-.sp
-New in version 3.29: Contents of \fBCROSSCOMPILING_EMULATOR\fP may use
-\fI\%generator expressions\fP\&.
 
 .sp
 This property is initialized by the value of the
@@ -4476,22 +4386,6 @@ Enable/Disable output of compile commands during generation for a target.
 .sp
 This property is initialized by the value of the variable
 \fI\%CMAKE_EXPORT_COMPILE_COMMANDS\fP if it is set when a target is created.
-.SS EXPORT_FIND_PACKAGE_NAME
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-Experimental. Gated by \fBCMAKE_EXPERIMENTAL_EXPORT_PACKAGE_DEPENDENCIES\fP\&.
-.UNINDENT
-.UNINDENT
-.sp
-Control the package name associated with a dependency target when exporting a
-\fI\%find_dependency()\fP call in \fI\%install(EXPORT)\fP or
-\fI\%export(EXPORT)\fP\&. This can be used to assign a package name to a
-package that is built by CMake and exported, or to override the package in the
-\fI\%find_package()\fP call that created the target.
-.sp
-This property is initialized by \fI\%CMAKE_EXPORT_FIND_PACKAGE_NAME\fP\&.
 .SS EXPORT_NAME
 .sp
 Exported name for target files.
@@ -5369,7 +5263,7 @@ listed in the \fI\%IMPORTED_CONFIGURATIONS\fP target property may be
 selected and its \fI\%IMPORTED_LOCATION_<CONFIG>\fP value used.
 .sp
 To get the location of an imported target read one of the \fI\%LOCATION\fP
-or \fI\%LOCATION_<CONFIG>\fP properties.
+or \fBLOCATION_<CONFIG>\fP properties.
 .sp
 For platforms with import libraries (e.g. Windows, AIX or Apple) see also
 \fI\%IMPORTED_IMPLIB\fP\&.
@@ -7607,116 +7501,6 @@ discussion can be found under the internal
 .sp
 If this property is not set by the user, it will be calculated at
 generate\-time by CMake.
-.SS LINKER_TYPE
-.sp
-New in version 3.29.
-
-.sp
-Specify which linker will be used for the link step. The property value may use
-\fI\%generator expressions\fP\&.
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-add_library(lib1 SHARED ...)
-set_property(TARGET lib1 PROPERTY LINKER_TYPE LLD)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-This specifies that \fBlib1\fP should use linker type \fBLLD\fP for the link step.
-The implementation details will be provided by the variable
-\fI\%CMAKE_<LANG>_USING_LINKER_<TYPE>\fP with \fB<TYPE>\fP having the value
-\fBLLD\fP\&.
-.sp
-This property is not supported on \fI\%Green Hills MULTI\fP and
-\fI\%Visual Studio 9 2008\fP generators.
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-It is assumed that the linker specified is fully compatible with the standard
-one. CMake will not do any options translation.
-.UNINDENT
-.UNINDENT
-.sp
-Linker types are case\-sensitive and may only contain letters, numbers and
-underscores. Linker types defined in all uppercase are reserved for CMake\(aqs own
-built\-in types. The pre\-defined linker types are:
-.INDENT 0.0
-.TP
-.B \fBDEFAULT\fP
-This type corresponds to standard linking, essentially equivalent to
-not specifying \fI\%LINKER_TYPE\fP target property.
-.TP
-.B \fBSYSTEM\fP
-Use the standard linker delivered by the platform or the standard toolkit
-(for example, \fBSYSTEM\fP imply Microsoft linker for all \fBMSVC\fP compatible
-compilers). This type is supported for the following platforms/compilers:
-.INDENT 7.0
-.IP \(bu 2
-Linux, for \fBGNU\fP, \fBClang\fP, \fBLLVMFlang\fP and \fBNVIDIA\fP compilers.
-.IP \(bu 2
-All Apple variants for \fBAppleClang\fP, \fBClang\fP and \fBGNU\fP compilers.
-.IP \(bu 2
-Windows, for \fBMSVC\fP, \fBGNU\fP, \fBClang\fP and \fBNVIDIA\fP compilers.
-.UNINDENT
-.TP
-.B \fBLLD\fP
-Use the \fBLLVM\fP linker. This type is supported for the following
-platforms/compilers:
-.INDENT 7.0
-.IP \(bu 2
-Linux, for \fBGNU\fP, \fBClang\fP, \fBLLVMFlang\fP and \fBNVIDIA\fP compilers.
-.IP \(bu 2
-All Apple variants for \fBClang\fP and \fBAppleClang\fP compilers.
-.IP \(bu 2
-Windows, for \fBGNU\fP, \fBClang\fP compilers with \fBGNU\fP front\-end and
-\fBCLang\fP, \fBMSVC\fP and \fBNVIDIA\fP compilers with \fBMSVC\fP front\-end.
-.UNINDENT
-.TP
-.B \fBBFD\fP
-Use the \fBGNU\fP linker.  This type is supported for the following
-platforms/compilers:
-.INDENT 7.0
-.IP \(bu 2
-Linux, for \fBGNU\fP, \fBClang\fP, \fBLLVMFlang\fP and \fBNVIDIA\fP compilers.
-.IP \(bu 2
-Windows, for \fBGNU\fP, \fBClang\fP compilers with \fBGNU\fP front\-end.
-.UNINDENT
-.TP
-.B \fBGOLD\fP
-Supported on Linux platform for \fBGNU\fP, \fBClang\fP, \fBLLVMFlang\fP and
-\fBNVIDIA\fP compilers.
-.TP
-.B \fBMOLD\fP
-Use the \fI\%mold linker\fP\&. This type is
-supported on the following platforms:
-.INDENT 7.0
-.IP \(bu 2
-Linux platform for \fBGNU\fP, \fBClang\fP, \fBLLVMFlang\fP and \fBNVIDIA\fP
-compilers.
-.IP \(bu 2
-All Apple variants for \fBClang\fP and \fBAppleClang\fP compilers as an
-alias to \fBSOLD\fP\&.
-.UNINDENT
-.TP
-.B \fBSOLD\fP
-Use the \fI\%sold linker\fP\&. This type
-is only supported on Apple platforms for \fBClang\fP and \fBAppleClang\fP
-compilers.
-.TP
-.B \fBAPPLE_CLASSIC\fP
-Use the Apple linker in the classic behavior (i.e. before \fBXcode 15.0\fP).
-This type is only supported on Apple platforms for \fBGNU\fP, \fBClang\fP and
-\fBAppleClang\fP compilers.
-.TP
-.B \fBMSVC\fP
-Use the Microsoft linker. This type is only supported on Windows
-platform for \fBMSVC\fP and \fBClang\fP compiler with \fBMSVC\fP front\-end.
-.UNINDENT
 .SS LOCATION
 .sp
 Read\-only location of a target on disk.
@@ -8956,30 +8740,14 @@ See the \fI\%cmake\-buildsystem(7)\fP manual for more on defining
 buildsystem properties.
 .SS SOVERSION
 .sp
-ABI version number of a shared library target.
+What version number is this target.
 .sp
 For shared libraries \fI\%VERSION\fP and \fBSOVERSION\fP can be used to
-specify the build version and ABI version respectively.  When building or
+specify the build version and API version respectively.  When building or
 installing appropriate symlinks are created if the platform supports
 symlinks and the linker supports so\-names.  If only one of both is
 specified the missing is assumed to have the same version number.
 \fBSOVERSION\fP is ignored if \fI\%NO_SONAME\fP property is set.
-.sp
-A common convention is to specify both \fBVERSION\fP and \fBSOVERSION\fP
-such that \fBSOVERSION\fP matches the first component of \fBVERSION\fP:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-set_target_properties(mylib PROPERTIES VERSION 1.2.3 SOVERSION 1)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-The idea is that breaking changes to the ABI increment both the
-\fBSOVERSION\fP and the major \fBVERSION\fP number.
 .SS Windows Versions
 .sp
 For shared libraries and executables on Windows the \fI\%VERSION\fP
@@ -9080,68 +8848,6 @@ What comes after the target name.
 .sp
 A target property that can be set to override the suffix (such as
 \fB\&.so\fP or \fB\&.exe\fP) on the name of a library, module or executable.
-.SS Swift_COMPILATION_MODE
-.sp
-New in version 3.29.
-
-.sp
-Specify how Swift compiles a target.
-.sp
-The allowed values are:
-.INDENT 0.0
-.TP
-.B \fBincremental\fP
-Compiles each Swift source in the module separately, resulting in better
-parallelism in the build. The compiler emits additional information into
-the build directory improving rebuild performance when small changes are made
-to the source between rebuilds. This is the best option to use while
-iterating on changes in a project.
-.TP
-.B \fBwholemodule\fP
-Whole\-module optimizations are slowest to compile, but results in the most
-optimized library. The entire context is loaded into once instance of the
-compiler, so there is no parallelism across source files in the module.
-.TP
-.B \fBsinglefile\fP
-Compiles each source in a Swift modules separately, resulting in better
-parallelism. Unlike the \fBincremental\fP build mode, no additional information
-is emitted by the compiler during the build, so rebuilding after making small
-changes to the source file will not run faster. This option should be used
-sparingly, preferring \fBincremental\fP builds, unless working around a compiler
-bug.
-.UNINDENT
-.sp
-Use \fI\%generator expressions\fP to support
-per\-configuration specification. For example, the code:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-add_library(foo foo.swift)
-set_property(TARGET foo PROPERTY
-  Swift_COMPILATION_MODE \(dq$<IF:$<CONFIG:Release>,wholemodule,incremental>\(dq)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-sets the Swift compilation mode to wholemodule mode in the release configuration
-and sets the property to incremental mode in other configurations.
-.sp
-The property is initialized from the value of the
-\fI\%CMAKE_Swift_COMPILATION_MODE\fP variable, if it is set. If the property
-is not set or is empty, then CMake uses the default value \fBincremental\fP to
-specify the swift compilation mode.
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-This property only has effect when policy \fI\%CMP0157\fP is set to \fBNEW\fP
-prior to the first \fI\%project()\fP or \fI\%enable_language()\fP command
-that enables the Swift language.
-.UNINDENT
-.UNINDENT
 .SS Swift_DEPENDENCIES_FILE
 .sp
 New in version 3.15.
@@ -9206,28 +8912,6 @@ installed.
 .sp
 For non\-imported targets, this target property is initialized from
 the \fI\%SYSTEM\fP directory property when the target is created.
-.SS TEST_LAUNCHER
-.sp
-New in version 3.29.
-
-.sp
-Use the given launcher to run executables.
-This command will be added as a prefix to \fI\%add_test()\fP commands
-for build target system executables and is meant to be run on the host
-machine.
-.sp
-It effectively acts as a run script for tests in a similar way
-to how \fI\%CMAKE_<LANG>_COMPILER_LAUNCHER\fP works for compilation.
-.sp
-If this property contains a \fI\%semicolon\-separated list\fP, then the first value is the command and remaining values are its
-arguments.
-.sp
-Contents of \fBTEST_LAUNCHER\fP may use
-\fI\%generator expressions\fP\&.
-.sp
-This property is initialized by the value of the
-\fI\%CMAKE_TEST_LAUNCHER\fP variable if it is set when a target
-is created.
 .SS TYPE
 .sp
 The type of the target.
@@ -9270,29 +8954,11 @@ this mode.
 If no explicit \fI\%UNITY_BUILD_MODE\fP has been specified, CMake will
 default to \fBBATCH\fP\&.
 .sp
-Unity builds are supported for the following languages:
-.INDENT 0.0
-.TP
-.B \fBC\fP
-New in version 3.16.
-
-.TP
-.B \fBCXX\fP
-New in version 3.16.
-
-.TP
-.B \fBOBJC\fP
-New in version 3.29.
-
-.TP
-.B \fBOBJCXX\fP
-New in version 3.29.
-
-.UNINDENT
-.sp
-For targets that mix source files from more than one language, CMake
-separates the languages such that each generated unity source file only
-contains sources for a single language.
+Unity builds are not currently supported for all languages.  CMake version
+3.28.4 supports combining \fBC\fP and \fBCXX\fP source files.  For targets that
+mix source files from more than one language, CMake will separate the languages
+such that each generated unity source file only contains sources for a single
+language.
 .sp
 This property is initialized by the value of the \fI\%CMAKE_UNITY_BUILD\fP
 variable when a target is created.
@@ -9614,32 +9280,16 @@ If the project wishes to control which header sets are verified by this
 property, it can set \fI\%INTERFACE_HEADER_SETS_TO_VERIFY\fP\&.
 .SS VERSION
 .sp
-Version number of a shared library target.
+What version number is this target.
 .sp
 For shared libraries \fBVERSION\fP and \fI\%SOVERSION\fP can be used
-to specify the build version and ABI version respectively.  When building or
+to specify the build version and API version respectively.  When building or
 installing appropriate symlinks are created if the platform supports
 symlinks and the linker supports so\-names.  If only one of both is
 specified the missing is assumed to have the same version number.  For
 executables \fBVERSION\fP can be used to specify the build version.  When
 building or installing appropriate symlinks are created if the
 platform supports symlinks.
-.sp
-A common convention is to specify both \fBVERSION\fP and \fBSOVERSION\fP
-such that \fBSOVERSION\fP matches the first component of \fBVERSION\fP:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-set_target_properties(mylib PROPERTIES VERSION 1.2.3 SOVERSION 1)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-The idea is that breaking changes to the ABI increment both the
-\fBSOVERSION\fP and the major \fBVERSION\fP number.
 .SS Windows Versions
 .sp
 For shared libraries and executables on Windows the \fBVERSION\fP
@@ -10464,33 +10114,6 @@ New in version 3.28.
 .sp
 The specified items will be added to the \fBEmbed Resources\fP build phase.
 They must be CMake target names or folder paths.
-.TP
-.B \fBXPC_SERVICES\fP
-New in version 3.29.
-
-.sp
-The specified items will be added to the \fBEmbed XPC Services\fP build phase.
-They must be CMake target names.
-.UNINDENT
-.sp
-When listing a target as any of the things to embed, Xcode must see that target
-as part of the same Xcode project, or a sub\-project of the one defining the
-bundle.  In order to satisfy this constraint, the CMake project must ensure
-at least one of the following:
-.INDENT 0.0
-.IP \(bu 2
-The \fI\%CMAKE_XCODE_GENERATE_TOP_LEVEL_PROJECT_ONLY\fP variable is set
-to true in the top level \fBCMakeLists.txt\fP file.  This is the simplest and
-most robust approach.
-.IP \(bu 2
-Define the target\-to\-embed in a subdirectory of the one that defines the
-target being embedded into.
-.IP \(bu 2
-If the target\-to\-embed and the target being embedded into are in separate,
-unrelated directories (i.e. they are siblings, not one a parent of the
-other), ensure they have a common \fI\%project()\fP call in a parent
-directory and no other \fI\%project()\fP calls between themselves and that
-common \fI\%project()\fP call.
 .UNINDENT
 .sp
 See also \fI\%XCODE_EMBED_<type>_PATH\fP,
@@ -10556,10 +10179,6 @@ New in version 3.23.
 .TP
 .B \fBRESOURCES\fP
 New in version 3.28.
-
-.TP
-.B \fBXPC_SERVICES\fP
-New in version 3.29.
 
 .UNINDENT
 .SS XCODE_EMBED_<type>_REMOVE_HEADERS_ON_COPY
@@ -11293,24 +10912,17 @@ valid behavior of existing tests.
 The environment changes from this property do not affect other tests.
 .SS FAIL_REGULAR_EXPRESSION
 .sp
-If the test output (stdout or stderr) matches this regular expression the test
-will fail, regardless of the process exit code. Tests that exceed the timeout
-specified by \fI\%TIMEOUT\fP fail regardless of
-\fBFAIL_REGULAR_EXPRESSION\fP\&. Any non\-zero return code or system\-level test
-failures including segmentation faults, signal abort, or heap errors fail the
-test even if the regular expression does not match.
+If the output matches this regular expression the test will fail,
+regardless of the process exit code.
 .sp
-If set, if the output matches one of specified regular expressions, the test
-will fail.  Example:
+If set, if the output matches one of specified regular expressions,
+the test will fail.  Example:
 .INDENT 0.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-# test would pass, except for FAIL_REGULAR_EXPRESSION
-add_test(NAME mytest COMMAND ${CMAKE_COMMAND} \-E echo \(dqFailed\(dq)
-
-set_property(TEST mytest PROPERTY
+set_tests_properties(mytest PROPERTIES
   FAIL_REGULAR_EXPRESSION \(dq[^a\-z]Error;ERROR;Failed\(dq
 )
 .ft P
@@ -11568,23 +11180,19 @@ measurement with a value of \fB1\fP\&.  You may also specify a value by
 setting \fBMEASUREMENT\fP to \fBmeasurement=value\fP\&.
 .SS PASS_REGULAR_EXPRESSION
 .sp
-The test output (stdout or stderr) must match this regular expression
-for the test to pass. The process exit code is ignored. Tests that exceed
-the timeout specified by \fI\%TIMEOUT\fP still fail regardless of
-\fBPASS_REGULAR_EXPRESSION\fP\&. System\-level test failures including
-segmentation faults, signal abort, or heap errors may fail the test even
-if \fBPASS_REGULAR_EXPRESSION\fP is matched.
+The output must match this regular expression for the test to pass.
+The process exit code is ignored.
 .sp
-Example:
+If set, the test output will be checked against the specified regular
+expressions and at least one of the regular expressions has to match,
+otherwise the test will fail.  Example:
 .INDENT 0.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-add_test(NAME mytest COMMAND ${CMAKE_COMMAND} \-E echo \(dqPassed this test\(dq)
-
-set_property(TEST mytest PROPERTY
-  PASS_REGULAR_EXPRESSION \(dqpass;Passed\(dq
+set_tests_properties(mytest PROPERTIES
+  PASS_REGULAR_EXPRESSION \(dqTestPassed;All ok\(dq
 )
 .ft P
 .fi
@@ -11592,44 +11200,6 @@ set_property(TEST mytest PROPERTY
 .UNINDENT
 .sp
 \fBPASS_REGULAR_EXPRESSION\fP expects a list of regular expressions.
-.sp
-To run a test that may have a system\-level failure, but still pass if
-\fBPASS_REGULAR_EXPRESSION\fP matches, use a CMake command to wrap the
-executable run. Note that this will prevent automatic handling of the
-\fI\%CROSSCOMPILING_EMULATOR\fP and \fI\%TEST_LAUNCHER\fP
-target property.
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-add_executable(main main.c)
-
-add_test(NAME sigabrt COMMAND ${CMAKE_COMMAND} \-E env $<TARGET_FILE:main>)
-
-set_property(TEST sigabrt PROPERTY PROPERTY_REGULAR_EXPRESSION \(dqpass;Passed\(dq)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-#include <signal.h>
-#include <stdio.h>
-
-int main(void){
-    fprintf(stdout, \(dqPassed\en\(dq);
-    fflush(stdout);  /* ensure the output buffer is seen */
-    raise(SIGABRT);
-    return 0;
-}
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
 .sp
 See also the \fI\%FAIL_REGULAR_EXPRESSION\fP and
 \fI\%SKIP_REGULAR_EXPRESSION\fP test properties.
@@ -11813,21 +11383,15 @@ any other tests.
 New in version 3.16.
 
 .sp
-If the test output (stderr or stdout) matches this regular expression the test
-will be marked as skipped, regardless of the process exit code. Tests that
-exceed the timeout specified by \fI\%TIMEOUT\fP still fail regardless of
-\fBSKIP_REGULAR_EXPRESSION\fP\&. System\-level test failures including segmentation
-faults, signal abort, or heap errors may fail the test even if the regular
-expression matches.
+If the output matches this regular expression the test will be marked as skipped.
 .sp
-Example:
+If set, if the output matches one of specified regular expressions,
+the test will be marked as skipped.  Example:
 .INDENT 0.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-add_test(NAME mytest COMMAND ${CMAKE_COMMAND} \-E echo \(dqSkipped this test\(dq)
-
 set_property(TEST mytest PROPERTY
   SKIP_REGULAR_EXPRESSION \(dq[^a\-z]Skip\(dq \(dqSKIP\(dq \(dqSkipped\(dq
 )
@@ -11837,38 +11401,6 @@ set_property(TEST mytest PROPERTY
 .UNINDENT
 .sp
 \fBSKIP_REGULAR_EXPRESSION\fP expects a list of regular expressions.
-.sp
-To run a test that may have a system\-level failure, but still skip if
-\fBSKIP_REGULAR_EXPRESSION\fP matches, use a CMake command to wrap the
-executable run. Note that this will prevent automatic handling of the
-\fI\%CROSSCOMPILING_EMULATOR\fP and \fI\%TEST_LAUNCHER\fP
-target property.
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-add_executable(main main.c)
-
-add_test(NAME sigabrt COMMAND ${CMAKE_COMMAND} \-E env $<TARGET_FILE:main>)
-
-set_property(TEST sigabrt PROPERTY SKIP_REGULAR_EXPRESSION \(dqSIGABRT;[aA]bort\(dq)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-#include <signal.h>
-
-int main(void){ raise(SIGABRT); return 0; }
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
 .sp
 See also the \fI\%SKIP_RETURN_CODE\fP,
 \fI\%PASS_REGULAR_EXPRESSION\fP, and \fI\%FAIL_REGULAR_EXPRESSION\fP
@@ -11883,59 +11415,7 @@ a return code of the process can be specified that will mark the test as
 \fBNot Run\fP if it is encountered. Valid values are in the range of
 0 to 255, inclusive.
 .sp
-Tests that exceed the timeout specified by \fI\%TIMEOUT\fP still fail
-regardless of \fBSKIP_RETURN_CODE\fP\&.
-System\-level test failures including segmentation faults,
-signal abort, or heap errors may fail the test even if the return code matches.
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-# cmake (1) defines this to return code 1
-add_test(NAME r1 COMMAND ${CMAKE_COMMAND} \-E false)
-
-set_tests_properties(r1 PROPERTIES SKIP_RETURN_CODE 1)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-To run a test that may have a system\-level failure, but still skip if
-\fBSKIP_RETURN_CODE\fP matches, use a CMake command to wrap the executable run.
-Note that this will prevent automatic handling of the
-\fI\%CROSSCOMPILING_EMULATOR\fP and \fI\%TEST_LAUNCHER\fP target
-property.
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-add_executable(main main.c)
-
-# cmake \-E env <command> returns 1 if the command fails in any way
-add_test(NAME sigabrt COMMAND ${CMAKE_COMMAND} \-E env $<TARGET_FILE:main>)
-
-set_property(TEST sigabrt PROPERTY SKIP_RETURN_CODE 1)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-#include <signal.h>
-
-int main(void){ raise(SIGABRT); return 0; }
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-To handle multiple types of cases that may need to be skipped, consider the
-\fI\%SKIP_REGULAR_EXPRESSION\fP property.
+See also the \fI\%SKIP_REGULAR_EXPRESSION\fP property.
 .SS TIMEOUT
 .sp
 How many seconds to allow for this test.
@@ -12060,58 +11540,11 @@ See also \fI\%CTEST_TEST_TIMEOUT\fP,
 \fI\%TIMEOUT\fP, and \fI\%TIMEOUT_AFTER_MATCH\fP\&.
 .SS WILL_FAIL
 .sp
-If \fBtrue\fP, inverts the pass / fail test criteria. Tests for which
-\fBWILL_FAIL\fP is \fBtrue\fP fail with return code 0 and pass with non\-zero
-return code. Tests that exceed the timeout specified by \fI\%TIMEOUT\fP
-still fail regardless of \fBWILL_FAIL\fP\&.
-System\-level test failures including segmentation faults,
-signal abort, or heap errors may fail the test even if \fBWILL_FAIL\fP is true.
+If set to true, this will invert the pass/fail flag of the test.
 .sp
-Example of a test that would ordinarily pass, but fails because \fBWILL_FAIL\fP
-is \fBtrue\fP:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-add_test(NAME failed COMMAND ${CMAKE_COMMAND} \-E true)
-set_property(TEST failed PROPERTY WILL_FAIL true)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-To run a test that may have a system\-level failure, but still pass if
-\fBWILL_FAIL\fP is set, use a CMake command to wrap the executable run.
-Note that this will prevent automatic handling of the
-\fI\%CROSSCOMPILING_EMULATOR\fP and \fI\%TEST_LAUNCHER\fP
-target property.
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-add_executable(main main.c)
-
-add_test(NAME sigabrt COMMAND ${CMAKE_COMMAND} \-E env $<TARGET_FILE:main>)
-
-set_property(TEST sigabrt PROPERTY WILL_FAIL TRUE)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-#include <signal.h>
-
-int main(void){ raise(SIGABRT); return 0; }
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
+This property can be used for tests that are expected to fail and return a
+non\-zero return code. Note that system\-level test failures such as segmentation
+faults or heap errors will still fail the test even if \fBWILL_FALL\fP is true.
 .SS WORKING_DIRECTORY
 .sp
 The directory from which the test executable will be called.
@@ -13133,7 +12566,7 @@ each of which has to match the following format.
 .sp
 .nf
 .ft C
-https://wixtoolset.org/documentation/manual/v3/xsd/wix/permission.html
+http://wixtoolset.org/documentation/manual/v3/xsd/wix/permission.html
 .ft P
 .fi
 .UNINDENT
@@ -13312,6 +12745,6 @@ This is the configuration\-specific version of \fI\%COMPILE_DEFINITIONS\fP\&.
 Note that \fI\%Xcode\fP does not support per\-configuration source
 file flags so this property will be ignored by the \fI\%Xcode\fP generator.
 .SH COPYRIGHT
-2000-2024 Kitware, Inc. and Contributors
+2000-2023 Kitware, Inc. and Contributors
 .\" Generated by docutils manpage writer.
 .

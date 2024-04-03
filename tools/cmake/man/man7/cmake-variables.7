@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "CMAKE-VARIABLES" "7" "Mar 21, 2024" "3.29.0" "CMake"
+.TH "CMAKE-VARIABLES" "7" "Mar 20, 2024" "3.28.4" "CMake"
 .SH NAME
 cmake-variables \- CMake Variables Reference
 .sp
@@ -243,11 +243,8 @@ New in version 3.28: This variable can be initialized via an
 The command will be used to run \fI\%try_run()\fP generated executables,
 which avoids manual population of the \fBTryRunResults.cmake\fP file.
 .sp
-This variable is also used as the default value for the
-\fI\%CROSSCOMPILING_EMULATOR\fP target property of executables.  However,
-while \fI\%generator expressions\fP are
-supported by the target property (since CMake 3.29), they are \fInot\fP supported
-by this variable\(aqs \fI\%try_run()\fP functionality.
+It is also used as the default value for the
+\fI\%CROSSCOMPILING_EMULATOR\fP target property of executables.
 .SS CMAKE_CTEST_COMMAND
 .sp
 Full path to \fI\%ctest(1)\fP command installed with CMake.
@@ -527,6 +524,20 @@ The suffix to use for the end of an executable filename of \fB<LANG>\fP
 compiler target architecture, if any.
 .sp
 It overrides \fI\%CMAKE_EXECUTABLE_SUFFIX\fP for language \fB<LANG>\fP\&.
+.SS CMAKE_EXTRA_GENERATOR
+.sp
+Deprecated since version 3.27: Support for \fI\%Extra Generators\fP is deprecated and will be removed from
+a future version of CMake.  IDEs may use the \fI\%cmake\-file\-api(7)\fP
+to view CMake\-generated project build trees.
+
+.sp
+The extra generator used to build the project.  See
+\fI\%cmake\-generators(7)\fP\&.
+.sp
+When using the Eclipse, CodeBlocks, CodeLite, Kate or Sublime generators, CMake
+generates Makefiles (\fI\%CMAKE_GENERATOR\fP) and additionally project
+files for the respective IDE.  This IDE project file generator is stored in
+\fBCMAKE_EXTRA_GENERATOR\fP (e.g.  \fBEclipse CDT4\fP).
 .SS CMAKE_EXTRA_SHARED_LIBRARY_SUFFIXES
 .sp
 Additional suffixes for shared libraries.
@@ -921,23 +932,6 @@ toolkit VS integration globally installed.
 See the \fI\%CMAKE_VS_PLATFORM_TOOLSET_CUDA\fP and
 \fI\%CMAKE_VS_PLATFORM_TOOLSET_CUDA_CUSTOM_DIR\fP variables.
 .TP
-.B \fBfortran=<compiler>\fP
-New in version 3.29.
-
-.sp
-Specify the Fortran compiler to use, among those that integrate with VS.
-The value may be one of:
-.INDENT 7.0
-.TP
-.B \fBifort\fP
-Intel classic Fortran compiler.
-.TP
-.B \fBifx\fP
-Intel oneAPI Fortran compiler.
-.UNINDENT
-.sp
-See the \fI\%CMAKE_VS_PLATFORM_TOOLSET_FORTRAN\fP variable.
-.TP
 .B \fBhost=<arch>\fP
 Specify the host tools architecture as \fBx64\fP or \fBx86\fP\&.
 Supported by VS 2013 and above.
@@ -1056,132 +1050,6 @@ and language extensions the compiler frontend expects.
 Changed in version 3.26: This variable is set for \fBGNU\fP, \fBMSVC\fP, and \fBAppleClang\fP
 compilers that have only one frontend variant.
 
-.SS CMAKE_<LANG>_COMPILER_LINKER
-.sp
-New in version 3.29.
-
-.sp
-The full path to the linker for \fBLANG\fP\&.
-.sp
-This is the command that will be used as the \fB<LANG>\fP linker.
-.sp
-This variable is not guaranteed to be defined for all linkers or languages.
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-This variable is read\-only. It must not be set by the user. To select a
-specific linker, use the \fI\%CMAKE_LINKER_TYPE\fP variable or the
-\fI\%LINKER_TYPE\fP target property.
-.UNINDENT
-.UNINDENT
-.SS CMAKE_<LANG>_COMPILER_LINKER_FRONTEND_VARIANT
-.sp
-New in version 3.29.
-
-.sp
-Identification string of the linker frontend variant.
-.sp
-Some linkers have multiple, different frontends for accepting command
-line options.  (For example \fBLLCM LLD\fP originally only had a frontend
-compatible with the \fBGNU\fP compiler but since its port to Windows
-(\fBlld\-link\fP) it now also supports a frontend compatible with \fBMSVC\fP\&.)
-When CMake detects such a linker it sets this variable to what would have been
-the \fI\%CMAKE_<LANG>_COMPILER_LINKER_ID\fP for the linker whose frontend
-it resembles.
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-In other words, this variable describes what command line options
-and language extensions the linker frontend expects.
-.sp
-This variable is set for \fBGNU\fP, \fBMSVC\fP, \fBMOLD\fP and \fBAppleClang\fP
-linkers that have only one frontend variant.
-.UNINDENT
-.UNINDENT
-.SS CMAKE_<LANG>_COMPILER_LINKER_ID
-.sp
-New in version 3.29.
-
-.sp
-Linker identification string.
-.sp
-A short string unique to the linker vendor.  Possible values
-include:
-.TS
-center;
-|l|l|.
-_
-T{
-Value
-T}	T{
-Name
-T}
-_
-T{
-\fBAppleClang\fP
-T}	T{
-Apple Clang
-T}
-_
-T{
-\fBLLD\fP
-T}	T{
-\fI\%LLVM LLD\fP
-T}
-_
-T{
-\fBGNU\fP
-T}	T{
-\fI\%GNU Binutils \- ld linker\fP (also known as
-\fBbfd\fP)
-T}
-_
-T{
-\fBGNUgold\fP
-T}	T{
-\fI\%GNU Binutils \- gold linker\fP
-T}
-_
-T{
-\fBMSVC\fP
-T}	T{
-\fI\%Microsoft Visual Studio\fP
-T}
-_
-T{
-\fBMOLD\fP
-T}	T{
-\fI\%mold: A Modern Linker\fP or, on Apple, \fI\%sold\fP
-linker
-T}
-_
-T{
-\fBAIX\fP
-T}	T{
-AIX system linker
-T}
-_
-T{
-\fBSolaris\fP
-T}	T{
-SunOS system linker
-T}
-_
-.TE
-.sp
-This variable is not guaranteed to be defined for all linkers or languages.
-.SS CMAKE_<LANG>_COMPILER_LINKER_VERSION
-.sp
-New in version 3.29.
-
-.sp
-Linker version string.
-.sp
-Linker version in major[.minor[.patch[.tweak]]] format.  This
-variable is not guaranteed to be defined for all linkers or
-languages.
 .SS CMAKE_<LANG>_COMPILER_RANLIB
 .sp
 New in version 3.9.
@@ -1329,6 +1197,9 @@ The \fBCMAKE_MATCH_COUNT\fP variable holds the number of match
 expressions when these are filled.
 .SS CMAKE_MATCH_<n>
 .sp
+New in version 3.9.
+
+.sp
 Capture group \fB<n>\fP matched by the last regular expression, for groups
 0 through 9.  Group 0 is the entire match.  Groups 1 through 9 are the
 subexpressions captured by \fB()\fP syntax.
@@ -1459,10 +1330,10 @@ the following top level CMakeLists.txt:
 .nf
 .ft C
 cmake_minimum_required(VERSION 3.0)
-project(First HOMEPAGE_URL \(dqhttps://first.example.com\(dq)
-project(Second HOMEPAGE_URL \(dqhttps://second.example.com\(dq)
+project(First HOMEPAGE_URL \(dqhttp://first.example.com\(dq)
+project(Second HOMEPAGE_URL \(dqhttp://second.example.com\(dq)
 add_subdirectory(sub)
-project(Third HOMEPAGE_URL \(dqhttps://third.example.com\(dq)
+project(Third HOMEPAGE_URL \(dqhttp://third.example.com\(dq)
 .ft P
 .fi
 .UNINDENT
@@ -1474,7 +1345,7 @@ And \fBsub/CMakeLists.txt\fP with the following contents:
 .sp
 .nf
 .ft C
-project(SubProj HOMEPAGE_URL \(dqhttps://subproj.example.com\(dq)
+project(SubProj HOMEPAGE_URL \(dqhttp://subproj.example.com\(dq)
 message(\(dqCMAKE_PROJECT_HOMEPAGE_URL = ${CMAKE_PROJECT_HOMEPAGE_URL}\(dq)
 .ft P
 .fi
@@ -1488,7 +1359,7 @@ CMakeLists.txt would be \fBproject(Second ...)\fP, so this will print:
 .sp
 .nf
 .ft C
-CMAKE_PROJECT_HOMEPAGE_URL = https://second.example.com
+CMAKE_PROJECT_HOMEPAGE_URL = http://second.example.com
 .ft P
 .fi
 .UNINDENT
@@ -1767,67 +1638,6 @@ The suffix to use for the end of a static library filename, \fB\&.lib\fP on
 Windows.
 .sp
 \fBCMAKE_STATIC_LIBRARY_SUFFIX_<LANG>\fP overrides this for language \fB<LANG>\fP\&.
-.SS CMAKE_Swift_COMPILATION_MODE
-.sp
-New in version 3.29.
-
-.sp
-Specify how Swift compiles a target. This variable is used to initialize the
-\fI\%Swift_COMPILATION_MODE\fP property on targets as they are created.
-.sp
-The allowed values are:
-.INDENT 0.0
-.TP
-.B \fBincremental\fP
-Compiles each Swift source in the module separately, resulting in better
-parallelism in the build. The compiler emits additional information into
-the build directory improving rebuild performance when small changes are made
-to the source between rebuilds. This is the best option to use while
-iterating on changes in a project.
-.TP
-.B \fBwholemodule\fP
-Whole\-module optimizations are slowest to compile, but results in the most
-optimized library. The entire context is loaded into once instance of the
-compiler, so there is no parallelism across source files in the module.
-.TP
-.B \fBsinglefile\fP
-Compiles each source in a Swift modules separately, resulting in better
-parallelism. Unlike the \fBincremental\fP build mode, no additional information
-is emitted by the compiler during the build, so rebuilding after making small
-changes to the source file will not run faster. This option should be used
-sparingly, preferring \fBincremental\fP builds, unless working around a compiler
-bug.
-.UNINDENT
-.sp
-Use \fI\%generator expressions\fP to support
-per\-configuration specification. For example, the code:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-set(CMAKE_Swift_COMPILATION_MODE
-  \(dq$<IF:$<CONFIG:Release>,wholemodule,incremental>\(dq)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-sets the default Swift compilation mode to wholemodule mode when building a
-release configuration and to incremental mode in other configurations.
-.sp
-If this variable is not set then the \fI\%Swift_COMPILATION_MODE\fP target
-property will not be set automatically. If that property is unset then CMake
-uses the default value \fBincremental\fP to build the Swift source files.
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-This property only has effect when policy \fI\%CMP0157\fP is set to \fBNEW\fP
-prior to the first \fI\%project()\fP or \fI\%enable_language()\fP command
-that enables the Swift language.
-.UNINDENT
-.UNINDENT
 .SS CMAKE_Swift_MODULE_DIRECTORY
 .sp
 New in version 3.15.
@@ -1848,21 +1658,6 @@ Number of threads for parallel compilation for Swift targets.
 This variable controls the number of parallel jobs that the swift driver creates
 for building targets.  If not specified, it will default to the number of
 logical CPUs on the host.
-.SS CMAKE_TEST_LAUNCHER
-.sp
-New in version 3.29.
-
-.sp
-This variable is used to initialize the \fI\%TEST_LAUNCHER\fP target
-property of executable targets as they are created.  It is used to specify
-a launcher for running tests, added by the \fI\%add_test()\fP command,
-that run an executable target.
-.sp
-If this variable contains a \fI\%semicolon\-separated list\fP, then the first value is the command and remaining values are its
-arguments.
-.sp
-This variable can be initialized via an
-\fI\%CMAKE_TEST_LAUNCHER\fP environment variable.
 .SS CMAKE_TOOLCHAIN_FILE
 .sp
 Path to toolchain file supplied to \fI\%cmake(1)\fP\&.
@@ -2098,18 +1893,6 @@ MSBuildExtensions\e\fP\&. One can create a standalone CUDA toolkit directory by
 either opening a installer with 7zip or copying the files that are extracted
 by the running installer. The value may be empty if no path to a standalone
 CUDA Toolkit was specified.
-.SS CMAKE_VS_PLATFORM_TOOLSET_FORTRAN
-.sp
-New in version 3.29.
-
-.sp
-Fortran compiler to be used by Visual Studio projects.
-.sp
-\fI\%Visual Studio Generators\fP support selecting among Fortran compilers
-whose Visual Studio Integration is installed.  The compiler may be specified
-by a field in \fI\%CMAKE_GENERATOR_TOOLSET\fP of the form \fBfortran=...\fP\&.
-CMake provides the selected Fortran compiler in this variable.
-The value may be empty if the field was not specified.
 .SS CMAKE_VS_PLATFORM_TOOLSET_HOST_ARCHITECTURE
 .sp
 New in version 3.8.
@@ -2552,64 +2335,13 @@ variable as set by the \fI\%project()\fP command.
 .SH VARIABLES THAT CHANGE BEHAVIOR
 .SS BUILD_SHARED_LIBS
 .sp
-Tell \fI\%add_library()\fP to default to \fBSHARED\fP libraries,
-instead of \fBSTATIC\fP libraries, when called with no explicit library type.
+Global flag to cause \fI\%add_library()\fP to create shared libraries if on.
 .sp
-Calls to \fI\%add_library()\fP without any explicit library type check
-the current \fBBUILD_SHARED_LIBS\fP variable value.  If it is true, then the
-default library type is \fBSHARED\fP\&.  Otherwise, the default is \fBSTATIC\fP\&.
-.sp
-For example, the code:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-add_library(example ${sources})
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-behaves as if written
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-if(BUILD_SHARED_LIBS)
-  add_library(example SHARED ${sources})
-else()
-  add_library(example STATIC ${sources})
-endif()
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-CMake does not define \fBBUILD_SHARED_LIBS\fP by default, but projects
-often create a cache entry for it using the \fI\%option()\fP command:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-option(BUILD_SHARED_LIBS \(dqBuild using shared libraries\(dq ON)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-This provides a switch that users can control, e.g., with \fI\%cmake \-D\fP\&.
-If adding such an option to the project, do so in the top level
-\fBCMakeLists.txt\fP file, before any \fI\%add_library()\fP calls.
-Note that if bringing external dependencies directly into the build, such as
-with \fI\%FetchContent\fP or a direct call to \fI\%add_subdirectory()\fP,
-and one of those dependencies has such a call to
-\fI\%option(BUILD_SHARED_LIBS ...)\fP, the top level project must
-also call \fI\%option(BUILD_SHARED_LIBS ...)\fP before bringing in
-its dependencies.  Failure to do so can lead to different behavior between the
-first and subsequent CMake runs.
+If present and true, this will cause all libraries to be built shared
+unless the library was explicitly added as a static library.  This
+variable is often added to projects as an \fI\%option()\fP so that each user
+of a project can decide if they want to build the project using shared or
+static libraries.
 .SS CMAKE_ABSOLUTE_DESTINATION_FILES
 .sp
 List of files which have been installed using an \fBABSOLUTE DESTINATION\fP path.
@@ -2639,6 +2371,24 @@ for macOS application bundles used by the \fI\%find_program()\fP, and
 .sp
 There is also an environment variable \fI\%CMAKE_APPBUNDLE_PATH\fP, which is used
 as an additional list of search directories.
+.SS CMAKE_AUTOMOC_RELAXED_MODE
+.sp
+Deprecated since version 3.15.
+
+.sp
+Switch between strict and relaxed automoc mode.
+.sp
+By default, \fI\%AUTOMOC\fP behaves exactly as described in the
+documentation of the \fI\%AUTOMOC\fP target property.  When set to
+\fBTRUE\fP, it accepts more input and tries to find the correct input file for
+\fBmoc\fP even if it differs from the documented behavior.  In this mode it
+e.g.  also checks whether a header file is intended to be processed by moc
+when a \fB\(dqfoo.moc\(dq\fP file has been included.
+.sp
+Relaxed mode has to be enabled for KDE4 compatibility.
+.SS CMAKE_BACKWARDS_COMPATIBILITY
+.sp
+Deprecated.  See CMake Policy \fI\%CMP0001\fP documentation.
 .SS CMAKE_BUILD_TYPE
 .sp
 Specifies the build type on single\-configuration generators (e.g.
@@ -2798,16 +2548,6 @@ the package has already been found in a previous CMake run, the
 variables which have been stored in the cache will still be there.  In
 that case it is recommended to remove the cache variables for this
 package from the cache using the cache editor or \fI\%cmake \-U\fP\&.
-.sp
-Note that this variable can lead to inconsistent results within the project.
-Consider the case where a dependency is requested via \fI\%find_package()\fP
-from two different places within the project.  If the first call does not
-have the \fBREQUIRED\fP keyword, it will not find the dependency when
-\fBCMAKE_DISABLE_FIND_PACKAGE_<PackageName>\fP is set to true for that
-dependency.  The project will proceed under the assumption that the dependency
-isn\(aqt available.  If the second call elsewhere in the project \fIdoes\fP have the
-\fBREQUIRED\fP keyword, it can succeed.  Two different parts of the same project
-have then seen opposite results for the same dependency.
 .sp
 See also the \fI\%CMAKE_REQUIRE_FIND_PACKAGE_<PackageName>\fP variable.
 .SS CMAKE_ECLIPSE_GENERATE_LINKED_RESOURCES
@@ -3060,11 +2800,11 @@ Suffixes to append when looking for libraries.
 .sp
 This specifies what suffixes to add to library names when the
 \fI\%find_library()\fP command looks for libraries.  On Windows systems this
-is typically \fB\&.lib\fP and, depending on the compiler, \fB\&.dll.lib\fP, \fB\&.dll.a\fP,
-\fB\&.a\fP (e.g. rustc, GCC, or Clang), so when it tries to find the \fBfoo\fP
-library, it will look for \fB[<prefix>]foo[.dll].lib\fP and/or
-\fB[<prefix>]foo[.dll].a\fP, depending on the compiler used and the \fB<prefix>\fP
-specified in the \fI\%CMAKE_FIND_LIBRARY_PREFIXES\fP\&.
+is typically \fB\&.lib\fP and, depending on the compiler, \fB\&.dll.a\fP, \fB\&.a\fP
+(e.g. GCC and Clang), so when it tries to find the \fBfoo\fP library, it will
+look for \fB[<prefix>]foo.lib\fP and/or \fB[<prefix>]foo[.dll].a\fP, depending on
+the compiler used and the \fB<prefix>\fP specified in the
+\fI\%CMAKE_FIND_LIBRARY_PREFIXES\fP\&.
 .SS CMAKE_FIND_NO_INSTALL_PREFIX
 .sp
 Exclude the values of the \fI\%CMAKE_INSTALL_PREFIX\fP and
@@ -3083,6 +2823,56 @@ user may set the variable as a cache entry on the command line to achieve this.
 Note that the prefix(es) may still be searched for other reasons, such as being
 the same prefix as the CMake installation, or for being a built\-in system
 prefix.
+.SS CMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY
+.sp
+New in version 3.1.
+
+.sp
+Deprecated since version 3.16: Use the \fI\%CMAKE_FIND_USE_PACKAGE_REGISTRY\fP variable instead.
+
+.sp
+By default this variable is not set. If neither
+\fI\%CMAKE_FIND_USE_PACKAGE_REGISTRY\fP nor
+\fBCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY\fP is set, then
+\fI\%find_package()\fP will use the \fI\%User Package Registry\fP
+unless the \fBNO_CMAKE_PACKAGE_REGISTRY\fP option is provided.
+.sp
+\fBCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY\fP is ignored if
+\fI\%CMAKE_FIND_USE_PACKAGE_REGISTRY\fP is set.
+.sp
+In some cases, for example to locate only system wide installations, it
+is not desirable to use the \fI\%User Package Registry\fP when searching
+for packages. If the \fBCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY\fP
+variable is \fBTRUE\fP, all the \fI\%find_package()\fP commands will skip
+the \fI\%User Package Registry\fP as if they were called with the
+\fBNO_CMAKE_PACKAGE_REGISTRY\fP argument.
+.sp
+See also \fI\%Disabling the Package Registry\fP\&.
+.SS CMAKE_FIND_PACKAGE_NO_SYSTEM_PACKAGE_REGISTRY
+.sp
+New in version 3.1.
+
+.sp
+Deprecated since version 3.16: Use the \fI\%CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY\fP variable instead.
+
+.sp
+By default this variable is not set. If neither
+\fI\%CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY\fP nor
+\fBCMAKE_FIND_PACKAGE_NO_SYSTEM_PACKAGE_REGISTRY\fP is set, then
+\fI\%find_package()\fP will use the \fI\%System Package Registry\fP
+unless the \fBNO_CMAKE_SYSTEM_PACKAGE_REGISTRY\fP option is provided.
+.sp
+\fBCMAKE_FIND_PACKAGE_NO_SYSTEM_PACKAGE_REGISTRY\fP is ignored if
+\fI\%CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY\fP is set.
+.sp
+In some cases, it is not desirable to use the
+\fI\%System Package Registry\fP when searching for packages. If the
+\fBCMAKE_FIND_PACKAGE_NO_SYSTEM_PACKAGE_REGISTRY\fP variable is
+\fBTRUE\fP, all the \fI\%find_package()\fP commands will skip
+the \fI\%System Package Registry\fP as if they were called with the
+\fBNO_CMAKE_SYSTEM_PACKAGE_REGISTRY\fP argument.
+.sp
+See also \fI\%Disabling the Package Registry\fP\&.
 .SS CMAKE_FIND_PACKAGE_PREFER_CONFIG
 .sp
 New in version 3.15.
@@ -3742,20 +3532,8 @@ If this variable is not set, the default behavior is \fBALWAYS\fP\&.
 Install directory used by \fI\%install()\fP\&.
 .sp
 If \fBmake install\fP is invoked or \fBINSTALL\fP is built, this directory is
-prepended onto all install directories.
-.sp
-This variable defaults as follows:
-.INDENT 0.0
-.IP \(bu 2
-New in version 3.29: If the \fI\%CMAKE_INSTALL_PREFIX\fP environment variable is set,
-its value is used as default for this variable.
-
-.IP \(bu 2
-\fBc:/Program Files/${PROJECT_NAME}\fP on Windows.
-.IP \(bu 2
-\fB/usr/local\fP on UNIX platforms.
-.UNINDENT
-.sp
+prepended onto all install directories.  This variable defaults to
+\fB/usr/local\fP on UNIX and \fBc:/Program Files/${PROJECT_NAME}\fP on Windows.
 See \fI\%CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT\fP for how a
 project might choose its own default.
 .sp
@@ -3800,10 +3578,9 @@ New in version 3.7.1.
 .sp
 CMake sets this variable to a \fBTRUE\fP value when the
 \fI\%CMAKE_INSTALL_PREFIX\fP has just been initialized to
-its default value, typically on the first
-run of CMake within a new build tree and the \fI\%CMAKE_INSTALL_PREFIX\fP
-environment variable is not set on the first run of CMake. This can be used
-by project code to change the default without overriding a user\-provided value:
+its default value, typically on the first run of CMake within
+a new build tree.  This can be used by project code to change
+the default without overriding a user\-provided value:
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -4248,17 +4025,11 @@ See also \fI\%CMAKE_SYSTEM_PROGRAM_PATH\fP and \fI\%CMAKE_PREFIX_PATH\fP\&.
 New in version 3.15.
 
 .sp
-A CMake language file to be included as the last step of all
+A CMake language file or module to be included as the last step of all
 \fI\%project()\fP command calls.  This is intended for injecting custom code
 into project builds without modifying their source.  See \fI\%Code Injection\fP
 for a more detailed discussion of files potentially included during a
 \fI\%project()\fP call.
-.sp
-New in version 3.29: This variable can be a \fI\%semicolon\-separated list\fP
-of CMake language files to be included sequentially. It can also now refer to
-module names to be found in \fI\%CMAKE_MODULE_PATH\fP or as a builtin
-CMake module.
-
 .sp
 See also the \fI\%CMAKE_PROJECT_<PROJECT\-NAME>_INCLUDE\fP,
 \fI\%CMAKE_PROJECT_<PROJECT\-NAME>_INCLUDE_BEFORE\fP,
@@ -4269,17 +4040,11 @@ See also the \fI\%CMAKE_PROJECT_<PROJECT\-NAME>_INCLUDE\fP,
 New in version 3.15.
 
 .sp
-A CMake language file to be included as the first step of all
+A CMake language file or module to be included as the first step of all
 \fI\%project()\fP command calls.  This is intended for injecting custom code
 into project builds without modifying their source.  See \fI\%Code Injection\fP
 for a more detailed discussion of files potentially included during a
 \fI\%project()\fP call.
-.sp
-New in version 3.29: This variable can be a \fI\%semicolon\-separated list\fP
-of CMake language files to be included sequentially. It can also now refer to
-module names to be found in \fI\%CMAKE_MODULE_PATH\fP or as a builtin
-CMake module.
-
 .sp
 See also the \fI\%CMAKE_PROJECT_<PROJECT\-NAME>_INCLUDE\fP,
 \fI\%CMAKE_PROJECT_<PROJECT\-NAME>_INCLUDE_BEFORE\fP,
@@ -4287,17 +4052,11 @@ See also the \fI\%CMAKE_PROJECT_<PROJECT\-NAME>_INCLUDE\fP,
 \fI\%CMAKE_PROJECT_TOP_LEVEL_INCLUDES\fP variables.
 .SS CMAKE_PROJECT_<PROJECT\-NAME>_INCLUDE
 .sp
-A CMake language file to be included as the last step of any
+A CMake language file or module to be included as the last step of any
 \fI\%project()\fP command calls that specify \fB<PROJECT\-NAME>\fP as the project
 name.  This is intended for injecting custom code into project builds without
 modifying their source.  See \fI\%Code Injection\fP for a more detailed
 discussion of files potentially included during a \fI\%project()\fP call.
-.sp
-New in version 3.29: This variable can be a \fI\%semicolon\-separated list\fP
-of CMake language files to be included sequentially. It can also now refer to
-module names to be found in \fI\%CMAKE_MODULE_PATH\fP or as a builtin
-CMake module.
-
 .sp
 See also the \fI\%CMAKE_PROJECT_<PROJECT\-NAME>_INCLUDE_BEFORE\fP,
 \fI\%CMAKE_PROJECT_INCLUDE\fP, \fI\%CMAKE_PROJECT_INCLUDE_BEFORE\fP,
@@ -4307,17 +4066,11 @@ and \fI\%CMAKE_PROJECT_TOP_LEVEL_INCLUDES\fP variables.
 New in version 3.17.
 
 .sp
-A CMake language file to be included as the first step of any
+A CMake language file or module to be included as the first step of any
 \fI\%project()\fP command calls that specify \fB<PROJECT\-NAME>\fP as the project
 name.  This is intended for injecting custom code into project builds without
 modifying their source.  See \fI\%Code Injection\fP for a more detailed
 discussion of files potentially included during a \fI\%project()\fP call.
-.sp
-New in version 3.29: This variable can be a \fI\%semicolon\-separated list\fP
-of CMake language files to be included sequentially. It can also now refer to
-module names to be found in \fI\%CMAKE_MODULE_PATH\fP or as a builtin
-CMake module.
-
 .sp
 See also the \fI\%CMAKE_PROJECT_<PROJECT\-NAME>_INCLUDE\fP,
 \fI\%CMAKE_PROJECT_INCLUDE\fP, \fI\%CMAKE_PROJECT_INCLUDE_BEFORE\fP,
@@ -4335,10 +4088,6 @@ languages have been enabled. Therefore, language\-specific variables,
 including things like \fI\%CMAKE_<LANG>_COMPILER\fP, might not be set.
 See \fI\%Code Injection\fP for a more detailed discussion of files potentially
 included during a \fI\%project()\fP call.
-.sp
-New in version 3.29: This variable can also now refer to module names to be found in
-\fI\%CMAKE_MODULE_PATH\fP or builtin to CMake.
-
 .sp
 This variable is intended for specifying files that perform one\-time setup
 for the build. It provides an injection point for things like configuring
@@ -4366,49 +4115,6 @@ turned into \fBREQUIRED\fP by setting the variable
 This can be used to assert assumptions about build environment and to
 ensure the build will fail early if they do not hold.
 .sp
-Note that setting this variable to true breaks some commonly used patterns.
-Multiple calls to \fI\%find_package()\fP are sometimes used to obtain a
-different search order to the default.
-For example, projects can force checking a known path for a particular
-package first before searching any of the other default search paths:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-find_package(something PATHS /some/local/path NO_DEFAULT_PATH)
-find_package(something)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-In the above, the first call looks for the \fBsomething\fP package in a specific
-directory.  If \fBCMAKE_REQUIRE_FIND_PACKAGE_something\fP is set to true, then
-this first call must succeed, otherwise a fatal error occurs.  The second call
-never gets a chance to provide a fall\-back to using the default search
-locations.
-.sp
-A similar pattern is used even by some of CMake\(aqs own Find modules to search
-for a config package first:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-find_package(something CONFIG QUIET)
-if(NOT something_FOUND)
-  # Fall back to searching using typical Find module logic...
-endif()
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-Again, if \fBCMAKE_REQUIRE_FIND_PACKAGE_something\fP is true, the first call
-must succeed.  It effectively means a config package must be found for the
-dependency, and the Find module logic is never used.
-.sp
 See also the \fI\%CMAKE_DISABLE_FIND_PACKAGE_<PackageName>\fP variable.
 .SS CMAKE_SKIP_INSTALL_ALL_DEPENDENCY
 .sp
@@ -4420,27 +4126,6 @@ built, first the \fBall\fP target is built, then the installation starts.
 If \fBCMAKE_SKIP_INSTALL_ALL_DEPENDENCY\fP is set to \fBTRUE\fP, this
 dependency is not created, so the installation process will start immediately,
 independent from whether the project has been completely built or not.
-.sp
-See also \fI\%CMAKE_SKIP_TEST_ALL_DEPENDENCY\fP\&.
-.SS CMAKE_SKIP_TEST_ALL_DEPENDENCY
-.sp
-New in version 3.29.
-
-.sp
-Control whether the \fBtest\fP target depends on the \fBall\fP target.
-.sp
-If this variable is not defined, or is set to \fBTRUE\fP, then the
-\fBtest\fP (or \fBRUN_TESTS\fP) target does not depend on the
-\fBall\fP (or \fBALL_BUILD\fP) target.  When the \fBtest\fP target is built,
-e.g., via \fBmake test\fP, the test process will start immediately,
-regardless of whether the project has been completely built or not.
-.sp
-If \fBCMAKE_SKIP_TEST_ALL_DEPENDENCY\fP is explicitly set to \fBFALSE\fP,
-then the \fBtest\fP target will depend on the \fBall\fP target.  When the
-\fBtest\fP target is built, e.g., via \fBmake test\fP, the \fBall\fP target
-will be built first, and then the tests will run.
-.sp
-See also \fI\%CMAKE_SKIP_INSTALL_ALL_DEPENDENCY\fP\&.
 .SS CMAKE_STAGING_PREFIX
 .sp
 This variable may be set to a path to install to when cross\-compiling. This can
@@ -5312,8 +4997,6 @@ Name of the OS CMake is running on.
 On systems that have the uname command, this variable is set to the
 output of \fBuname \-s\fP\&.  \fBLinux\fP, \fBWindows\fP, and \fBDarwin\fP for macOS
 are the values found on the big three operating systems.
-.sp
-For a list of possible values, see \fI\%CMAKE_SYSTEM_NAME\fP\&.
 .SS CMAKE_HOST_SYSTEM_PROCESSOR
 .sp
 The name of the CPU CMake is running on.
@@ -5429,395 +5112,6 @@ targets the host system.
 tree in order to enable \fI\%cross compiling\fP\&.
 In this case the \fI\%CMAKE_SYSTEM_VERSION\fP variable must also be
 set explicitly.
-.SS System Names Known to CMake
-.sp
-The following is a list of possible values, each associated with corresponding
-operating systems or environments.
-.TS
-center;
-|l|l|.
-_
-T{
-Value
-T}	T{
-Name
-T}
-_
-T{
-\fBADSP\fP
-T}	T{
-Analog Devices Audio Digital Signal Processing
-T}
-_
-T{
-\fBAIX\fP
-T}	T{
-IBM Unix operating system
-T}
-_
-T{
-\fBAndroid\fP
-T}	T{
-Android operating system
-T}
-_
-T{
-\fBARTOS\fP
-T}	T{
-Operating system for microcontrollers
-T}
-_
-T{
-\fBBeOS\fP
-T}	T{
-Operating system for personal computers (discontinued)
-T}
-_
-T{
-\fBBlueGeneL\fP
-T}	T{
-Blue Gene/L static environment
-T}
-_
-T{
-\fBBlueGeneP\-dynamic\fP
-T}	T{
-Blue Gene/P dynamic environment
-T}
-_
-T{
-\fBBlueGeneP\-static\fP
-T}	T{
-Blue Gene/P static environment
-T}
-_
-T{
-\fBBlueGeneQ\-dynamic\fP
-T}	T{
-Blue Gene/Q dynamic environment
-T}
-_
-T{
-\fBBlueGeneQ\-static\fP
-T}	T{
-Blue Gene/Q static environment
-T}
-_
-T{
-\fBBSDOS\fP
-T}	T{
-BSD operating system (discontinued)
-T}
-_
-T{
-\fBCatamount\fP
-T}	T{
-Operating system for Cray XT series
-T}
-_
-T{
-\fBCrayLinuxEnvironment\fP
-T}	T{
-Cray Linux Environment
-T}
-_
-T{
-\fBCYGWIN\fP
-T}	T{
-Cygwin environment for Windows
-T}
-_
-T{
-\fBDarwin\fP
-T}	T{
-Apple stationary operating systems (macOS, OS X, etc.)
-T}
-_
-T{
-\fBDOS\fP
-T}	T{
-MS\-DOS or compatible
-T}
-_
-T{
-\fBDragonFly\fP
-T}	T{
-BSD\-derived operating system
-T}
-_
-T{
-\fBeCos\fP
-T}	T{
-Real\-time embedded operating system
-T}
-_
-T{
-\fBEmscripten\fP
-T}	T{
-Compiler toolchain to WebAssembly
-T}
-_
-T{
-\fBEuros\fP
-T}	T{
-Real\-time operating system for embedded devices
-T}
-_
-T{
-\fBFreeBSD\fP
-T}	T{
-FreeBSD operating system
-T}
-_
-T{
-\fBFuchsia\fP
-T}	T{
-Operating system by Google based on the Zircon kernel
-T}
-_
-T{
-\fBGeneric\-ADSP\fP
-T}	T{
-Generic ADSP (Audio DSP) environment
-T}
-_
-T{
-\fBGeneric\-ELF\fP
-T}	T{
-Generic ELF (Executable and Linkable Format) environment
-T}
-_
-T{
-\fBGeneric\fP
-T}	T{
-Some platforms, e.g. bare metal embedded devices
-T}
-_
-T{
-\fBGHS\-MULTI\fP
-T}	T{
-Green Hills Software MULTI environment
-T}
-_
-T{
-\fBGNU\fP
-T}	T{
-GNU/Hurd\-based operating system
-T}
-_
-T{
-\fBHaiku\fP
-T}	T{
-Unix operating system inspired by BeOS
-T}
-_
-T{
-\fBHP\-UX\fP
-T}	T{
-Hewlett Packard Unix
-T}
-_
-T{
-\fBiOS\fP
-T}	T{
-Apple mobile phone operating system
-T}
-_
-T{
-\fBkFreeBSD\fP
-T}	T{
-FreeBSD kernel with a GNU userland
-T}
-_
-T{
-\fBLinux\fP
-T}	T{
-All Linux\-based distributions
-T}
-_
-T{
-\fBMidipix\fP
-T}	T{
-POSIX\-compatible layer for Windows
-T}
-_
-T{
-\fBMirBSD\fP
-T}	T{
-MirOS BSD operating system
-T}
-_
-T{
-\fBMP\-RAS\fP
-T}	T{
-MP\-RAS UNIX operating system
-T}
-_
-T{
-\fBMSYS\fP
-T}	T{
-MSYS environment (MSYSTEM=MSYS)
-T}
-_
-T{
-\fBNetBSD\fP
-T}	T{
-NetBSD operating systems
-T}
-_
-T{
-\fBOpenBSD\fP
-T}	T{
-OpenBSD operating systems
-T}
-_
-T{
-\fBOpenVMS\fP
-T}	T{
-OpenVMS operating system by HP
-T}
-_
-T{
-\fBOS2\fP
-T}	T{
-OS/2 operating system
-T}
-_
-T{
-\fBOSF1\fP
-T}	T{
-Compaq Tru64 UNIX (formerly DEC OSF/1, Digital Unix) (discontinued)
-T}
-_
-T{
-\fBQNX\fP
-T}	T{
-Unix\-like operating system by BlackBerry
-T}
-_
-T{
-\fBRISCos\fP
-T}	T{
-RISC OS operating system
-T}
-_
-T{
-\fBSCO_SV\fP
-T}	T{
-SCO OpenServer 5
-T}
-_
-T{
-\fBSerenityOS\fP
-T}	T{
-Unix\-like operating system
-T}
-_
-T{
-\fBSINIX\fP
-T}	T{
-SINIX operating system
-T}
-_
-T{
-\fBSunOS\fP
-T}	T{
-Oracle Solaris and all illumos operating systems
-T}
-_
-T{
-\fBsyllable\fP
-T}	T{
-Syllable operating system
-T}
-_
-T{
-\fBTru64\fP
-T}	T{
-Compaq Tru64 UNIX (formerly DEC OSF/1) operating system
-T}
-_
-T{
-\fBtvOS\fP
-T}	T{
-Apple TV operating system
-T}
-_
-T{
-\fBULTRIX\fP
-T}	T{
-Unix operating system (discontinued)
-T}
-_
-T{
-\fBUNIX_SV\fP
-T}	T{
-SCO UnixWare (pre release 7)
-T}
-_
-T{
-\fBUnixWare\fP
-T}	T{
-SCO UnixWare 7
-T}
-_
-T{
-\fBvisionOS\fP
-T}	T{
-Apple mixed reality operating system
-T}
-_
-T{
-\fBwatchOS\fP
-T}	T{
-Apple watch operating system
-T}
-_
-T{
-\fBWindows\fP
-T}	T{
-Windows stationary operating systems
-T}
-_
-T{
-\fBWindowsCE\fP
-T}	T{
-Windows Embedded Compact
-T}
-_
-T{
-\fBWindowsPhone\fP
-T}	T{
-Windows mobile phone operating system
-T}
-_
-T{
-\fBWindowsStore\fP
-T}	T{
-Universal Windows Platform applications
-T}
-_
-T{
-\fBXenix\fP
-T}	T{
-SCO Xenix Unix operating system (discontinued)
-T}
-_
-.TE
-.sp
-Platform\-specific notes:
-.INDENT 0.0
-.IP \(bu 2
-MSYS2\(aqs \fBmsys/cmake\fP package (\fB/usr/bin/cmake\fP) works only under
-\fBMSYSTEM=MSYS\fP environments, with system name \fBMSYS\fP\&.  Under other
-environments like \fBMSYSTEM=MINGW64\fP, use another package such
-as \fBmingw64/mingw\-w64\-x86_64\-cmake\fP (\fB/mingw64/bin/cmake\fP),
-which targets \fBMSYSTEM=MINGW64\fP with system name \fBWindows\fP\&.
-.IP \(bu 2
-Cygwin\(aqs \fBcmake\fP package (\fB/usr/bin/cmake\fP) uses system name \fBCYGWIN\fP\&.
-A non\-cygwin CMake on Windows (e.g. \fB$PROGRAMFILES/CMake/bin/cmake\fP)
-uses system name \fBWindows\fP even when it runs under a Cygwin environment.
-.UNINDENT
 .SS CMAKE_SYSTEM_PROCESSOR
 .sp
 When not cross\-compiling, this variable has the same value as the
@@ -5894,6 +5188,66 @@ Set to \fBtrue\fP when the compiler is some version of Microsoft Visual C++
 or another compiler simulating the Visual C++ \fBcl\fP command\-line syntax.
 .sp
 See also the \fI\%MSVC_VERSION\fP variable.
+.SS MSVC10
+.sp
+Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
+.sp
+\fBTrue\fP when using the Microsoft Visual Studio \fBv100\fP toolset
+(\fBcl\fP version 16) or another compiler that simulates it.
+.SS MSVC11
+.sp
+Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
+.sp
+\fBTrue\fP when using the Microsoft Visual Studio \fBv110\fP toolset
+(\fBcl\fP version 17) or another compiler that simulates it.
+.SS MSVC12
+.sp
+Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
+.sp
+\fBTrue\fP when using the Microsoft Visual Studio \fBv120\fP toolset
+(\fBcl\fP version 18) or another compiler that simulates it.
+.SS MSVC14
+.sp
+New in version 3.1.
+
+.sp
+Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
+.sp
+\fBTrue\fP when using the Microsoft Visual Studio \fBv140\fP or \fBv141\fP
+toolset (\fBcl\fP version 19) or another compiler that simulates it.
+.SS MSVC60
+.sp
+Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
+.sp
+\fBTrue\fP when using Microsoft Visual C++ 6.0.
+.sp
+Set to \fBtrue\fP when the compiler is version 6.0 of Microsoft Visual C++.
+.SS MSVC70
+.sp
+Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
+.sp
+\fBTrue\fP when using Microsoft Visual C++ 7.0.
+.sp
+Set to \fBtrue\fP when the compiler is version 7.0 of Microsoft Visual C++.
+.SS MSVC71
+.sp
+Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
+.sp
+\fBTrue\fP when using Microsoft Visual C++ 7.1.
+.sp
+Set to \fBtrue\fP when the compiler is version 7.1 of Microsoft Visual C++.
+.SS MSVC80
+.sp
+Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
+.sp
+\fBTrue\fP when using the Microsoft Visual Studio \fBv80\fP toolset
+(\fBcl\fP version 14) or another compiler that simulates it.
+.SS MSVC90
+.sp
+Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
+.sp
+\fBTrue\fP when using the Microsoft Visual Studio \fBv90\fP toolset
+(\fBcl\fP version 15) or another compiler that simulates it.
 .SS MSVC_IDE
 .sp
 \fBTrue\fP when using the Microsoft Visual C++ IDE.
@@ -6384,47 +5738,13 @@ target files when built for a specific configuration.
 This variable is used to initialize the
 \fI\%ARCHIVE_OUTPUT_DIRECTORY_<CONFIG>\fP property on all the targets.
 See that target property for additional information.
-.SS CMAKE_AUTOGEN_BETTER_GRAPH_MULTI_CONFIG
-.sp
-New in version 3.29.
-
-.sp
-This variable is used to initialize the
-\fI\%AUTOGEN_BETTER_GRAPH_MULTI_CONFIG\fP property on all targets as they
-are created.  See that target property for additional information.
-.sp
-By default \fBCMAKE_AUTOGEN_BETTER_GRAPH_MULTI_CONFIG\fP is unset.
-.SS CMAKE_AUTOGEN_COMMAND_LINE_LENGTH_MAX
-.sp
-New in version 3.29.
-
-.sp
-Command line length limit for autogen targets, i.e. \fBmoc\fP or \fBuic\fP,
-that triggers the use of response files on Windows instead of passing all
-arguments to the command line.
-.sp
-By default \fBCMAKE_AUTOGEN_COMMAND_LINE_LENGTH_MAX\fP is unset.
 .SS CMAKE_AUTOGEN_ORIGIN_DEPENDS
 .sp
 New in version 3.14.
 
 .sp
 Switch for forwarding origin target dependencies to the corresponding
-\fI\%The <ORIGIN>_autogen target\fP targets.
-.INDENT 0.0
-.INDENT 3.5
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-If Qt 5.15 or later is used and the generator is either \fI\%Ninja\fP
-or \fI\%Makefile Generators\fP, additional target dependencies are added to
-the \fI\%The <ORIGIN>_autogen_timestamp_deps target\fP target instead of the
-\fI\%The <ORIGIN>_autogen target\fP target.
-.UNINDENT
-.UNINDENT
-.UNINDENT
-.UNINDENT
+\fB_autogen\fP targets.
 .sp
 This variable is used to initialize the \fI\%AUTOGEN_ORIGIN_DEPENDS\fP
 property on all the targets.  See that target property for additional
@@ -6948,16 +6268,6 @@ the value based on the environment and target platform.
 .sp
 See also the configuration\-specific variable
 \fI\%CMAKE_EXE_LINKER_FLAGS_<CONFIG>_INIT\fP\&.
-.SS CMAKE_EXPORT_FIND_PACKAGE_NAME
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-Experimental. Gated by \fBCMAKE_EXPERIMENTAL_EXPORT_PACKAGE_DEPENDENCIES\fP\&.
-.UNINDENT
-.UNINDENT
-.sp
-Initializes the value of \fI\%EXPORT_FIND_PACKAGE_NAME\fP\&.
 .SS CMAKE_FOLDER
 .sp
 New in version 3.12.
@@ -7026,7 +6336,7 @@ Switch to enable generation of a global \fBautogen\fP target.
 .sp
 When \fBCMAKE_GLOBAL_AUTOGEN_TARGET\fP is enabled, a custom target
 \fBautogen\fP is generated.  This target depends on all \fI\%AUTOMOC\fP and
-\fI\%AUTOUIC\fP generated \fI\%The <ORIGIN>_autogen target\fP targets in the project.
+\fI\%AUTOUIC\fP generated \fB<ORIGIN>_autogen\fP targets in the project.
 By building the global \fBautogen\fP target, all \fI\%AUTOMOC\fP and
 \fI\%AUTOUIC\fP files in the project will be generated.
 .sp
@@ -7037,16 +6347,12 @@ By default \fBCMAKE_GLOBAL_AUTOGEN_TARGET\fP is unset.
 .sp
 See the \fI\%cmake\-qt(7)\fP manual for more information on using CMake
 with Qt.
+.SS Note
 .sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-\fI\%The <ORIGIN>_autogen target\fP targets by default inherit their origin target\(aqs
-dependencies. This might result in unintended dependency target builds when
-only \fI\%The <ORIGIN>_autogen target\fP targets are built.  A solution is to disable
-\fI\%AUTOGEN_ORIGIN_DEPENDS\fP on the respective origin targets.
-.UNINDENT
-.UNINDENT
+\fB<ORIGIN>_autogen\fP targets by default inherit their origin target\(aqs
+dependencies.  This might result in unintended dependency target
+builds when only \fB<ORIGIN>_autogen\fP targets are built.  A solution is to
+disable \fI\%AUTOGEN_ORIGIN_DEPENDS\fP on the respective origin targets.
 .SS CMAKE_GLOBAL_AUTOGEN_TARGET_NAME
 .sp
 New in version 3.14.
@@ -7182,6 +6488,19 @@ New in version 3.9.
 Default value for \fI\%INTERPROCEDURAL_OPTIMIZATION_<CONFIG>\fP of targets.
 .sp
 This variable is used to initialize the \fI\%INTERPROCEDURAL_OPTIMIZATION_<CONFIG>\fP
+property on all the targets.  See that target property for additional
+information.
+.SS CMAKE_IOS_INSTALL_COMBINED
+.sp
+New in version 3.5.
+
+.sp
+Deprecated since version 3.28: This is deprecated because \fI\%IOS_INSTALL_COMBINED\fP is deprecated.
+
+.sp
+Default value for \fI\%IOS_INSTALL_COMBINED\fP of targets.
+.sp
+This variable is used to initialize the \fI\%IOS_INSTALL_COMBINED\fP
 property on all the targets.  See that target property for additional
 information.
 .SS CMAKE_<LANG>_CLANG_TIDY
@@ -7807,80 +7126,6 @@ This is done only when \fB<LANG>\fP is \fBC\fP, \fBCXX\fP, \fBOBJC\fP, or \fBOBJ
 .sp
 This variable is initialized to the \fI\%CMAKE_<LANG>_LINKER_LAUNCHER\fP
 environment variable if it is set.
-.SS CMAKE_<LANG>_USING_LINKER_MODE
-.sp
-New in version 3.29.
-
-.INDENT 0.0
-.TP
-.B This variable specify what is the type of data stored in variable
-\fI\%CMAKE_<LANG>_USING_LINKER_<TYPE>\fP\&. There are two possible values:
-.TP
-.B \fBFLAG\fP
-\fI\%CMAKE_<LANG>_USING_LINKER_<TYPE>\fP holds compiler flags. This is
-the default.
-.TP
-.B \fBTOOL\fP
-\fI\%CMAKE_<LANG>_USING_LINKER_<TYPE>\fP holds the path to the linker
-tool.
-.UNINDENT
-.SS CMAKE_<LANG>_USING_LINKER_<TYPE>
-.sp
-New in version 3.29.
-
-.sp
-This variable defines how to specify the linker for the link step for the type
-as specified by the variable \fI\%CMAKE_LINKER_TYPE\fP or the target
-property \fI\%LINKER_TYPE\fP\&. It can hold compiler flags for the link step
-or directly the linker tool. The type of data is given by the variable
-\fI\%CMAKE_<LANG>_USING_LINKER_MODE\fP\&.
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-The specified linker tool is expected to be accessible through
-the \fBPATH\fP environment variable, particularly when the
-\fI\%CMAKE_<LANG>_USING_LINKER_MODE\fP variable is set to \fBFLAG\fP\&.
-.UNINDENT
-.UNINDENT
-.sp
-For example, to specify the \fBLLVM\fP linker for \fBGNU\fP compilers, we have:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-set(CMAKE_C_USING_LINKER_LLD \(dq\-fuse\-ld=lld\(dq)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-Or on \fBWindows\fP platform, for \fBClang\fP compilers simulating \fBMSVC\fP, we
-have:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-set(CMAKE_C_USING_LINKER_LLD \(dq\-fuse\-ld=lld\-link\(dq)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-And for the \fBMSVC\fP compiler, linker is directly used, so we have:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-set(CMAKE_C_USING_LINKER_LLD \(dq/path/to/lld\-link.exe\(dq)
-set(CMAKE_C_USING_LINKER_MODE TOOL)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
 .SS CMAKE_<LANG>_VISIBILITY_PRESET
 .sp
 Default value for the \fI\%<LANG>_VISIBILITY_PRESET\fP target
@@ -7939,7 +7184,7 @@ target property is true.
 \fBNOTE:\fP
 .INDENT 0.0
 .INDENT 3.5
-CMake version 3.29.0 defaults this variable to \fBFALSE\fP because
+CMake version 3.28.4 defaults this variable to \fBFALSE\fP because
 GNU binutils linkers (\fBld\fP, \fBld.bfd\fP, \fBld.gold\fP) generate spurious
 dependencies on temporary files when LTO is enabled.  See \fI\%GNU bug 30568\fP\&.
 .UNINDENT
@@ -8499,102 +7744,6 @@ This check is currently only defined on \fBELF\fP platforms with value
 \fBldd \-u \-r\fP\&.
 .sp
 See also \fI\%CMAKE_<LANG>_LINK_WHAT_YOU_USE_FLAG\fP variables.
-.SS CMAKE_LINKER_TYPE
-.sp
-New in version 3.29.
-
-.sp
-Specify which linker will be used for the link step.
-.sp
-\fBNOTE:\fP
-.INDENT 0.0
-.INDENT 3.5
-It is assumed that the linker specified is fully compatible with the standard
-one. CMake will not do any options translation.
-.UNINDENT
-.UNINDENT
-.sp
-This variable is used to initialize the \fI\%LINKER_TYPE\fP target
-property when they are created by calls to \fI\%add_library()\fP or
-\fI\%add_executable()\fP commands. It is meaningful only for targets having a
-link step. If set, its value is also used by the \fI\%try_compile()\fP
-command.
-.sp
-Linker types are case\-sensitive and may only contain letters, numbers and
-underscores. Linker types defined in all uppercase are reserved for CMake\(aqs own
-built\-in types. The pre\-defined linker types are:
-.INDENT 0.0
-.TP
-.B \fBDEFAULT\fP
-This type corresponds to standard linking, essentially equivalent to
-not specifying \fI\%LINKER_TYPE\fP target property.
-.TP
-.B \fBSYSTEM\fP
-Use the standard linker delivered by the platform or the standard toolkit
-(for example, \fBSYSTEM\fP imply Microsoft linker for all \fBMSVC\fP compatible
-compilers). This type is supported for the following platforms/compilers:
-.INDENT 7.0
-.IP \(bu 2
-Linux, for \fBGNU\fP, \fBClang\fP, \fBLLVMFlang\fP and \fBNVIDIA\fP compilers.
-.IP \(bu 2
-All Apple variants for \fBAppleClang\fP, \fBClang\fP and \fBGNU\fP compilers.
-.IP \(bu 2
-Windows, for \fBMSVC\fP, \fBGNU\fP, \fBClang\fP and \fBNVIDIA\fP compilers.
-.UNINDENT
-.TP
-.B \fBLLD\fP
-Use the \fBLLVM\fP linker. This type is supported for the following
-platforms/compilers:
-.INDENT 7.0
-.IP \(bu 2
-Linux, for \fBGNU\fP, \fBClang\fP, \fBLLVMFlang\fP and \fBNVIDIA\fP compilers.
-.IP \(bu 2
-All Apple variants for \fBClang\fP and \fBAppleClang\fP compilers.
-.IP \(bu 2
-Windows, for \fBGNU\fP, \fBClang\fP compilers with \fBGNU\fP front\-end and
-\fBCLang\fP, \fBMSVC\fP and \fBNVIDIA\fP compilers with \fBMSVC\fP front\-end.
-.UNINDENT
-.TP
-.B \fBBFD\fP
-Use the \fBGNU\fP linker.  This type is supported for the following
-platforms/compilers:
-.INDENT 7.0
-.IP \(bu 2
-Linux, for \fBGNU\fP, \fBClang\fP, \fBLLVMFlang\fP and \fBNVIDIA\fP compilers.
-.IP \(bu 2
-Windows, for \fBGNU\fP, \fBClang\fP compilers with \fBGNU\fP front\-end.
-.UNINDENT
-.TP
-.B \fBGOLD\fP
-Supported on Linux platform for \fBGNU\fP, \fBClang\fP, \fBLLVMFlang\fP and
-\fBNVIDIA\fP compilers.
-.TP
-.B \fBMOLD\fP
-Use the \fI\%mold linker\fP\&. This type is
-supported on the following platforms:
-.INDENT 7.0
-.IP \(bu 2
-Linux platform for \fBGNU\fP, \fBClang\fP, \fBLLVMFlang\fP and \fBNVIDIA\fP
-compilers.
-.IP \(bu 2
-All Apple variants for \fBClang\fP and \fBAppleClang\fP compilers as an
-alias to \fBSOLD\fP\&.
-.UNINDENT
-.TP
-.B \fBSOLD\fP
-Use the \fI\%sold linker\fP\&. This type
-is only supported on Apple platforms for \fBClang\fP and \fBAppleClang\fP
-compilers.
-.TP
-.B \fBAPPLE_CLASSIC\fP
-Use the Apple linker in the classic behavior (i.e. before \fBXcode 15.0\fP).
-This type is only supported on Apple platforms for \fBGNU\fP, \fBClang\fP and
-\fBAppleClang\fP compilers.
-.TP
-.B \fBMSVC\fP
-Use the Microsoft linker. This type is only supported on Windows
-platform for \fBMSVC\fP and \fBClang\fP compiler with \fBMSVC\fP front\-end.
-.UNINDENT
 .SS CMAKE_MACOSX_BUNDLE
 .sp
 Default value for \fI\%MACOSX_BUNDLE\fP of targets.
@@ -9321,6 +8470,10 @@ New in version 3.20.
 This variable is used to initialize the \fI\%UNITY_BUILD_UNIQUE_ID\fP
 property of targets when they are created.  It specifies the name of the
 unique identifier generated per file in a unity build.
+.SS CMAKE_USE_RELATIVE_PATHS
+.sp
+This variable has no effect.  The partially implemented effect it
+had in previous releases was removed in CMake 3.4.
 .SS CMAKE_VERIFY_INTERFACE_HEADER_SETS
 .sp
 New in version 3.24.
@@ -9714,6 +8867,24 @@ a target is created.
 .sp
 See the \fI\%cmake\-compile\-features(7)\fP manual for information on
 compile features and a list of supported compilers.
+.SS CMAKE_COMPILER_IS_GNUCC
+.sp
+True if the \fBC\fP compiler is GNU.
+.sp
+This variable is deprecated.  Use
+\fI\%CMAKE_C_COMPILER_ID\fP instead.
+.SS CMAKE_COMPILER_IS_GNUCXX
+.sp
+True if the C++ (\fBCXX\fP) compiler is GNU.
+.sp
+This variable is deprecated.  Use
+\fI\%CMAKE_CXX_COMPILER_ID\fP instead.
+.SS CMAKE_COMPILER_IS_GNUG77
+.sp
+True if the \fBFortran\fP compiler is GNU.
+.sp
+This variable is deprecated.  Use
+\fI\%CMAKE_Fortran_COMPILER_ID\fP instead.
 .SS CMAKE_CUDA_ARCHITECTURES
 .sp
 New in version 3.18.
@@ -10352,12 +9523,6 @@ T{
 \fBTI\fP
 T}	T{
 Texas Instruments
-T}
-_
-T{
-\fBTIClang\fP
-T}	T{
-\fI\%Texas Instruments Clang\-based Compilers\fP
 T}
 _
 T{
@@ -11348,6 +10513,12 @@ build outputs by the \fI\%ctest_build()\fP command.
 .sp
 It is initialized by \fI\%ctest(1)\fP, but may be edited in a \fBCTestCustom\fP
 file. See \fI\%ctest_read_custom_files()\fP documentation.
+.SS CTEST_CVS_CHECKOUT
+.sp
+New in version 3.1.
+
+.sp
+Deprecated.  Use \fI\%CTEST_CHECKOUT_COMMAND\fP instead.
 .SS CTEST_CVS_COMMAND
 .sp
 New in version 3.1.
@@ -11564,6 +10735,12 @@ New in version 3.11.
 .sp
 Setting this to 0 prevents \fI\%ctest(1)\fP from being run again when it
 reaches the end of a script run by calling \fI\%ctest \-S\fP\&.
+.SS CTEST_SCP_COMMAND
+.sp
+New in version 3.1.
+
+.sp
+Legacy option.  Not used.
 .SS CTEST_SCRIPT_DIRECTORY
 .sp
 The directory containing the top\-level CTest script.
@@ -11633,6 +10810,12 @@ New in version 3.1.
 .sp
 Specify the CTest \fBTimeOut\fP setting
 in a \fI\%ctest(1)\fP dashboard client script.
+.SS CTEST_TRIGGER_SITE
+.sp
+New in version 3.1.
+
+.sp
+Legacy option.  Not used.
 .SS CTEST_UPDATE_COMMAND
 .sp
 New in version 3.1.
@@ -11981,208 +11164,7 @@ When generating for \fI\%Visual Studio 9 2008\fP or greater with the Intel
 Fortran plugin installed, this specifies the \fB\&.vfproj\fP project file format
 version.  This is intended for internal use by CMake and should not be
 used by project code.
-.SH DEPRECATED VARIABLES THAT PROVIDE INFORMATION
-.SS CMAKE_EXTRA_GENERATOR
-.sp
-Deprecated since version 3.27: Support for \fI\%Extra Generators\fP is deprecated and will be removed from
-a future version of CMake.  IDEs may use the \fI\%cmake\-file\-api(7)\fP
-to view CMake\-generated project build trees.
-
-.sp
-The extra generator used to build the project.  See
-\fI\%cmake\-generators(7)\fP\&.
-.sp
-When using the Eclipse, CodeBlocks, CodeLite, Kate or Sublime generators, CMake
-generates Makefiles (\fI\%CMAKE_GENERATOR\fP) and additionally project
-files for the respective IDE.  This IDE project file generator is stored in
-\fBCMAKE_EXTRA_GENERATOR\fP (e.g.  \fBEclipse CDT4\fP).
-.SH DEPRECATED VARIABLES THAT CHANGE BEHAVIOR
-.SS CMAKE_AUTOMOC_RELAXED_MODE
-.sp
-Deprecated since version 3.15.
-
-.sp
-Switch between strict and relaxed automoc mode.
-.sp
-By default, \fI\%AUTOMOC\fP behaves exactly as described in the
-documentation of the \fI\%AUTOMOC\fP target property.  When set to
-\fBTRUE\fP, it accepts more input and tries to find the correct input file for
-\fBmoc\fP even if it differs from the documented behavior.  In this mode it
-e.g.  also checks whether a header file is intended to be processed by moc
-when a \fB\(dqfoo.moc\(dq\fP file has been included.
-.sp
-Relaxed mode has to be enabled for KDE4 compatibility.
-.SS CMAKE_BACKWARDS_COMPATIBILITY
-.sp
-Deprecated.  See CMake Policy \fI\%CMP0001\fP documentation.
-.SS CMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY
-.sp
-New in version 3.1.
-
-.sp
-Deprecated since version 3.16: Use the \fI\%CMAKE_FIND_USE_PACKAGE_REGISTRY\fP variable instead.
-
-.sp
-By default this variable is not set. If neither
-\fI\%CMAKE_FIND_USE_PACKAGE_REGISTRY\fP nor
-\fBCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY\fP is set, then
-\fI\%find_package()\fP will use the \fI\%User Package Registry\fP
-unless the \fBNO_CMAKE_PACKAGE_REGISTRY\fP option is provided.
-.sp
-\fBCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY\fP is ignored if
-\fI\%CMAKE_FIND_USE_PACKAGE_REGISTRY\fP is set.
-.sp
-In some cases, for example to locate only system wide installations, it
-is not desirable to use the \fI\%User Package Registry\fP when searching
-for packages. If the \fBCMAKE_FIND_PACKAGE_NO_PACKAGE_REGISTRY\fP
-variable is \fBTRUE\fP, all the \fI\%find_package()\fP commands will skip
-the \fI\%User Package Registry\fP as if they were called with the
-\fBNO_CMAKE_PACKAGE_REGISTRY\fP argument.
-.sp
-See also \fI\%Disabling the Package Registry\fP\&.
-.SS CMAKE_FIND_PACKAGE_NO_SYSTEM_PACKAGE_REGISTRY
-.sp
-New in version 3.1.
-
-.sp
-Deprecated since version 3.16: Use the \fI\%CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY\fP variable instead.
-
-.sp
-By default this variable is not set. If neither
-\fI\%CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY\fP nor
-\fBCMAKE_FIND_PACKAGE_NO_SYSTEM_PACKAGE_REGISTRY\fP is set, then
-\fI\%find_package()\fP will use the \fI\%System Package Registry\fP
-unless the \fBNO_CMAKE_SYSTEM_PACKAGE_REGISTRY\fP option is provided.
-.sp
-\fBCMAKE_FIND_PACKAGE_NO_SYSTEM_PACKAGE_REGISTRY\fP is ignored if
-\fI\%CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY\fP is set.
-.sp
-In some cases, it is not desirable to use the
-\fI\%System Package Registry\fP when searching for packages. If the
-\fBCMAKE_FIND_PACKAGE_NO_SYSTEM_PACKAGE_REGISTRY\fP variable is
-\fBTRUE\fP, all the \fI\%find_package()\fP commands will skip
-the \fI\%System Package Registry\fP as if they were called with the
-\fBNO_CMAKE_SYSTEM_PACKAGE_REGISTRY\fP argument.
-.sp
-See also \fI\%Disabling the Package Registry\fP\&.
-.SH DEPRECATED VARIABLES THAT DESCRIBE THE SYSTEM
-.SS MSVC10
-.sp
-Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
-.sp
-\fBTrue\fP when using the Microsoft Visual Studio \fBv100\fP toolset
-(\fBcl\fP version 16) or another compiler that simulates it.
-.SS MSVC11
-.sp
-Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
-.sp
-\fBTrue\fP when using the Microsoft Visual Studio \fBv110\fP toolset
-(\fBcl\fP version 17) or another compiler that simulates it.
-.SS MSVC12
-.sp
-Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
-.sp
-\fBTrue\fP when using the Microsoft Visual Studio \fBv120\fP toolset
-(\fBcl\fP version 18) or another compiler that simulates it.
-.SS MSVC14
-.sp
-New in version 3.1.
-
-.sp
-Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
-.sp
-\fBTrue\fP when using the Microsoft Visual Studio \fBv140\fP or \fBv141\fP
-toolset (\fBcl\fP version 19) or another compiler that simulates it.
-.SS MSVC60
-.sp
-Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
-.sp
-\fBTrue\fP when using Microsoft Visual C++ 6.0.
-.sp
-Set to \fBtrue\fP when the compiler is version 6.0 of Microsoft Visual C++.
-.SS MSVC70
-.sp
-Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
-.sp
-\fBTrue\fP when using Microsoft Visual C++ 7.0.
-.sp
-Set to \fBtrue\fP when the compiler is version 7.0 of Microsoft Visual C++.
-.SS MSVC71
-.sp
-Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
-.sp
-\fBTrue\fP when using Microsoft Visual C++ 7.1.
-.sp
-Set to \fBtrue\fP when the compiler is version 7.1 of Microsoft Visual C++.
-.SS MSVC80
-.sp
-Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
-.sp
-\fBTrue\fP when using the Microsoft Visual Studio \fBv80\fP toolset
-(\fBcl\fP version 14) or another compiler that simulates it.
-.SS MSVC90
-.sp
-Discouraged.  Use the \fI\%MSVC_VERSION\fP variable instead.
-.sp
-\fBTrue\fP when using the Microsoft Visual Studio \fBv90\fP toolset
-(\fBcl\fP version 15) or another compiler that simulates it.
-.SH DEPRECATED VARIABLES THAT CONTROL THE BUILD
-.SS CMAKE_IOS_INSTALL_COMBINED
-.sp
-New in version 3.5.
-
-.sp
-Deprecated since version 3.28: This is deprecated because \fI\%IOS_INSTALL_COMBINED\fP is deprecated.
-
-.sp
-Default value for \fI\%IOS_INSTALL_COMBINED\fP of targets.
-.sp
-This variable is used to initialize the \fI\%IOS_INSTALL_COMBINED\fP
-property on all the targets.  See that target property for additional
-information.
-.SS CMAKE_USE_RELATIVE_PATHS
-.sp
-This variable has no effect.  The partially implemented effect it
-had in previous releases was removed in CMake 3.4.
-.SH DEPRECATED VARIABLES FOR LANGUAGES
-.SS CMAKE_COMPILER_IS_GNUCC
-.sp
-True if the \fBC\fP compiler is GNU.
-.sp
-This variable is deprecated.  Use
-\fI\%CMAKE_C_COMPILER_ID\fP instead.
-.SS CMAKE_COMPILER_IS_GNUCXX
-.sp
-True if the C++ (\fBCXX\fP) compiler is GNU.
-.sp
-This variable is deprecated.  Use
-\fI\%CMAKE_CXX_COMPILER_ID\fP instead.
-.SS CMAKE_COMPILER_IS_GNUG77
-.sp
-True if the \fBFortran\fP compiler is GNU.
-.sp
-This variable is deprecated.  Use
-\fI\%CMAKE_Fortran_COMPILER_ID\fP instead.
-.SH DEPRECATED VARIABLES FOR CTEST
-.SS CTEST_CVS_CHECKOUT
-.sp
-New in version 3.1.
-
-.sp
-Deprecated.  Use \fI\%CTEST_CHECKOUT_COMMAND\fP instead.
-.SS CTEST_SCP_COMMAND
-.sp
-New in version 3.1.
-
-.sp
-Legacy option.  Not used.
-.SS CTEST_TRIGGER_SITE
-.sp
-New in version 3.1.
-
-.sp
-Legacy option.  Not used.
 .SH COPYRIGHT
-2000-2024 Kitware, Inc. and Contributors
+2000-2023 Kitware, Inc. and Contributors
 .\" Generated by docutils manpage writer.
 .

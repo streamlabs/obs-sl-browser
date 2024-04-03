@@ -12,7 +12,7 @@ Write-Output "${github_workspace}\ci\tools\cmake\bin"
 $currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Process)
 $pathArray = $currentPath -split ";"
 $filteredPathArray = $pathArray -notmatch '\\CMake\\'
-$customCMakePath = "${github_workspace}\ci\tools\cmake\bin"
+$customCMakePath = "${github_workspace}\tools\cmake\bin"
 $newPath = $customCMakePath + ";" + ($filteredPathArray -join ";")
 [Environment]::SetEnvironmentVariable("PATH", $newPath, [EnvironmentVariableTarget]::Process)
 Write-Output "Cmake version..."

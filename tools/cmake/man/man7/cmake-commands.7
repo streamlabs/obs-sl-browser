@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "CMAKE-COMMANDS" "7" "Mar 21, 2024" "3.29.0" "CMake"
+.TH "CMAKE-COMMANDS" "7" "Mar 20, 2024" "3.28.4" "CMake"
 .SH NAME
 cmake-commands \- CMake Language Command Reference
 .SH SCRIPTING COMMANDS
@@ -662,7 +662,6 @@ cmake_language(\fI\%EVAL\fP CODE <code>...)
 cmake_language(\fI\%DEFER\fP <options>... CALL <command> [<arg>...])
 cmake_language(\fI\%SET_DEPENDENCY_PROVIDER\fP <command> SUPPORTED_METHODS <methods>...)
 cmake_language(\fI\%GET_MESSAGE_LOG_LEVEL\fP <out\-var>)
-cmake_language(\fI\%EXIT\fP <exit\-code>)
 .ft P
 .fi
 .UNINDENT
@@ -1052,7 +1051,7 @@ If the provider needs to call the built\-in \fI\%find_package()\fP
 implementation as part of its processing, it can do so by including the
 \fBBYPASS_PROVIDER\fP keyword as one of the arguments.
 .TP
-.B \fBFETCHCONTENT_MAKEAVAILABLE_SERIAL\fP
+.B \fBFETCHCONTENT_MAKEAVAILABE_SERIAL\fP
 The \fB<method\-specific\-args>\fP will be everything passed to the
 \fI\%FetchContent_Declare()\fP call that corresponds to the requested
 dependency, with the following exceptions:
@@ -1269,27 +1268,6 @@ the \fI\%CMAKE_MESSAGE_LOG_LEVEL\fP variable.
 If both the command line option and the variable are set, the command line
 option takes precedence. If neither are set, the default logging level
 is returned.
-.UNINDENT
-.SS Terminating Scripts
-.sp
-New in version 3.29.
-
-.INDENT 0.0
-.TP
-.B cmake_language(EXIT <exit\-code>)
-Terminate the current \fI\%cmake \-P\fP script and exit with \fB<exit\-code>\fP\&.
-.sp
-This command works only in \fI\%script mode\fP\&.
-If used outside of that context, it will cause a fatal error.
-.sp
-The \fB<exit\-code>\fP should be non\-negative.
-If \fB<exit\-code>\fP is negative, then the behavior
-is unspecified (e.g., on Windows the error code \-1
-becomes \fB0xffffffff\fP, and on Linux it becomes 255).
-Exit codes above 255 may not be supported by the underlying
-shell or platform, and some shells may interpret values
-above 125 specially.  Therefore, it is advisable to only
-specify an \fB<exit\-code>\fP in the range 0 to 125.
 .UNINDENT
 .SS cmake_minimum_required
 .sp
@@ -2749,80 +2727,11 @@ configure_file(<input> <output>
 .UNINDENT
 .UNINDENT
 .sp
-Copies an \fB<input>\fP file to an \fB<output>\fP file while performing
-\fI\%transformations\fP of the input file content.
-.sp
-If the input file is modified the build system will re\-run CMake to
-re\-configure the file and generate the build system again.
-The generated file is modified and its timestamp updated on subsequent
-cmake runs only if its content is changed.
-.SS Options
-.sp
-The options are:
-.INDENT 0.0
-.TP
-.B \fB<input>\fP
-Path to the input file.  A relative path is treated with respect to
-the value of \fI\%CMAKE_CURRENT_SOURCE_DIR\fP\&.  The input path
-must be a file, not a directory.
-.TP
-.B \fB<output>\fP
-Path to the output file or directory.  A relative path is treated
-with respect to the value of \fI\%CMAKE_CURRENT_BINARY_DIR\fP\&.
-If the path names an existing directory the output file is placed
-in that directory with the same file name as the input file.
-If the path contains non\-existent directories, they are created.
-.TP
-.B \fBNO_SOURCE_PERMISSIONS\fP
-New in version 3.19.
-
-.sp
-Do not transfer the permissions of the input file to the output file.
-The copied file permissions default to the standard 644 value
-(\-rw\-r\-\-r\-\-).
-.TP
-.B \fBUSE_SOURCE_PERMISSIONS\fP
-New in version 3.20.
-
-.sp
-Transfer the permissions of the input file to the output file.
-This is already the default behavior if none of the three permissions\-related
-keywords are given (\fBNO_SOURCE_PERMISSIONS\fP, \fBUSE_SOURCE_PERMISSIONS\fP
-or \fBFILE_PERMISSIONS\fP).  The \fBUSE_SOURCE_PERMISSIONS\fP keyword mostly
-serves as a way of making the intended behavior clearer at the call site.
-.TP
-.B \fBFILE_PERMISSIONS <permissions>...\fP
-New in version 3.20.
-
-.sp
-Ignore the input file\(aqs permissions and use the specified \fB<permissions>\fP
-for the output file instead.
-.TP
-.B \fBCOPYONLY\fP
-Copy the file without replacing any variable references or other
-content.  This option may not be used with \fBNEWLINE_STYLE\fP\&.
-.TP
-.B \fBESCAPE_QUOTES\fP
-Escape any substituted quotes with backslashes (C\-style).
-.TP
-.B \fB@ONLY\fP
-Restrict variable replacement to references of the form \fB@VAR@\fP\&.
-This is useful for configuring scripts that use \fB${VAR}\fP syntax.
-.TP
-.B \fBNEWLINE_STYLE <style>\fP
-Specify the newline style for the output file.  Specify
-\fBUNIX\fP or \fBLF\fP for \fB\en\fP newlines, or specify
-\fBDOS\fP, \fBWIN32\fP, or \fBCRLF\fP for \fB\er\en\fP newlines.
-This option may not be used with \fBCOPYONLY\fP\&.
-.UNINDENT
-.SS Transformations
-.sp
-\fI\%Variables\fP referenced in the input
-file content as \fB@VAR@\fP, \fB${VAR}\fP, \fB$CACHE{VAR}\fP, and
-\fI\%environment variables\fP
-referenced as \fB$ENV{VAR}\fP, will each be replaced with the current value
-of the variable, or the empty string if the variable is not defined.
-Furthermore, input lines of the form
+Copies an \fB<input>\fP file to an \fB<output>\fP file and substitutes
+variable values referenced as \fB@VAR@\fP, \fB${VAR}\fP, \fB$CACHE{VAR}\fP or
+\fB$ENV{VAR}\fP in the input file content.  Each variable reference will be
+replaced with the current value of the variable, or the empty string if
+the variable is not defined.  Furthermore, input lines of the form
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -2933,6 +2842,69 @@ will be replaced, if \fBVAR\fP is defined, with
 .UNINDENT
 .UNINDENT
 
+.sp
+If the input file is modified the build system will re\-run CMake to
+re\-configure the file and generate the build system again.
+The generated file is modified and its timestamp updated on subsequent
+cmake runs only if its content is changed.
+.sp
+The arguments are:
+.INDENT 0.0
+.TP
+.B \fB<input>\fP
+Path to the input file.  A relative path is treated with respect to
+the value of \fI\%CMAKE_CURRENT_SOURCE_DIR\fP\&.  The input path
+must be a file, not a directory.
+.TP
+.B \fB<output>\fP
+Path to the output file or directory.  A relative path is treated
+with respect to the value of \fI\%CMAKE_CURRENT_BINARY_DIR\fP\&.
+If the path names an existing directory the output file is placed
+in that directory with the same file name as the input file.
+If the path contains non\-existent directories, they are created.
+.TP
+.B \fBNO_SOURCE_PERMISSIONS\fP
+New in version 3.19.
+
+.sp
+Do not transfer the permissions of the input file to the output file.
+The copied file permissions default to the standard 644 value
+(\-rw\-r\-\-r\-\-).
+.TP
+.B \fBUSE_SOURCE_PERMISSIONS\fP
+New in version 3.20.
+
+.sp
+Transfer the permissions of the input file to the output file.
+This is already the default behavior if none of the three permissions\-related
+keywords are given (\fBNO_SOURCE_PERMISSIONS\fP, \fBUSE_SOURCE_PERMISSIONS\fP
+or \fBFILE_PERMISSIONS\fP).  The \fBUSE_SOURCE_PERMISSIONS\fP keyword mostly
+serves as a way of making the intended behavior clearer at the call site.
+.TP
+.B \fBFILE_PERMISSIONS <permissions>...\fP
+New in version 3.20.
+
+.sp
+Ignore the input file\(aqs permissions and use the specified \fB<permissions>\fP
+for the output file instead.
+.TP
+.B \fBCOPYONLY\fP
+Copy the file without replacing any variable references or other
+content.  This option may not be used with \fBNEWLINE_STYLE\fP\&.
+.TP
+.B \fBESCAPE_QUOTES\fP
+Escape any substituted quotes with backslashes (C\-style).
+.TP
+.B \fB@ONLY\fP
+Restrict variable replacement to references of the form \fB@VAR@\fP\&.
+This is useful for configuring scripts that use \fB${VAR}\fP syntax.
+.TP
+.B \fBNEWLINE_STYLE <style>\fP
+Specify the newline style for the output file.  Specify
+\fBUNIX\fP or \fBLF\fP for \fB\en\fP newlines, or specify
+\fBDOS\fP, \fBWIN32\fP, or \fBCRLF\fP for \fB\er\en\fP newlines.
+This option may not be used with \fBCOPYONLY\fP\&.
+.UNINDENT
 .SS Example
 .sp
 Consider a source tree containing a \fBfoo.h.in\fP file:
@@ -3415,14 +3387,14 @@ been superseded, respectively, by sub\-commands
 
 \fI\%Writing\fP
   file({\fI\%WRITE\fP | \fI\%APPEND\fP} <filename> <content>...)
-  file({\fI\%TOUCH\fP | \fI\%TOUCH_NOCREATE\fP} <file>...)
+  file({\fI\%TOUCH\fP | \fI\%TOUCH_NOCREATE\fP} [<file>...])
   file(\fI\%GENERATE\fP OUTPUT <output\-file> [...])
   file(\fI\%CONFIGURE\fP OUTPUT <output\-file> CONTENT <content> [...])
 
 \fI\%Filesystem\fP
-  file({\fI\%GLOB\fP | \fI\%GLOB_RECURSE\fP} <out\-var> [...] <globbing\-expr>...)
-  file(\fI\%MAKE_DIRECTORY\fP <directories>...)
-  file({\fI\%REMOVE\fP | \fI\%REMOVE_RECURSE\fP } <files>...)
+  file({\fI\%GLOB\fP | \fI\%GLOB_RECURSE\fP} <out\-var> [...] [<globbing\-expr>...])
+  file(\fI\%MAKE_DIRECTORY\fP [<dir>...])
+  file({\fI\%REMOVE\fP | \fI\%REMOVE_RECURSE\fP } [<files>...])
   file(\fI\%RENAME\fP <oldname> <newname> [...])
   file(\fI\%COPY_FILE\fP <oldname> <newname> [...])
   file({\fI\%COPY\fP | \fI\%INSTALL\fP} <file>... DESTINATION <dir> [...])
@@ -3464,7 +3436,7 @@ If the \fBHEX\fP option is specified, letters in the output
 .UNINDENT
 .INDENT 0.0
 .TP
-.B file(STRINGS <filename> <variable> <options>...)
+.B file(STRINGS <filename> <variable> [<options>...])
 Parse a list of ASCII strings from \fB<filename>\fP and store it in
 \fB<variable>\fP\&.  Binary data in the file are ignored.  Carriage return
 (\fB\er\fP, CR) characters are ignored.  The options are:
@@ -3498,11 +3470,6 @@ binary while reading unless this option is given.
 .B \fBREGEX <regex>\fP
 Consider only strings that match the given regular expression,
 as described under \fI\%string(REGEX)\fP\&.
-.sp
-Changed in version 3.29: Capture groups from the last match in the file are stored in
-\fI\%CMAKE_MATCH_<n>\fP, similar to
-\fI\%string(REGEX MATCHALL)\fP\&.  See policy \fI\%CMP0159\fP\&.
-
 .TP
 .B \fBENCODING <encoding\-type>\fP
 New in version 3.1.
@@ -3568,17 +3535,17 @@ file(GET_RUNTIME_DEPENDENCIES
   [RESOLVED_DEPENDENCIES_VAR <deps_var>]
   [UNRESOLVED_DEPENDENCIES_VAR <unresolved_deps_var>]
   [CONFLICTING_DEPENDENCIES_PREFIX <conflicting_deps_prefix>]
-  [EXECUTABLES <executable_files>...]
-  [LIBRARIES <library_files>...]
-  [MODULES <module_files>...]
-  [DIRECTORIES <directories>...]
+  [EXECUTABLES [<executable_files>...]]
+  [LIBRARIES [<library_files>...]]
+  [MODULES [<module_files>...]]
+  [DIRECTORIES [<directories>...]]
   [BUNDLE_EXECUTABLE <bundle_executable_file>]
-  [PRE_INCLUDE_REGEXES <regexes>...]
-  [PRE_EXCLUDE_REGEXES <regexes>...]
-  [POST_INCLUDE_REGEXES <regexes>...]
-  [POST_EXCLUDE_REGEXES <regexes>...]
-  [POST_INCLUDE_FILES <files>...]
-  [POST_EXCLUDE_FILES <files>...]
+  [PRE_INCLUDE_REGEXES [<regexes>...]]
+  [PRE_EXCLUDE_REGEXES [<regexes>...]]
+  [POST_INCLUDE_REGEXES [<regexes>...]]
+  [POST_EXCLUDE_REGEXES [<regexes>...]]
+  [POST_INCLUDE_FILES [<files>...]]
+  [POST_EXCLUDE_FILES [<files>...]]
   )
 .ft P
 .fi
@@ -3626,7 +3593,7 @@ in \fB<conflicting_deps_prefix>_FILENAMES\fP\&. For each filename, the list
 of paths that were found for that filename are stored in
 \fB<conflicting_deps_prefix>_<filename>\fP\&.
 .TP
-.B \fBEXECUTABLES <executable_files>...\fP
+.B \fBEXECUTABLES <executable_files>\fP
 List of executable files to read for dependencies. These are executables
 that are typically created with \fI\%add_executable()\fP, but they do
 not have to be created by CMake. On Apple platforms, the paths to these
@@ -3634,14 +3601,14 @@ files determine the value of \fB@executable_path\fP when recursively
 resolving the libraries. Specifying any kind of library (\fBSTATIC\fP,
 \fBMODULE\fP, or \fBSHARED\fP) here will result in undefined behavior.
 .TP
-.B \fBLIBRARIES <library_files>...\fP
+.B \fBLIBRARIES <library_files>\fP
 List of library files to read for dependencies. These are libraries that
 are typically created with \fI\%add_library(SHARED)\fP, but they do
 not have to be created by CMake. Specifying \fBSTATIC\fP libraries,
 \fBMODULE\fP libraries, or executables here will result in undefined
 behavior.
 .TP
-.B \fBMODULES <module_files>...\fP
+.B \fBMODULES <module_files>\fP
 List of loadable module files to read for dependencies. These are modules
 that are typically created with \fI\%add_library(MODULE)\fP, but they
 do not have to be created by CMake. They are typically used by calling
@@ -3649,7 +3616,7 @@ do not have to be created by CMake. They are typically used by calling
 Specifying \fBSTATIC\fP libraries, \fBSHARED\fP libraries, or executables
 here will result in undefined behavior.
 .TP
-.B \fBDIRECTORIES <directories>...\fP
+.B \fBDIRECTORIES <directories>\fP
 List of additional directories to search for dependencies. On Linux
 platforms, these directories are searched if the dependency is not found
 in any of the other usual paths. If it is found in such a directory, a
@@ -3678,23 +3645,23 @@ to be resolved. See below for a full description of how they work.
 .INDENT 3.5
 .INDENT 0.0
 .TP
-.B \fBPRE_INCLUDE_REGEXES <regexes>...\fP
+.B \fBPRE_INCLUDE_REGEXES <regexes>\fP
 List of pre\-include regexes through which to filter the names of
 not\-yet\-resolved dependencies.
 .TP
-.B \fBPRE_EXCLUDE_REGEXES <regexes>...\fP
+.B \fBPRE_EXCLUDE_REGEXES <regexes>\fP
 List of pre\-exclude regexes through which to filter the names of
 not\-yet\-resolved dependencies.
 .TP
-.B \fBPOST_INCLUDE_REGEXES <regexes>...\fP
+.B \fBPOST_INCLUDE_REGEXES <regexes>\fP
 List of post\-include regexes through which to filter the names of
 resolved dependencies.
 .TP
-.B \fBPOST_EXCLUDE_REGEXES <regexes>...\fP
+.B \fBPOST_EXCLUDE_REGEXES <regexes>\fP
 List of post\-exclude regexes through which to filter the names of
 resolved dependencies.
 .TP
-.B \fBPOST_INCLUDE_FILES <files>...\fP
+.B \fBPOST_INCLUDE_FILES <files>\fP
 New in version 3.21.
 
 .sp
@@ -3702,7 +3669,7 @@ List of post\-include filenames through which to filter the names of
 resolved dependencies. Symlinks are resolved when attempting to match
 these filenames.
 .TP
-.B \fBPOST_EXCLUDE_FILES <files>...\fP
+.B \fBPOST_EXCLUDE_FILES <files>\fP
 New in version 3.21.
 
 .sp
@@ -3963,9 +3930,9 @@ to update the file only when its content changes.
 .UNINDENT
 .INDENT 0.0
 .TP
-.B file(TOUCH <files>...)
+.B file(TOUCH [<files>...])
 .TP
-.B file(TOUCH_NOCREATE <files>...)
+.B file(TOUCH_NOCREATE [<files>...])
 New in version 3.12.
 
 .sp
@@ -4133,9 +4100,9 @@ Specify the newline style for the output file.  Specify
 .SS Filesystem
 .INDENT 0.0
 .TP
-.B file(GLOB <variable> [LIST_DIRECTORIES\ true|false] [RELATIVE\ <path>] [CONFIGURE_DEPENDS] <globbing\-expressions>...)
+.B file(GLOB <variable> [LIST_DIRECTORIES\ true|false] [RELATIVE\ <path>] [CONFIGURE_DEPENDS] [<globbing\-expressions>...])
 .TP
-.B file(GLOB_RECURSE <variable> [FOLLOW_SYMLINKS] [LIST_DIRECTORIES\ true|false] [RELATIVE\ <path>] [CONFIGURE_DEPENDS] <globbing\-expressions>...)
+.B file(GLOB_RECURSE <variable> [FOLLOW_SYMLINKS] [LIST_DIRECTORIES\ true|false] [RELATIVE\ <path>] [CONFIGURE_DEPENDS] [<globbing\-expressions>...])
 Generate a list of files that match the \fB<globbing\-expressions>\fP and
 store it into the \fB<variable>\fP\&.  Globbing expressions are similar to
 regular expressions, but much simpler.  If \fBRELATIVE\fP flag is
@@ -4225,14 +4192,14 @@ _
 .UNINDENT
 .INDENT 0.0
 .TP
-.B file(MAKE_DIRECTORY <directories>...)
+.B file(MAKE_DIRECTORY [<directories>...])
 Create the given directories and their parents as needed.
 .UNINDENT
 .INDENT 0.0
 .TP
-.B file(REMOVE <files>...)
+.B file(REMOVE [<files>...])
 .TP
-.B file(REMOVE_RECURSE <files>...)
+.B file(REMOVE_RECURSE [<files>...])
 Remove the given files.  The \fBREMOVE_RECURSE\fP mode will remove the given
 files and directories, including non\-empty directories. No error is emitted
 if a given file does not exist.  Relative input paths are evaluated with
@@ -4585,9 +4552,9 @@ as a single argument to this command.
 .SS Transfer
 .INDENT 0.0
 .TP
-.B file(DOWNLOAD <url> [<file>] <options>...)
+.B file(DOWNLOAD <url> [<file>] [<options>...])
 .TP
-.B file(UPLOAD <file> <url> <options>...)
+.B file(UPLOAD <file> <url> [<options>...])
 The \fBDOWNLOAD\fP subcommand downloads the given \fB<url>\fP to a local
 \fB<file>\fP\&.  The \fBUPLOAD\fP mode uploads a local \fB<file>\fP to a given
 \fB<url>\fP\&.
@@ -4836,17 +4803,6 @@ supported.  If the \fBPATTERNS\fP option is not given, the entire archive will
 be listed or extracted.
 .sp
 \fBLIST_ONLY\fP will list the files in the archive rather than extract them.
-.sp
-\fBNOTE:\fP
-.INDENT 7.0
-.INDENT 3.5
-The working directory for this subcommand is the \fBDESTINATION\fP directory
-(provided or computed) except when \fBLIST_ONLY\fP is specified. Therefore,
-outside of script mode, it may be best to provide absolute paths to
-\fBINPUT\fP archives as they are unlikely to be extracted where a relative
-path works.
-.UNINDENT
-.UNINDENT
 .sp
 New in version 3.24: The \fBTOUCH\fP option gives extracted files a current local
 timestamp instead of extracting file timestamps from the archive.
@@ -8319,56 +8275,6 @@ Resolves symbolic links, i.e. if the named file or directory is a
 symbolic link, returns true if the target of the symbolic link exists.
 .sp
 False if the given path is an empty string.
-.sp
-\fBNOTE:\fP
-.INDENT 7.0
-.INDENT 3.5
-Prefer \fBif(IS_READABLE)\fP to check file readability.  \fBif(EXISTS)\fP
-may be changed in the future to only check file existence.
-.UNINDENT
-.UNINDENT
-.UNINDENT
-.INDENT 0.0
-.TP
-.B if(IS_READABLE <path\-to\-file\-or\-directory>)
-New in version 3.29.
-
-.sp
-True if the named file or directory is readable.  Behavior
-is well\-defined only for explicit full paths (a leading \fB~/\fP is not
-expanded as a home directory and is considered a relative path).
-Resolves symbolic links, i.e. if the named file or directory is a
-symbolic link, returns true if the target of the symbolic link is readable.
-.sp
-False if the given path is an empty string.
-.UNINDENT
-.INDENT 0.0
-.TP
-.B if(IS_WRITABLE <path\-to\-file\-or\-directory>)
-New in version 3.29.
-
-.sp
-True if the named file or directory is writable.  Behavior
-is well\-defined only for explicit full paths (a leading \fB~/\fP is not
-expanded as a home directory and is considered a relative path).
-Resolves symbolic links, i.e. if the named file or directory is a
-symbolic link, returns true if the target of the symbolic link is writable.
-.sp
-False if the given path is an empty string.
-.UNINDENT
-.INDENT 0.0
-.TP
-.B if(IS_EXECUTABLE <path\-to\-file\-or\-directory>)
-New in version 3.29.
-
-.sp
-True if the named file or directory is executable.  Behavior
-is well\-defined only for explicit full paths (a leading \fB~/\fP is not
-expanded as a home directory and is considered a relative path).
-Resolves symbolic links, i.e. if the named file or directory is a
-symbolic link, returns true if the target of the symbolic link is executable.
-.sp
-False if the given path is an empty string.
 .UNINDENT
 .INDENT 0.0
 .TP
@@ -9808,7 +9714,7 @@ CMakeLists.txt
 .sp
 .nf
 .ft C
-cmake_minimum_required(VERSION 3.25)
+cmake_version_required(VERSION 3.25)
 project(example)
 
 set(var1 \(dqtop\-value\(dq)
@@ -11627,11 +11533,6 @@ and for the \fI\%Xcode\fP generator.  Support for
 added.
 
 .sp
-New in version 3.29: The \fI\%Ninja Generators\fP will now incorporate the dependencies into its
-\(dqdeps log\(dq database if the file is not listed in \fBOUTPUTS\fP or
-\fBBYPRODUCTS\fP\&.
-
-.sp
 Using \fBDEPFILE\fP with generators other than those listed above is an error.
 .sp
 If the \fBDEPFILE\fP argument is relative, it should be relative to
@@ -11830,14 +11731,11 @@ For \fBVisual Studio 12 2013 (and newer)\fP generators these command
 lines or custom commands will be omitted for the specific
 configuration and no \(dqempty\-string\-command\(dq will be added.
 .sp
-This allows adding individual build events for every configuration.
+This allows to add individual build events for every configuration.
 .UNINDENT
 .UNINDENT
 .sp
 New in version 3.21: Support for target\-dependent generator expressions.
-
-.sp
-New in version 3.29: The \fB<target>\fP may be an \fI\%ALIAS target\fP\&.
 
 .SS Examples: Build Events
 .sp
@@ -12220,29 +12118,21 @@ file\-level dependencies to object files.
 Add an executable to the project using the specified source files.
 .SS Normal Executables
 .INDENT 0.0
-.TP
-.B add_executable(<name> <options>... <sources>...)
-Add an executable target called \fB<name>\fP to be built from the source
-files listed in the command invocation.
+.INDENT 3.5
 .sp
-The options are:
-.INDENT 7.0
-.TP
-.B \fBWIN32\fP
-Set the \fI\%WIN32_EXECUTABLE\fP target property automatically.
-See documentation of that target property for details.
-.TP
-.B \fBMACOSX_BUNDLE\fP
-Set the \fI\%MACOSX_BUNDLE\fP target property automatically.
-See documentation of that target property for details.
-.TP
-.B \fBEXCLUDE_FROM_ALL\fP
-Set the \fI\%EXCLUDE_FROM_ALL\fP target property automatically.
-See documentation of that target property for details.
+.nf
+.ft C
+add_executable(<name> [WIN32] [MACOSX_BUNDLE]
+               [EXCLUDE_FROM_ALL]
+               [source1] [source2 ...])
+.ft P
+.fi
 .UNINDENT
 .UNINDENT
 .sp
-The \fB<name>\fP corresponds to the logical target name and must be globally
+Adds an executable target called \fB<name>\fP to be built from the source
+files listed in the command invocation.  The
+\fB<name>\fP corresponds to the logical target name and must be globally
 unique within a project.  The actual file name of the executable built is
 constructed based on conventions of the native platform (such as
 \fB<name>.exe\fP or just \fB<name>\fP).
@@ -12263,6 +12153,18 @@ command was invoked.  See documentation of the
 location.  See documentation of the \fI\%OUTPUT_NAME\fP target property
 to change the \fB<name>\fP part of the final file name.
 .sp
+If \fBWIN32\fP is given the property \fI\%WIN32_EXECUTABLE\fP will be
+set on the target created.  See documentation of that target property for
+details.
+.sp
+If \fBMACOSX_BUNDLE\fP is given the corresponding property will be set on
+the created target.  See documentation of the \fI\%MACOSX_BUNDLE\fP
+target property for details.
+.sp
+If \fBEXCLUDE_FROM_ALL\fP is given the corresponding property will be set on
+the created target.  See documentation of the \fI\%EXCLUDE_FROM_ALL\fP
+target property for details.
+.sp
 See the \fI\%cmake\-buildsystem(7)\fP manual for more on defining
 buildsystem properties.
 .sp
@@ -12271,26 +12173,23 @@ pre\-processed, and you want to have the original sources reachable from
 within IDE.
 .SS Imported Executables
 .INDENT 0.0
-.TP
-.B add_executable(<name> IMPORTED [GLOBAL])
-Add an \fI\%IMPORTED executable target\fP to reference
-an executable file located outside the project.  The target name may be
-referenced like any target built within the project, except that by
-default it is visible only in the directory in which it is created,
-and below.
+.INDENT 3.5
 .sp
-The options are:
-.INDENT 7.0
-.TP
-.B \fBGLOBAL\fP
-Make the target name globally visible.
+.nf
+.ft C
+add_executable(<name> IMPORTED [GLOBAL])
+.ft P
+.fi
 .UNINDENT
 .UNINDENT
 .sp
-No rules are generated to build imported targets, and the \fI\%IMPORTED\fP
-target property is \fBTrue\fP\&.  Imported executables are useful for convenient
-reference from commands like \fI\%add_custom_command()\fP\&.
-.sp
+An \fI\%IMPORTED executable target\fP references an
+executable file located outside the project.  No rules are generated to
+build it, and the \fI\%IMPORTED\fP target property is \fBTrue\fP\&.  The
+target name has scope in the directory in which it is created and below, but
+the \fBGLOBAL\fP option extends visibility.  It may be referenced like any
+target built within the project.  \fBIMPORTED\fP executables are useful
+for convenient reference from commands like \fI\%add_custom_command()\fP\&.
 Details about the imported executable are specified by setting properties
 whose names begin in \fBIMPORTED_\fP\&.  The most important such property is
 \fI\%IMPORTED_LOCATION\fP (and its per\-configuration version
@@ -12299,13 +12198,20 @@ the main executable file on disk.  See documentation of the \fBIMPORTED_*\fP
 properties for more information.
 .SS Alias Executables
 .INDENT 0.0
-.TP
-.B add_executable(<name> ALIAS <target>)
+.INDENT 3.5
+.sp
+.nf
+.ft C
+add_executable(<name> ALIAS <target>)
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
 Creates an \fI\%Alias Target\fP, such that \fB<name>\fP can
 be used to refer to \fB<target>\fP in subsequent commands.  The \fB<name>\fP
 does not appear in the generated buildsystem as a make target.  The
 \fB<target>\fP may not be an \fBALIAS\fP\&.
-.UNINDENT
 .sp
 New in version 3.11: An \fBALIAS\fP can target a \fBGLOBAL\fP \fI\%Imported Target\fP
 
@@ -12333,42 +12239,24 @@ An \fBALIAS\fP target may not be installed or exported.
 Add a library to the project using the specified source files.
 .SS Normal Libraries
 .INDENT 0.0
-.TP
-.B add_library(<name> [<type>] [EXCLUDE_FROM_ALL] <sources>...)
-Add a library target called \fB<name>\fP to be built from the source files
-listed in the command invocation.
+.INDENT 3.5
 .sp
-The optional \fB<type>\fP specifies the type of library to be created:
-.INDENT 7.0
-.TP
-.B \fBSTATIC\fP
-An archive of object files for use when linking other targets.
-.TP
-.B \fBSHARED\fP
-A dynamic library that may be linked by other targets and loaded
-at runtime.
-.TP
-.B \fBMODULE\fP
-A plugin that may not be linked by other targets, but may be
-dynamically loaded at runtime using dlopen\-like functionality.
-.UNINDENT
-.sp
-If no \fB<type>\fP is given the default is \fBSTATIC\fP or \fBSHARED\fP
-based on the value of the \fI\%BUILD_SHARED_LIBS\fP variable.
-.sp
-The options are:
-.INDENT 7.0
-.TP
-.B \fBEXCLUDE_FROM_ALL\fP
-Set the \fI\%EXCLUDE_FROM_ALL\fP target property automatically.
-See documentation of that target property for details.
+.nf
+.ft C
+add_library(<name> [STATIC | SHARED | MODULE]
+            [EXCLUDE_FROM_ALL]
+            [<source>...])
+.ft P
+.fi
 .UNINDENT
 .UNINDENT
 .sp
-The \fB<name>\fP corresponds to the logical target name and must be globally
-unique within a project.  The actual file name of the library built is
-constructed based on conventions of the native platform (such as
-\fBlib<name>.a\fP or \fB<name>.lib\fP).
+Adds a library target called \fB<name>\fP to be built from the source files
+listed in the command invocation.  The \fB<name>\fP
+corresponds to the logical target name and must be globally unique within
+a project.  The actual file name of the library built is constructed based
+on conventions of the native platform (such as \fBlib<name>.a\fP or
+\fB<name>.lib\fP).
 .sp
 New in version 3.1: Source arguments to \fBadd_library\fP may use \(dqgenerator expressions\(dq with
 the syntax \fB$<...>\fP\&.  See the \fI\%cmake\-generator\-expressions(7)\fP
@@ -12379,8 +12267,15 @@ New in version 3.11: The source files can be omitted if they are added later usi
 \fI\%target_sources()\fP\&.
 
 .sp
-For \fBSHARED\fP and \fBMODULE\fP libraries the
-\fI\%POSITION_INDEPENDENT_CODE\fP target
+\fBSTATIC\fP, \fBSHARED\fP, or \fBMODULE\fP may be given to specify the type of
+library to be created.  \fBSTATIC\fP libraries are archives of object files
+for use when linking other targets.  \fBSHARED\fP libraries are linked
+dynamically and loaded at runtime.  \fBMODULE\fP libraries are plugins that
+are not linked into other targets but may be loaded dynamically at runtime
+using dlopen\-like functionality.  If no type is given explicitly the
+type is \fBSTATIC\fP or \fBSHARED\fP based on whether the current value of the
+variable \fI\%BUILD_SHARED_LIBS\fP is \fBON\fP\&.  For \fBSHARED\fP and
+\fBMODULE\fP libraries the \fI\%POSITION_INDEPENDENT_CODE\fP target
 property is set to \fBON\fP automatically.
 A \fBSHARED\fP library may be marked with the \fI\%FRAMEWORK\fP
 target property to create an macOS Framework.
@@ -12403,6 +12298,10 @@ invoked.  See documentation of the \fI\%ARCHIVE_OUTPUT_DIRECTORY\fP,
 location.  See documentation of the \fI\%OUTPUT_NAME\fP target
 property to change the \fB<name>\fP part of the final file name.
 .sp
+If \fBEXCLUDE_FROM_ALL\fP is given the corresponding property will be set on
+the created target.  See documentation of the \fI\%EXCLUDE_FROM_ALL\fP
+target property for details.
+.sp
 See the \fI\%cmake\-buildsystem(7)\fP manual for more on defining
 buildsystem properties.
 .sp
@@ -12411,14 +12310,20 @@ pre\-processed, and you want to have the original sources reachable from
 within IDE.
 .SS Object Libraries
 .INDENT 0.0
-.TP
-.B add_library(<name> OBJECT <sources>...)
-Add an \fI\%Object Library\fP to compile source files
-without archiving or linking their object files into a library.
+.INDENT 3.5
+.sp
+.nf
+.ft C
+add_library(<name> OBJECT [<source>...])
+.ft P
+.fi
+.UNINDENT
 .UNINDENT
 .sp
-Other targets created by \fBadd_library\fP or \fI\%add_executable()\fP
-may reference the objects using an expression of the
+Creates an \fI\%Object Library\fP\&.  An object library
+compiles source files but does not archive or link their object files into a
+library.  Instead other targets created by \fBadd_library\fP or
+\fI\%add_executable()\fP may reference the objects using an expression of the
 form \fI\%$<TARGET_OBJECTS:objlib>\fP as a source, where
 \fBobjlib\fP is the object library name.  For example:
 .INDENT 0.0
@@ -12447,18 +12352,23 @@ New in version 3.12: Object libraries can be linked to with \fI\%target_link_lib
 
 .SS Interface Libraries
 .INDENT 0.0
-.TP
-.B add_library(<name> INTERFACE)
-Add an \fI\%Interface Library\fP target that may
-specify usage requirements for dependents but does not compile sources
-and does not produce a library artifact on disk.
+.INDENT 3.5
 .sp
-An interface library with no source files is not included as a target
-in the generated buildsystem.  However, it may have
+.nf
+.ft C
+add_library(<name> INTERFACE)
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Creates an \fI\%Interface Library\fP\&.
+An \fBINTERFACE\fP library target does not compile sources and does
+not produce a library artifact on disk.  However, it may have
 properties set on it and it may be installed and exported.
 Typically, \fBINTERFACE_*\fP properties are populated on an interface
 target using the commands:
-.INDENT 7.0
+.INDENT 0.0
 .IP \(bu 2
 \fI\%set_property()\fP,
 .IP \(bu 2
@@ -12478,23 +12388,29 @@ target using the commands:
 and then it is used as an argument to \fI\%target_link_libraries()\fP
 like any other target.
 .sp
+An interface library created with the above signature has no source files
+itself and is not included as a target in the generated buildsystem.
+.sp
 New in version 3.15: An interface library can have \fI\%PUBLIC_HEADER\fP and
 \fI\%PRIVATE_HEADER\fP properties.  The headers specified by those
 properties can be installed using the \fI\%install(TARGETS)\fP command.
 
-.UNINDENT
-.INDENT 0.0
-.TP
-.B add_library(<name> INTERFACE [EXCLUDE_FROM_ALL] <sources>...)
-New in version 3.19.
-
 .sp
-Add an \fI\%Interface Library\fP target with
-source files (in addition to usage requirements and properties as
-documented by the \fI\%above signature\fP).
-Source files may be listed directly in the \fBadd_library\fP call
-or added later by calls to \fI\%target_sources()\fP with the
-\fBPRIVATE\fP or \fBPUBLIC\fP keywords.
+New in version 3.19: An interface library target may be created with source files:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+add_library(<name> INTERFACE [<source>...] [EXCLUDE_FROM_ALL])
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Source files may be listed directly in the \fBadd_library\fP call or added
+later by calls to \fI\%target_sources()\fP with the \fBPRIVATE\fP or
+\fBPUBLIC\fP keywords.
 .sp
 If an interface library has source files (i.e. the \fI\%SOURCES\fP
 target property is set), or header sets (i.e. the \fI\%HEADER_SETS\fP
@@ -12503,17 +12419,10 @@ as a build target much like a target defined by the
 \fI\%add_custom_target()\fP command.  It does not compile any sources,
 but does contain build rules for custom commands created by the
 \fI\%add_custom_command()\fP command.
-.sp
-The options are:
-.INDENT 7.0
-.TP
-.B \fBEXCLUDE_FROM_ALL\fP
-Set the \fI\%EXCLUDE_FROM_ALL\fP target property automatically.
-See documentation of that target property for details.
-.UNINDENT
+
 .sp
 \fBNOTE:\fP
-.INDENT 7.0
+.INDENT 0.0
 .INDENT 3.5
 In most command signatures where the \fBINTERFACE\fP keyword appears,
 the items listed after it only become part of that target\(aqs usage
@@ -12524,18 +12433,30 @@ call are \fBPRIVATE\fP to the interface library and do not appear in its
 \fI\%INTERFACE_SOURCES\fP target property.
 .UNINDENT
 .UNINDENT
-.UNINDENT
 .SS Imported Libraries
 .INDENT 0.0
-.TP
-.B add_library(<name> <type> IMPORTED [GLOBAL])
-Add an \fI\%IMPORTED library target\fP called \fB<name>\fP\&.
-The target name may be referenced like any target built within the project,
-except that by default it is visible only in the directory in which it is
-created, and below.
+.INDENT 3.5
+.sp
+.nf
+.ft C
+add_library(<name> <type> IMPORTED [GLOBAL])
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Creates an \fI\%IMPORTED library target\fP called \fB<name>\fP\&.
+No rules are generated to build it, and the \fI\%IMPORTED\fP target
+property is \fBTrue\fP\&.  The target name has scope in the directory in which
+it is created and below, but the \fBGLOBAL\fP option extends visibility.
+It may be referenced like any target built within the project.
+\fBIMPORTED\fP libraries are useful for convenient reference from commands
+like \fI\%target_link_libraries()\fP\&.  Details about the imported library
+are specified by setting properties whose names begin in \fBIMPORTED_\fP and
+\fBINTERFACE_\fP\&.
 .sp
 The \fB<type>\fP must be one of:
-.INDENT 7.0
+.INDENT 0.0
 .TP
 .B \fBSTATIC\fP, \fBSHARED\fP, \fBMODULE\fP, \fBUNKNOWN\fP
 References a library file located outside the project.  The
@@ -12562,53 +12483,44 @@ library (and is optional, but needed by the \fI\%TARGET_RUNTIME_DLLS\fP
 generator expression).
 .UNINDENT
 .sp
-Additional usage requirements may be specified in \fBINTERFACE_*\fP
-properties.
+Additional usage requirements may be specified in \fBINTERFACE_*\fP properties.
 .sp
-An \fBUNKNOWN\fP library type is typically only used in the implementation
-of \fI\%Find Modules\fP\&.  It allows the path to an imported library
-(often found using the \fI\%find_library()\fP command) to be used
-without having to know what type of library it is.  This is especially
-useful on Windows where a static library and a DLL\(aqs import library
-both have the same file extension.
+An \fBUNKNOWN\fP library type is typically only used in the implementation of
+\fI\%Find Modules\fP\&.  It allows the path to an imported library (often found
+using the \fI\%find_library()\fP command) to be used without having to know
+what type of library it is.  This is especially useful on Windows where a
+static library and a DLL\(aqs import library both have the same file extension.
 .TP
 .B \fBOBJECT\fP
 References a set of object files located outside the project.
 The \fI\%IMPORTED_OBJECTS\fP target property (or its per\-configuration
 variant \fI\%IMPORTED_OBJECTS_<CONFIG>\fP) specifies the locations of
 object files on disk.
-Additional usage requirements may be specified in \fBINTERFACE_*\fP
-properties.
+Additional usage requirements may be specified in \fBINTERFACE_*\fP properties.
 .TP
 .B \fBINTERFACE\fP
 Does not reference any library or object files on disk, but may
 specify usage requirements in \fBINTERFACE_*\fP properties.
 .UNINDENT
 .sp
-The options are:
-.INDENT 7.0
-.TP
-.B \fBGLOBAL\fP
-Make the target name globally visible.
-.UNINDENT
-.UNINDENT
-.sp
-No rules are generated to build imported targets, and the \fI\%IMPORTED\fP
-target property is \fBTrue\fP\&.  Imported libraries are useful for convenient
-reference from commands like \fI\%target_link_libraries()\fP\&.
-.sp
-Details about the imported library are specified by setting properties whose
-names begin in \fBIMPORTED_\fP and \fBINTERFACE_\fP\&.  See documentation of
-such properties for more information.
+See documentation of the \fBIMPORTED_*\fP and \fBINTERFACE_*\fP properties
+for more information.
 .SS Alias Libraries
 .INDENT 0.0
-.TP
-.B add_library(<name> ALIAS <target>)
+.INDENT 3.5
+.sp
+.nf
+.ft C
+add_library(<name> ALIAS <target>)
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
 Creates an \fI\%Alias Target\fP, such that \fB<name>\fP can be
 used to refer to \fB<target>\fP in subsequent commands.  The \fB<name>\fP does
 not appear in the generated buildsystem as a make target.  The \fB<target>\fP
 may not be an \fBALIAS\fP\&.
-.UNINDENT
 .sp
 New in version 3.11: An \fBALIAS\fP can target a \fBGLOBAL\fP \fI\%Imported Target\fP
 
@@ -12815,60 +12727,9 @@ directory the test is created in.
 .INDENT 0.0
 .TP
 .B \fBCOMMAND\fP
-Specify the test command\-line.
-.sp
-If \fB<command>\fP specifies an executable target created by
-\fI\%add_executable()\fP:
-.INDENT 7.0
-.IP \(bu 2
-It will automatically be replaced by the location of the executable
-created at build time.
-.IP \(bu 2
-New in version 3.3: The target\(aqs \fI\%CROSSCOMPILING_EMULATOR\fP, if set, will be
-used to run the command on the host:
-.INDENT 2.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-<emulator> <command>
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-Changed in version 3.29: The emulator is used only when
-\fI\%cross\-compiling\fP\&.
-See policy \fI\%CMP0158\fP\&.
-
-
-.IP \(bu 2
-New in version 3.29: The target\(aqs \fI\%TEST_LAUNCHER\fP, if set, will be
-used to launch the command:
-.INDENT 2.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-<launcher> <command>
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-If the \fI\%CROSSCOMPILING_EMULATOR\fP is also set, both are used:
-.INDENT 2.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-<launcher> <emulator> <command>
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-
-.UNINDENT
+Specify the test command\-line.  If \fB<command>\fP specifies an executable
+target created by \fI\%add_executable()\fP, it will automatically be
+replaced by the location of the executable created at build time.
 .sp
 The command may be specified using
 \fI\%generator expressions\fP\&.
@@ -13138,79 +12999,38 @@ add_custom_target(verify_project
 .UNINDENT
 .SS create_test_sourcelist
 .sp
-Create a test driver program that links together many small tests into a
-single executable.  This is useful when building static executables with
-large libraries to shrink the total required size.
+Create a test driver and source list for building test programs.
 .INDENT 0.0
-.TP
-.B create_test_sourcelist(<sourceListName> <driverName> <test>... <options>...)
-Generate a test driver source file from a list of individual test sources
-and provide a combined list of sources that can be built as an executable.
-.sp
-The options are:
-.INDENT 7.0
-.TP
-.B \fB<sourceListName>\fP
-The name of a variable in which to store the list of source files needed
-to build the test driver.  The list will contain the \fB<test>...\fP sources
-and the generated \fB<driverName>\fP source.
-.sp
-Changed in version 3.29: The test driver source is listed by absolute path in the build tree.
-Previously it was listed only as \fB<driverName>\fP\&.
-
-.TP
-.B \fB<driverName>\fP
-Name of the test driver source file to be generated into the build tree.
-The source file will contain a \fBmain()\fP program entry point that
-dispatches to whatever test is named on the command line.
-.TP
-.B \fB<test>...\fP
-Test source files to be added to the driver binary.  Each test source
-file must have a function in it that is the same name as the file with the
-extension removed.  For example, a \fBfoo.cxx\fP test source might contain:
-.INDENT 7.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-int foo(int argc, char** argv)
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.TP
-.B \fBEXTRA_INCLUDE <header>\fP
-Specify a header file to \fB#include\fP in the generated test driver source.
-.TP
-.B \fBFUNCTION <function>\fP
-Specify a function to be called with pointers to \fBargc\fP and \fBargv\fP\&.
-The function may be provided in the \fBEXTRA_INCLUDE\fP header:
-.INDENT 7.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-void function(int* pargc, char*** pargv)
+create_test_sourcelist(<sourceListName> <driverName>
+                       <tests> ...
+                       [EXTRA_INCLUDE <include>]
+                       [FUNCTION <function>])
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
 .sp
-This can be used to add extra command line processing to each test.
-.UNINDENT
-.UNINDENT
-.sp
-Additionally, some CMake variables affect test driver generation:
-.INDENT 0.0
-.TP
-.B CMAKE_TESTDRIVER_BEFORE_TESTMAIN
-Code to be placed directly before calling each test\(aqs function.
-.UNINDENT
-.INDENT 0.0
-.TP
-.B CMAKE_TESTDRIVER_AFTER_TESTMAIN
-Code to be placed directly after the call to each test\(aqs function.
-.UNINDENT
+A test driver is a program that links together many small tests into a single
+executable.  This is useful when building static executables with large
+libraries to shrink the total required size.  The list of source files needed
+to build the test driver will be in \fBsourceListName\fP\&.  \fBdriverName\fP is the
+name of the test driver program. The rest of the arguments consist of a list
+of test source files and can be semicolon separated.  Each test source file
+should have a function in it that is the same name as the file with no
+extension (\fBfoo.cxx\fP should have \fBint foo(int, char*[]);\fP). \fBdriverName\fP
+will be able to call each of the tests by name on the command line.  If
+\fBEXTRA_INCLUDE\fP is specified, then the next argument is included into the
+generated file. If \fBFUNCTION\fP is specified, then the next argument is taken
+as a function name that is passed pointers to \fBargc\fP and \fBargv\fP\&.  This can
+be used to add extra command line processing to each test.  The
+\fBCMAKE_TESTDRIVER_BEFORE_TESTMAIN\fP cmake variable can be set to have code
+that will be placed directly before calling the test \fBmain\fP function.
+\fBCMAKE_TESTDRIVER_AFTER_TESTMAIN\fP can be set to have code that will be
+placed directly after the call to the test \fBmain\fP function.
 .SS define_property
 .sp
 Define and document custom properties.
@@ -13298,46 +13118,6 @@ with \fBCMAKE_\fP or \fB_CMAKE_\fP\&. The property name must contain at least on
 underscore. It is recommended that the property name have a prefix specific
 to the project.
 
-.SS Property Redefinition
-.sp
-Once a property is defined for a particular type of scope, it cannot be
-redefined. Attempts to redefine an existing property by calling
-\fI\%define_property()\fP with the same scope type and property name
-will be silently ignored. Defining the same property name for two different
-kinds of scope is valid.
-.sp
-\fI\%get_property()\fP can be used to determine whether a property is
-already defined for a particular kind of scope, and if so, to examine its
-definition. For example:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-# Initial definition
-define_property(TARGET PROPERTY MY_NEW_PROP
-  BRIEF_DOCS \(dqMy new custom property\(dq
-)
-
-# Later examination
-get_property(my_new_prop_exists
-  TARGET NONE
-  PROPERTY MY_NEW_PROP
-  DEFINED
-)
-
-if(my_new_prop_exists)
-  get_property(my_new_prop_docs
-    TARGET NONE
-    PROPERTY MY_NEW_PROP
-    BRIEF_DOCS
-  )
-  # ${my_new_prop_docs} is now set to \(dqMy new custom property\(dq
-endif()
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
 .SS See Also
 .INDENT 0.0
 .IP \(bu 2
@@ -13441,16 +13221,11 @@ install tree.
 export(\fI\%TARGETS\fP <target>... [...])
 export(\fI\%EXPORT\fP <export\-name> [...])
 export(\fI\%PACKAGE\fP <PackageName>)
-export(\fI\%SETUP\fP <export\-name> [...])
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
 .SS Exporting Targets
-.INDENT 0.0
-.TP
-.B export(TARGETS <target>... [...])
-.UNINDENT
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -13547,16 +13322,12 @@ targets and puts them in the \fBAndroid.mk\fP file specified by the
 that policy is set to OLD for one of the targets.
 .SS Exporting Targets matching install(EXPORT)
 .INDENT 0.0
-.TP
-.B export(EXPORT <export\-name> [...])
-.UNINDENT
-.INDENT 0.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
 export(EXPORT <export\-name> [NAMESPACE <namespace>] [FILE <filename>]
-       [CXX_MODULES_DIRECTORY <directory>] [EXPORT_PACKAGE_DEPENDENCIES])
+       [CXX_MODULES_DIRECTORY <directory>])
 .ft P
 .fi
 .UNINDENT
@@ -13569,25 +13340,7 @@ explicitly listed.  Instead, it exports the targets associated with
 the installation export \fB<export\-name>\fP\&.  Target installations may be
 associated with the export \fB<export\-name>\fP using the \fBEXPORT\fP option
 of the \fI\%install(TARGETS)\fP command.
-.INDENT 0.0
-.TP
-.B \fBEXPORT_PACKAGE_DEPENDENCIES\fP
-.sp
-\fBNOTE:\fP
-.INDENT 7.0
-.INDENT 3.5
-Experimental. Gated by \fBCMAKE_EXPERIMENTAL_EXPORT_PACKAGE_DEPENDENCIES\fP\&.
-.UNINDENT
-.UNINDENT
-.sp
-Specify that \fI\%find_dependency()\fP calls should be exported. See
-\fI\%install(EXPORT)\fP for details on how this works.
-.UNINDENT
 .SS Exporting Packages
-.INDENT 0.0
-.TP
-.B export(PACKAGE <PackageName>)
-.UNINDENT
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -13620,87 +13373,6 @@ outside the source and build trees.  Set the
 \fI\%CMAKE_EXPORT_PACKAGE_REGISTRY\fP variable to add build directories
 to the CMake user package registry.
 
-.SS Configuring Exports
-.INDENT 0.0
-.TP
-.B export(SETUP <export\-name> [...])
-.UNINDENT
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-export(SETUP <export\-name>
-       [PACKAGE_DEPENDENCY <dep>
-        [ENABLED (<bool\-true>|<bool\-false>|AUTO)]
-        [EXTRA_ARGS <args>...]
-       ] [...]
-       [TARGET <target>
-        [XCFRAMEWORK_LOCATION <location>]
-       ] [...]
-       )
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-New in version 3.29.
-
-.sp
-Configure the parameters of an export. The arguments are as follows:
-.INDENT 0.0
-.TP
-.B \fBPACKAGE_DEPENDENCY <dep>\fP
-.sp
-\fBNOTE:\fP
-.INDENT 7.0
-.INDENT 3.5
-Experimental. Gated by \fBCMAKE_EXPERIMENTAL_EXPORT_PACKAGE_DEPENDENCIES\fP\&.
-.UNINDENT
-.UNINDENT
-.sp
-Specify a package dependency to configure. This changes how
-\fI\%find_dependency()\fP calls are written during
-\fI\%export(EXPORT)\fP and \fI\%install(EXPORT)\fP\&. \fB<dep>\fP is the
-name of a package to export. This argument accepts the following additional
-arguments:
-.INDENT 7.0
-.TP
-.B \fBENABLED\fP
-Manually control whether or not the dependency is exported. This accepts
-the following values:
-.INDENT 7.0
-.TP
-.B \fB<bool\-true>\fP
-Any value that CMake recognizes as \(dqtrue\(dq. Always export the dependency,
-even if no exported targets depend on it. This can be used to manually
-add \fI\%find_dependency()\fP calls to the export.
-.TP
-.B \fB<bool\-false>\fP
-Any value that CMake recognizes as \(dqfalse\(dq. Never export the dependency,
-even if an exported target depends on it.
-.TP
-.B \fBAUTO\fP
-Only export the dependency if an exported target depends on it.
-.UNINDENT
-.TP
-.B \fBEXTRA_ARGS <args>\fP
-Specify additional arguments to pass to \fI\%find_dependency()\fP after
-the \fBREQUIRED\fP argument.
-.UNINDENT
-.TP
-.B \fBTARGET <target>\fP
-Specify a target to configure in this export. This argument accepts the
-following additional arguments:
-.INDENT 7.0
-.TP
-.B \fBXCFRAMEWORK_LOCATION\fP
-Specify the location of an \fB\&.xcframework\fP which contains the library from
-this target. If specified, the generated code will check to see if the
-\fB\&.xcframework\fP exists, and if it does, it will use the \fB\&.xcframework\fP
-as its imported location instead of the installed library.
-.UNINDENT
-.UNINDENT
 .SS fltk_wrap_ui
 .sp
 Create FLTK user interfaces Wrappers.
@@ -14022,25 +13694,22 @@ signatures that specify them.  The common options are:
 .TP
 .B \fBDESTINATION <dir>\fP
 Specify the directory on disk to which a file will be installed.
-\fB<dir>\fP should be a relative path.  An absolute path is allowed,
-but not recommended.
+Arguments can be relative or absolute paths.
 .sp
-When a relative path is given it is interpreted relative to the value
+If a relative path is given it is interpreted relative to the value
 of the \fI\%CMAKE_INSTALL_PREFIX\fP variable.
 The prefix can be relocated at install time using the \fBDESTDIR\fP
 mechanism explained in the \fI\%CMAKE_INSTALL_PREFIX\fP variable
 documentation.
 .sp
-As absolute paths do not work with the \fBcmake \-\-install\fP command\(aqs
-\fI\%\-\-prefix\fP option, or with the
-\fI\%cpack\fP installer generators, it is strongly recommended
-to use relative paths throughout for best support by package maintainers.
+If an absolute path (with a leading slash or drive letter) is given
+it is used verbatim.
+.sp
+As absolute paths are not supported by \fI\%cpack\fP installer
+generators, it is preferable to use relative paths throughout.
 In particular, there is no need to make paths absolute by prepending
 \fI\%CMAKE_INSTALL_PREFIX\fP; this prefix is used by default if
 the DESTINATION is a relative path.
-.sp
-If an absolute path (with a leading slash or drive letter) is given
-it is used verbatim.
 .TP
 .B \fBPERMISSIONS <permission>...\fP
 Specify permissions for installed files.  Valid permissions are
@@ -14335,8 +14004,8 @@ paths and base directories. Otherwise, they must provide a \fBDESTINATION\fP
 instead of being able to rely on the above (see next example below).
 .sp
 To make packages compliant with distribution filesystem layout policies, if
-projects must specify a \fBDESTINATION\fP, it is strongly recommended that they use
-a path that begins with the appropriate relative \fI\%GNUInstallDirs\fP variable.
+projects must specify a \fBDESTINATION\fP, it is recommended that they use a
+path that begins with the appropriate \fI\%GNUInstallDirs\fP variable.
 This allows package maintainers to control the install destination by setting
 the appropriate cache variables.  The following example shows a static library
 being installed to the default destination provided by
@@ -14779,8 +14448,8 @@ default. You cannot use \fBDATAROOT\fP as a \fBTYPE\fP parameter; please use
 \fBDATA\fP instead.
 .sp
 To make packages compliant with distribution filesystem layout policies, if
-projects must specify a \fBDESTINATION\fP, it is strongly recommended that they use
-a path that begins with the appropriate relative \fI\%GNUInstallDirs\fP variable.
+projects must specify a \fBDESTINATION\fP, it is recommended that they use a
+path that begins with the appropriate \fI\%GNUInstallDirs\fP variable.
 This allows package maintainers to control the install destination by setting
 the appropriate cache variables.  The following example shows how to follow
 this advice while installing an image to a project\-specific documentation
@@ -15053,8 +14722,8 @@ default. You cannot use \fBDATAROOT\fP as a \fBTYPE\fP parameter; please use
 \fBDATA\fP instead.
 .sp
 To make packages compliant with distribution filesystem layout policies, if
-projects must specify a \fBDESTINATION\fP, it is strongly recommended that they use
-a path that begins with the appropriate relative \fI\%GNUInstallDirs\fP variable.
+projects must specify a \fBDESTINATION\fP, it is recommended that they use a
+path that begins with the appropriate \fI\%GNUInstallDirs\fP variable.
 This allows package maintainers to control the install destination by setting
 the appropriate cache variables.
 .sp
@@ -15133,8 +14802,7 @@ install(EXPORT <export\-name> DESTINATION <dir>
         [CXX_MODULES_DIRECTORY <directory>]
         [EXPORT_LINK_INTERFACE_LIBRARIES]
         [COMPONENT <component>]
-        [EXCLUDE_FROM_ALL]
-        [EXPORT_PACKAGE_DEPENDENCIES])
+        [EXCLUDE_FROM_ALL])
 install(EXPORT_ANDROID_MK <export\-name> DESTINATION <dir> [...])
 .ft P
 .fi
@@ -15207,43 +14875,6 @@ export set. This directory will be populated with files which add the
 necessary target property information to the relevant targets. Note that
 without this information, none of the C++ modules which are part of the
 targets in the export set will support being imported in consuming targets.
-.TP
-.B \fBEXPORT_PACKAGE_DEPENDENCIES\fP
-.sp
-\fBNOTE:\fP
-.INDENT 7.0
-.INDENT 3.5
-Experimental. Gated by \fBCMAKE_EXPERIMENTAL_EXPORT_PACKAGE_DEPENDENCIES\fP\&.
-.UNINDENT
-.UNINDENT
-.sp
-Specify that \fI\%find_dependency()\fP calls should be exported. If this
-argument is specified, CMake examines all targets in the export set and
-gathers their \fBINTERFACE\fP link targets. If any such targets either were
-found with \fI\%find_package()\fP or have the
-\fI\%EXPORT_FIND_PACKAGE_NAME\fP property set, and such package
-dependency was not disabled by passing \fBENABLED OFF\fP to
-\fI\%export(SETUP)\fP, then a \fI\%find_dependency()\fP call is
-written with the target\(aqs corresponding package name, a \fBREQUIRED\fP
-argument, and any additional arguments specified by the \fBEXTRA_ARGS\fP
-argument of \fI\%export(SETUP)\fP\&. Any package dependencies that were
-manually specified by passing \fBENABLED ON\fP to \fI\%export(SETUP)\fP
-are also added, even if the exported targets don\(aqt depend on any targets
-from them.
-.sp
-The \fI\%find_dependency()\fP calls are written in the following order:
-.INDENT 7.0
-.IP 1. 3
-Any package dependencies that were listed in \fI\%export(SETUP)\fP
-are written in the order they were first specified, regardless of
-whether or not they contain \fBINTERFACE\fP dependencies of the
-exported targets.
-.IP 2. 3
-Any package dependencies that contain \fBINTERFACE\fP link dependencies
-of the exported targets and that were never specified in
-\fI\%export(SETUP)\fP are written in the order they were first
-found.
-.UNINDENT
 .UNINDENT
 .sp
 The \fBEXPORT\fP form is useful to help outside projects use targets built
@@ -15804,12 +15435,12 @@ The following outlines the steps performed during a \fBproject()\fP call:
 .INDENT 0.0
 .IP \(bu 2
 New in version 3.15: For every \fBproject()\fP call regardless of the project
-name, include the file(s) and module(s) named by
-\fI\%CMAKE_PROJECT_INCLUDE_BEFORE\fP, if set.
+name, include the file named by \fI\%CMAKE_PROJECT_INCLUDE_BEFORE\fP,
+if set.
 
 .IP \(bu 2
 New in version 3.17: If the \fBproject()\fP command specifies \fB<PROJECT\-NAME>\fP as its project
-name, include the file(s) and module(s) named by
+name, include the file named by
 \fI\%CMAKE_PROJECT_<PROJECT\-NAME>_INCLUDE_BEFORE\fP, if set.
 
 .IP \(bu 2
@@ -15839,12 +15470,12 @@ none were provided. The toolchain file may be re\-read when enabling a
 language for the first time.
 .IP \(bu 2
 New in version 3.15: For every \fBproject()\fP call regardless of the project
-name, include the file(s) and module(s) named by
-\fI\%CMAKE_PROJECT_INCLUDE\fP, if set.
+name, include the file named by \fI\%CMAKE_PROJECT_INCLUDE\fP,
+if set.
 
 .IP \(bu 2
 If the \fBproject()\fP command specifies \fB<PROJECT\-NAME>\fP as its project
-name, include the file(s) and module(s) named by
+name, include the file named by
 \fI\%CMAKE_PROJECT_<PROJECT\-NAME>_INCLUDE\fP, if set.
 .UNINDENT
 .SS Usage
@@ -17734,7 +17365,6 @@ try_compile(<compileResultVar>
             [COMPILE_DEFINITIONS <defs>...]
             [LINK_OPTIONS <options>...]
             [LINK_LIBRARIES <libs>...]
-            [LINKER_LANGUAGE <lang>]
             [OUTPUT_VARIABLE <var>]
             [COPY_FILE <fileName> [COPY_FILE_ERROR <var>]]
             [<LANG>_STANDARD <std>]
@@ -17848,9 +17478,6 @@ The list of libraries may refer to system libraries and to
 .sp
 If this option is specified, any \fB\-DLINK_LIBRARIES=...\fP value
 given to the \fBCMAKE_FLAGS\fP option will be ignored.
-.sp
-New in version 3.29: Alias targets to imported libraries are also supported.
-
 .TP
 .B \fBLINK_OPTIONS <options>...\fP
 New in version 3.14.
@@ -17859,15 +17486,6 @@ New in version 3.14.
 Specify link step options to pass to \fI\%target_link_options()\fP or to
 set the \fI\%STATIC_LIBRARY_OPTIONS\fP target property in the generated
 project, depending on the \fI\%CMAKE_TRY_COMPILE_TARGET_TYPE\fP variable.
-.TP
-.B \fBLINKER_LANGUAGE <lang>\(ga\fP
-New in version 3.29.
-
-.sp
-Specify the \fI\%LINKER_LANGUAGE\fP target property of the generated
-project.  When using multiple source files with different languages, set
-this to the language of the source file containing the program entry point,
-e.g., \fBmain\fP\&.
 .TP
 .B \fBLOG_DESCRIPTION <text>\fP
 New in version 3.26.
@@ -18179,7 +17797,6 @@ try_run(<runResultVar> <compileResultVar>
         [COMPILE_DEFINITIONS <defs>...]
         [LINK_OPTIONS <options>...]
         [LINK_LIBRARIES <libs>...]
-        [LINKER_LANGUAGE <lang>]
         [COMPILE_OUTPUT_VARIABLE <var>]
         [COPY_FILE <fileName> [COPY_FILE_ERROR <var>]]
         [<LANG>_STANDARD <std>]
@@ -18931,12 +18548,10 @@ ctest_test([BUILD <build\-dir>] [APPEND]
            [INCLUDE <include\-regex>]
            [EXCLUDE_LABEL <label\-exclude\-regex>]
            [INCLUDE_LABEL <label\-include\-regex>]
-           [EXCLUDE_FROM_FILE <filename>]
-           [INCLUDE_FROM_FILE <filename>]
            [EXCLUDE_FIXTURE <regex>]
            [EXCLUDE_FIXTURE_SETUP <regex>]
            [EXCLUDE_FIXTURE_CLEANUP <regex>]
-           [PARALLEL_LEVEL [<level>]]
+           [PARALLEL_LEVEL <level>]
            [RESOURCE_SPEC_FILE <file>]
            [TEST_LOAD <threshold>]
            [SCHEDULE_RANDOM <ON|OFF>]
@@ -18993,18 +18608,6 @@ Specify a regular expression matching test labels to exclude.
 Specify a regular expression matching test labels to include.
 Tests not matching this expression are excluded.
 .TP
-.B \fBEXCLUDE_FROM_FILE <filename>\fP
-New in version 3.29.
-
-.sp
-Do NOT run tests listed with their exact name in the given file.
-.TP
-.B \fBINCLUDE_FROM_FILE <filename>\fP
-New in version 3.29.
-
-.sp
-Only run the tests listed with their exact name in the given file.
-.TP
 .B \fBEXCLUDE_FIXTURE <regex>\fP
 New in version 3.7.
 
@@ -19028,13 +18631,9 @@ New in version 3.7.
 .sp
 Same as \fBEXCLUDE_FIXTURE\fP except only matching cleanup tests are excluded.
 .TP
-.B \fBPARALLEL_LEVEL [<level>]\fP
-Run tests in parallel, limited to a given level of parallelism.
-.sp
-New in version 3.29: The \fB<level>\fP may be omitted, or \fB0\fP, to let ctest use a default
-level of parallelism, or unbounded parallelism, respectively, as
-documented by the \fI\%ctest \-\-parallel\fP option.
-
+.B \fBPARALLEL_LEVEL <level>\fP
+Specify a positive number representing the number of tests to
+be run in parallel.
 .TP
 .B \fBRESOURCE_SPEC_FILE <file>\fP
 New in version 3.16.
@@ -19667,7 +19266,7 @@ Deprecated since version 3.14: This command was originally added to support Qt 3
 \fI\%FindQt4\fP module provides the \fBqt4_wrap_cpp()\fP macro, which
 should be used instead for Qt 4 projects.  For projects using Qt 5 or
 later, use the equivalent macro provided by Qt itself (e.g. Qt 5 provides
-\fI\%qt5_wrap_cpp()\fP).
+\fBqt5_wrap_cpp()\fP).
 
 .sp
 Manually create Qt Wrappers.
@@ -19886,6 +19485,6 @@ input to CMake (CONFIGURE_FILE, source file ...) because it will lead
 to an infinite loop.  Use \fI\%configure_file()\fP if you want to
 generate input files to CMake.
 .SH COPYRIGHT
-2000-2024 Kitware, Inc. and Contributors
+2000-2023 Kitware, Inc. and Contributors
 .\" Generated by docutils manpage writer.
 .

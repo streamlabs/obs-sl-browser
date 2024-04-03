@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "CPACK-GENERATORS" "7" "Mar 21, 2024" "3.29.0" "CMake"
+.TH "CPACK-GENERATORS" "7" "Mar 20, 2024" "3.28.4" "CMake"
 .SH NAME
 cpack-generators \- CPack Generator Reference
 .SH GENERATORS
@@ -385,11 +385,8 @@ Yes
 \fB<CPACK_PACKAGE_FILE_NAME>[\-<component>].deb\fP
 .UNINDENT
 .sp
-This may be set to:
-.INDENT 7.0
-.TP
-.B \fBDEB\-DEFAULT\fP
-Tell CPack to automatically generate the package file name in deb format:
+This may be set to \fBDEB\-DEFAULT\fP to allow the CPack DEB generator to generate
+package file name by itself in deb format:
 .INDENT 7.0
 .INDENT 3.5
 .sp
@@ -401,25 +398,28 @@ Tell CPack to automatically generate the package file name in deb format:
 .UNINDENT
 .UNINDENT
 .sp
-This setting recommended as the preferred behavior, but for backward
-compatibility with the CPack DEB generator in CMake prior to version 3.6,
-this is not the default.   Without this, duplicate names may occur.
-Duplicate files get overwritten and it is up to the packager to set
-the variables in a manner that will prevent such errors.
-.TP
-.B \fB<file\-name>[.deb]\fP
-Use the given file name.
+Alternatively provided package file name must end
+with either \fB\&.deb\fP or \fB\&.ipk\fP suffix.
 .sp
-Changed in version 3.29: The \fB\&.deb\fP suffix will be automatically added if the file name does
-not end in \fB\&.deb\fP or \fB\&.ipk\fP\&.  Previously the suffix was required.
-
-.TP
-.B \fB<file\-name>.ipk\fP
-New in version 3.10.
+New in version 3.10: \fB\&.ipk\fP suffix used by OPKG packaging system.
 
 .sp
-Use the given file name.
-The \fB\&.ipk\fP suffix is used by the OPKG packaging system.
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+Preferred setting of this variable is \fBDEB\-DEFAULT\fP but for backward
+compatibility with the CPack DEB generator in CMake prior to version 3.6 this
+feature is disabled by default.
+.UNINDENT
+.UNINDENT
+.sp
+\fBNOTE:\fP
+.INDENT 7.0
+.INDENT 3.5
+By using non default filenames duplicate names may occur. Duplicate files
+get overwritten and it is up to the packager to set the variables in a
+manner that will prevent such errors.
+.UNINDENT
 .UNINDENT
 .UNINDENT
 .INDENT 0.0
@@ -4085,9 +4085,8 @@ New in version 3.23.
 
 .sp
 This option enables more granular control over where the product may be
-installed. When it is set to true (see policy \fI\%CMP0161\fP), a
-\fBdomains\fP element of the following form will be added to the
-productbuild Distribution XML:
+installed. When it is set to true, a \fBdomains\fP element of the following
+form will be added to the productbuild Distribution XML:
 .INDENT 7.0
 .INDENT 3.5
 .sp
@@ -4386,19 +4385,9 @@ Yes
 replaced by \(aq\-\(aq
 .UNINDENT
 .sp
-This may be set to:
-.INDENT 7.0
-.TP
-.B \fBRPM\-DEFAULT\fP
-Tell \fBrpmbuild\fP to automatically generate the package file name.
-.TP
-.B \fB<file\-name>[.rpm]\fP
-Use the given file name.
-.sp
-Changed in version 3.29: The \fB\&.rpm\fP suffix will be automatically added if missing.
-Previously the suffix was required.
-
-.UNINDENT
+This may be set to \fBRPM\-DEFAULT\fP to allow \fBrpmbuild\fP tool to generate package
+file name by itself.
+Alternatively provided package file name must end with \fB\&.rpm\fP suffix.
 .sp
 \fBNOTE:\fP
 .INDENT 7.0
@@ -6149,8 +6138,7 @@ Template file for WiX generation
 .sp
 If this variable is set, the specified template will be used to generate
 the WiX wxs file.  This should be used if further customization of the
-output is required. The template contents will override the effect of most
-\fBCPACK_WIX_\fP variables.
+output is required.
 .sp
 If this variable is not set, the default MSI template included with CMake
 will be used.
@@ -6429,38 +6417,7 @@ of the installer. May for example be set to \fBx64\fP or \fBarm64\fP\&.
 .sp
 When unspecified, CPack will default to \fBx64\fP or \fBx86\fP\&.
 .UNINDENT
-.INDENT 0.0
-.TP
-.B CPACK_WIX_INSTALL_SCOPE
-New in version 3.29.
-
-.sp
-This variable can be optionally set to specify the \fBInstallScope\fP
-of the installer:
-.INDENT 7.0
-.TP
-.B \fBperMachine\fP (default)
-Create an installer that installs for all users and requires
-administrative privileges.  Start menu entries created by the
-installer are visible to all users.
-.TP
-.B \fBperUser\fP
-Not yet supported. This is reserved for future use.
-.TP
-.B \fBNONE\fP
-Create an installer without any \fBInstallScope\fP attribute.
-.sp
-Deprecated since version 3.29: This value is only for compatibility with the inconsistent behavior used
-by CPack 3.28 and older.  The resulting installer requires administrative
-privileges and installs into the system\-wide \fBProgramFiles\fP directory,
-but the start menu entry and uninstaller registration are created only
-for the current user.
-
-.UNINDENT
-.sp
-See \fI\%https://wixtoolset.org/docs/v3/xsd/wix/package/\fP
-.UNINDENT
 .SH COPYRIGHT
-2000-2024 Kitware, Inc. and Contributors
+2000-2023 Kitware, Inc. and Contributors
 .\" Generated by docutils manpage writer.
 .

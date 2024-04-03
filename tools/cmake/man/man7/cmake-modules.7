@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "CMAKE-MODULES" "7" "Mar 21, 2024" "3.29.0" "CMake"
+.TH "CMAKE-MODULES" "7" "Mar 20, 2024" "3.28.4" "CMake"
 .SH NAME
 cmake-modules \- CMake Modules Reference
 .sp
@@ -4275,9 +4275,8 @@ CMAKE_FIND_FRAMEWORK_EXTRA_LOCATIONS \- Extra directories
 .UNINDENT
 .SS CMakeFindPackageMode
 .sp
-This file is executed by cmake when invoked with
-\fI\%\-\-find\-package\fP\&.
-It expects that the following variables are set using \fB\-D\fP:
+This file is executed by cmake when invoked with \-\-find\-package.  It
+expects that the following variables are set using \-D:
 .INDENT 0.0
 .TP
 .B \fBNAME\fP
@@ -4522,6 +4521,9 @@ Default: TRUE
 .sp
 Helpers functions for creating config files that can be included by other
 projects to find and use a package.
+.sp
+Adds the \fI\%configure_package_config_file()\fP and
+\fI\%write_basic_package_version_file()\fP commands.
 .SS Generating a Package Configuration File
 .INDENT 0.0
 .TP
@@ -4728,165 +4730,6 @@ resulting version file.  Depending on the \fBCOMPATIBILITY\fP, the corresponding
 Please note that these files are internal to CMake and you should not call
 \fI\%configure_file()\fP on them yourself, but they can be used as starting
 point to create more sophisticated custom \fBConfigVersion.cmake\fP files.
-.SS Generating an Apple Platform Selection File
-.INDENT 0.0
-.TP
-.B generate_apple_platform_selection_file
-New in version 3.29.
-
-.sp
-Create an Apple platform selection file:
-.INDENT 7.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-generate_apple_platform_selection_file(<filename>
-  INSTALL_DESTINATION <path>
-  [INSTALL_PREFIX <path>]
-  [MACOS_INCLUDE_FILE <file>]
-  [IOS_INCLUDE_FILE <file>]
-  [IOS_SIMULATOR_INCLUDE_FILE <file>]
-  [TVOS_INCLUDE_FILE <file>]
-  [TVOS_SIMULATOR_INCLUDE_FILE <file>]
-  [WATCHOS_INCLUDE_FILE <file>]
-  [WATCHOS_SIMULATOR_INCLUDE_FILE <file>]
-  [VISIONOS_INCLUDE_FILE <file>]
-  [VISIONOS_SIMULATOR_INCLUDE_FILE <file>]
-  [ERROR_VARIABLE <variable>]
-  )
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-Write a file that includes an Apple\-platform\-specific \fB\&.cmake\fP file,
-e.g., for use as \fB<PackageName>Config.cmake\fP\&.  This can be used in
-conjunction with the \fBXCFRAMEWORK_LOCATION\fP argument of
-\fI\%export(SETUP)\fP to export packages in a way that a project
-built for any Apple platform can use them.
-.INDENT 7.0
-.TP
-.B \fBINSTALL_DESTINATION <path>\fP
-Path to which the generated file will be installed by the caller, e.g.,
-via \fI\%install(FILES)\fP\&.  The path may be either relative to the
-\fBINSTALL_PREFIX\fP or absolute.
-.TP
-.B \fBINSTALL_PREFIX <path>\fP
-Path prefix to which the package will be installed by the caller.
-The \fB<path>\fP argument must be an absolute path.  If this argument
-is not passed, the \fI\%CMAKE_INSTALL_PREFIX\fP variable will be
-used instead.
-.TP
-.B \fBMACOS_INCLUDE_FILE <file>\fP
-File to include if the platform is macOS.
-.TP
-.B \fBIOS_INCLUDE_FILE <file>\fP
-File to include if the platform is iOS.
-.TP
-.B \fBIOS_SIMULATOR_INCLUDE_FILE <file>\fP
-File to include if the platform is iOS Simulator.
-.TP
-.B \fBTVOS_INCLUDE_FILE <file>\fP
-File to include if the platform is tvOS.
-.TP
-.B \fBTVOS_SIMULATOR_INCLUDE_FILE <file>\fP
-File to include if the platform is tvOS Simulator.
-.TP
-.B \fBWATCHOS_INCLUDE_FILE <file>\fP
-File to include if the platform is watchOS.
-.TP
-.B \fBWATCHOS_SIMULATOR_INCLUDE_FILE <file>\fP
-File to include if the platform is watchOS Simulator.
-.TP
-.B \fBVISIONOS_INCLUDE_FILE <file>\fP
-File to include if the platform is visionOS.
-.TP
-.B \fBVISIONOS_SIMULATOR_INCLUDE_FILE <file>\fP
-File to include if the platform is visionOS Simulator.
-.TP
-.B \fBERROR_VARIABLE <variable>\fP
-If the consuming project is built for an unsupported platform,
-set \fB<variable>\fP to an error message.  The includer may use this
-information to pretend the package was not found.  If this option
-is not given, the default behavior is to issue a fatal error.
-.UNINDENT
-.sp
-If any of the optional include files is not specified, and the consuming
-project is built for its corresponding platform, the generated file will
-consider the platform to be unsupported.  The behavior is determined
-by the \fBERROR_VARIABLE\fP option.
-.UNINDENT
-.INDENT 0.0
-.TP
-.B generate_apple_architecture_selection_file
-New in version 3.29.
-
-.sp
-Create an Apple architecture selection file:
-.INDENT 7.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-generate_apple_architecture_selection_file(<filename>
-  INSTALL_DESTINATION <path>
-  [INSTALL_PREFIX <path>]
-  [SINGLE_ARCHITECTURES <arch>...
-   SINGLE_ARCHITECTURE_INCLUDE_FILES <file>...]
-  [UNIVERSAL_ARCHITECTURES <arch>...
-   UNIVERSAL_INCLUDE_FILE <file>]
-  [ERROR_VARIABLE <variable>]
-  )
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-Write a file that includes an Apple\-architecture\-specific \fB\&.cmake\fP file
-based on \fI\%CMAKE_OSX_ARCHITECTURES\fP, e.g., for inclusion from an
-Apple\-specific \fB<PackageName>Config.cmake\fP file.
-.INDENT 7.0
-.TP
-.B \fBINSTALL_DESTINATION <path>\fP
-Path to which the generated file will be installed by the caller, e.g.,
-via \fI\%install(FILES)\fP\&.  The path may be either relative to the
-\fBINSTALL_PREFIX\fP or absolute.
-.TP
-.B \fBINSTALL_PREFIX <path>\fP
-Path prefix to which the package will be installed by the caller.
-The \fB<path>\fP argument must be an absolute path.  If this argument
-is not passed, the \fI\%CMAKE_INSTALL_PREFIX\fP variable will be
-used instead.
-.TP
-.B \fBSINGLE_ARCHITECTURES <arch>...\fP
-Architectures provided by entries of \fBSINGLE_ARCHITECTURE_INCLUDE_FILES\fP\&.
-.TP
-.B \fBSINGLE_ARCHITECTURE_INCLUDE_FILES <file>...\fP
-Architecture\-specific files.  One of them will be loaded
-when \fI\%CMAKE_OSX_ARCHITECTURES\fP contains a single
-architecture matching the corresponding entry of
-\fBSINGLE_ARCHITECTURES\fP\&.
-.TP
-.B \fBUNIVERSAL_ARCHITECTURES <arch>...\fP
-Architectures provided by the \fBUNIVERSAL_INCLUDE_FILE\fP\&.
-.sp
-The list may include \fB$(ARCHS_STANDARD)\fP to support consumption using
-the \fI\%Xcode\fP generator, but the architectures should always
-be listed individually too.
-.TP
-.B \fBUNIVERSAL_INCLUDE_FILE <file>\fP
-A file to load when \fI\%CMAKE_OSX_ARCHITECTURES\fP contains
-a (non\-strict) subset of the \fBUNIVERSAL_ARCHITECTURES\fP and
-does not match any one of the \fBSINGLE_ARCHITECTURES\fP\&.
-.TP
-.B \fBERROR_VARIABLE <variable>\fP
-If the consuming project is built for an unsupported architecture,
-set \fB<variable>\fP to an error message.  The includer may use this
-information to pretend the package was not found.  If this option
-is not given, the default behavior is to issue a fatal error.
-.UNINDENT
-.UNINDENT
 .SS Example Generating Package Files
 .sp
 Example using both \fI\%configure_package_config_file()\fP and
@@ -6574,7 +6417,7 @@ VS_CSHARP_SubType \(dqDesigner\(dq
 Sets source file properties of \fB\&.Designer.cs\fP files depending on
 sibling filenames. Use this, if your CSharp target does \fBnot\fP
 use Windows Forms (for Windows Forms use
-\fI\%csharp_set_windows_forms_properties()\fP instead):
+\fI\%csharp_set_designer_cs_properties()\fP instead):
 .INDENT 7.0
 .INDENT 3.5
 .sp
@@ -6696,7 +6539,7 @@ csharp_get_filename_keys(OUT [<file1> [<file2> [...]]])
 Name of the variable in which the list of keys is stored
 .TP
 .B \fB<fileN>\fP
-filename(s) as given to CSharp target using \fI\%add_library()\fP
+filename(s) as given to to CSharp target using \fI\%add_library()\fP
 or \fI\%add_executable()\fP
 .UNINDENT
 .sp
@@ -9635,12 +9478,6 @@ with nothing after it, which indicates that \fI\%find_package()\fP can
 still be called if \fI\%FETCHCONTENT_TRY_FIND_PACKAGE_MODE\fP is
 set to \fBOPT_IN\fP or is not set.
 .sp
-It would not normally be appropriate to specify \fBREQUIRED\fP as one of
-the additional arguments after \fBFIND_PACKAGE_ARGS\fP\&.  Doing so would
-mean the \fI\%find_package()\fP call must succeed, so none of the other
-details specified in the \fBFetchContent_Declare()\fP call would get a
-chance to be used as a fall\-back.
-.sp
 Everything after the \fBFIND_PACKAGE_ARGS\fP keyword is appended to the
 \fI\%find_package()\fP call, so all other \fB<contentOptions>\fP must
 come before the \fBFIND_PACKAGE_ARGS\fP keyword.  If the
@@ -9833,10 +9670,6 @@ added to the \fI\%add_subdirectory()\fP command as well.
 New in version 3.28: If the \fBEXCLUDE_FROM_ALL\fP keyword was included in the call to
 \fI\%FetchContent_Declare()\fP, the \fBEXCLUDE_FROM_ALL\fP keyword will
 be added to the \fI\%add_subdirectory()\fP command as well.
-
-.sp
-New in version 3.29: \fI\%CMAKE_EXPORT_FIND_PACKAGE_NAME\fP is set to the dependency name
-before calling \fI\%add_subdirectory()\fP\&.
 
 .UNINDENT
 .sp
@@ -10221,20 +10054,6 @@ contents the developer has provided manually (using options described
 further below).  When the developer knows that no changes have been made to
 any content details, turning this option \fBON\fP can significantly speed up
 the configure stage.  It is \fBOFF\fP by default.
-.sp
-\fBNOTE:\fP
-.INDENT 7.0
-.INDENT 3.5
-The \fBFETCHCONTENT_FULLY_DISCONNECTED\fP variable is not an appropriate way
-to prevent any network access on the first run in a build directory.
-Doing so can break projects, lead to misleading error messages, and hide
-subtle population failures.  This variable is specifically intended to
-only be turned on \fIafter\fP the first time CMake has been run.
-If you want to prevent network access even on the first run, use a
-\fI\%dependency provider\fP and populate the
-dependency from local content instead.
-.UNINDENT
-.UNINDENT
 .UNINDENT
 .INDENT 0.0
 .TP
@@ -11537,16 +11356,11 @@ Inclusion of this module defines the following variables:
 .INDENT 0.0
 .INDENT 3.5
 Destination for files of a given type.  This value may be passed to
-the \fBDESTINATION\fP options of  \fI\%install()\fP commands for the
-corresponding file type.  It should be a path relative to the installation
-prefix so that it can be converted to an absolute path in a relocatable way.
-.sp
-While absolute paths are allowed, they are not recommended as they
-do not work with the \fBcmake \-\-install\fP command\(aqs
-\fI\%\-\-prefix\fP option, or with the
-\fI\%cpack\fP installer generators. In particular, there is no
-need to make paths absolute by prepending \fI\%CMAKE_INSTALL_PREFIX\fP;
-this prefix is used by default if the DESTINATION is a relative path.
+the \fBDESTINATION\fP options of \fI\%install()\fP commands for the
+corresponding file type.  It should typically be a path relative to
+the installation prefix so that it can be converted to an absolute
+path in a relocatable way (see \fBCMAKE_INSTALL_FULL_<dir>\fP).
+However, an absolute path is also allowed.
 .UNINDENT
 .UNINDENT
 .sp
@@ -11558,11 +11372,6 @@ value.  If the value is not already an absolute path, an absolute path
 is constructed typically by prepending the value of the
 \fI\%CMAKE_INSTALL_PREFIX\fP variable.  However, there are some
 \fI\%special cases\fP as documented below.
-.sp
-These variables shouldn\(aqt be used in \fI\%install()\fP commands
-as they do not work with the \fBcmake \-\-install\fP command\(aqs
-\fI\%\-\-prefix\fP option, or with the
-\fI\%cpack\fP installer generators.
 .UNINDENT
 .UNINDENT
 .sp
@@ -12278,41 +12087,21 @@ CMAKE_NO_STD_NAMESPACE \- defined by the results
 This module defines variables and macros required to build eCos application.
 .sp
 This file contains the following macros:
-.INDENT 0.0
-.TP
-.B \fBECOS_ADD_INCLUDE_DIRECTORIES()\fP
-add the eCos include dirs
-.TP
-.B \fBECOS_ADD_EXECUTABLE(name source1 ...  sourceN )\fP
-create an eCos executable
-.TP
-.B \fBECOS_ADJUST_DIRECTORY(VAR source1 ...  sourceN )\fP
-adjusts the path of the source files and puts the result into \fBVAR\fP
-.UNINDENT
+ECOS_ADD_INCLUDE_DIRECTORIES() \- add the eCos include dirs
+ECOS_ADD_EXECUTABLE(name source1 ...  sourceN ) \- create an eCos
+executable ECOS_ADJUST_DIRECTORY(VAR source1 ...  sourceN ) \- adjusts
+the path of the source files and puts the result into VAR
 .sp
-Macros for selecting the toolchain:
-.INDENT 0.0
-.TP
-.B \fBECOS_USE_ARM_ELF_TOOLS()\fP
-enable the ARM ELF toolchain for the directory where it is called
-.TP
-.B \fBECOS_USE_I386_ELF_TOOLS()\fP
-enable the i386 ELF toolchain for the directory where it is called
-.TP
-.B \fBECOS_USE_PPC_EABI_TOOLS()\fP
-enable the PowerPC toolchain for the directory where it is called
-.UNINDENT
+Macros for selecting the toolchain: ECOS_USE_ARM_ELF_TOOLS() \- enable
+the ARM ELF toolchain for the directory where it is called
+ECOS_USE_I386_ELF_TOOLS() \- enable the i386 ELF toolchain for the
+directory where it is called ECOS_USE_PPC_EABI_TOOLS() \- enable the
+PowerPC toolchain for the directory where it is called
 .sp
-It contains the following variables:
-.sp
-\fBECOS_DEFINITIONS\fP
-.sp
-\fBECOSCONFIG_EXECUTABLE\fP
-.INDENT 0.0
-.TP
-.B \fBECOS_CONFIG_FILE\fP
-defaults to ecos.ecc, if your eCos configuration file has a different name, adjust this variable for internal use only:
-.UNINDENT
+It contains the following variables: ECOS_DEFINITIONS
+ECOSCONFIG_EXECUTABLE ECOS_CONFIG_FILE \- defaults to ecos.ecc, if your
+eCos configuration file has a different name, adjust this variable for
+internal use only:
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -21203,7 +20992,6 @@ Defined if the system has GLES3.
 .TP
 .B \fBOPENGL_INCLUDE_DIR\fP
 Path to the OpenGL include directory.
-The \fBOPENGL_INCLUDE_DIRS\fP variable is preferred.
 .TP
 .B \fBOPENGL_EGL_INCLUDE_DIRS\fP
 Path to the EGL include directory.
@@ -21212,12 +21000,6 @@ Path to the EGL include directory.
 Paths to the OpenGL library, windowing system libraries, and GLU libraries.
 On Linux, this assumes GLX and is never correct for EGL\-based targets.
 Clients are encouraged to use the \fBOpenGL::*\fP import targets instead.
-.TP
-.B \fBOPENGL_INCLUDE_DIRS\fP
-New in version 3.29.
-
-.sp
-Paths to the OpenGL include directories.
 .UNINDENT
 .sp
 New in version 3.10: Variables for GLVND\-specific libraries \fBOpenGL\fP, \fBEGL\fP and \fBGLX\fP\&.
@@ -21254,12 +21036,6 @@ New in version 3.27.
 
 .sp
 Path to the OpenGL GLES3 library.
-.TP
-.B \fBOPENGL_GLU_INCLUDE_DIR\fP
-New in version 3.29.
-
-.sp
-Path to the OpenGL GLU include directory.
 .UNINDENT
 .sp
 New in version 3.10: Variables for GLVND\-specific libraries \fBOpenGL\fP, \fBEGL\fP and \fBGLX\fP\&.
@@ -21308,29 +21084,9 @@ module does not currently support that; contributions welcome.
 GLVND.  For non\-GLVND Linux and other systems these are left undefined.
 .SS macOS\-Specific
 .sp
-On macOS this module defaults to using the macOS\-native framework
-version of OpenGL.  To use the X11 version of OpenGL on macOS, one
-can disable searching of frameworks.  For example:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-find_package(X11)
-if(APPLE AND X11_FOUND)
-  set(CMAKE_FIND_FRAMEWORK NEVER)
-  find_package(OpenGL)
-  unset(CMAKE_FIND_FRAMEWORK)
-else()
-  find_package(OpenGL)
-endif()
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-An end user building this project may need to point CMake at their
-X11 installation, e.g., with \fB\-DOpenGL_ROOT=/opt/X11\fP\&.
+On OSX FindOpenGL defaults to using the framework version of OpenGL. People
+will have to change the cache values of OPENGL_glu_LIBRARY and
+OPENGL_gl_LIBRARY to use OpenGL with X11 on OSX.
 .SS FindOpenMP
 .sp
 Finds Open Multi\-Processing (OpenMP) support.
@@ -21763,40 +21519,22 @@ locations.  Useful on multi\-lib systems.
 .sp
 OpenThreads is a C++ based threading library.  Its largest userbase
 seems to OpenSceneGraph so you might notice I accept OSGDIR as an
-environment path.  I consider this part of the \fBFindosg*\fP suite used to
+environment path.  I consider this part of the Findosg* suite used to
 find OpenSceneGraph components.  Each component is separate and you
 must opt in to each module.
 .sp
-This module defines:
+Locate OpenThreads This module defines OPENTHREADS_LIBRARY
+OPENTHREADS_FOUND, if false, do not try to link to OpenThreads
+OPENTHREADS_INCLUDE_DIR, where to find the headers
 .sp
-\fBOPENTHREADS_LIBRARY\fP
-.INDENT 0.0
-.TP
-.B \fBOPENTHREADS_FOUND\fP
-if false, do not try to link to OpenThreads
-.TP
-.B \fBOPENTHREADS_INCLUDE_DIR\fP
-where to find the headers
-.UNINDENT
+$OPENTHREADS_DIR is an environment variable that would correspond to
+the ./configure \-\-prefix=$OPENTHREADS_DIR used in building osg.
 .sp
-\fB$OPENTHREADS_DIR\fP is an environment variable that would correspond to the:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-\&./configure \-\-prefix=$OPENTHREADS_DIR
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-used in building osg.
-.sp
-New in version 2.8.10: The CMake variables \fBOPENTHREADS_DIR\fP or \fBOSG_DIR\fP can now
+[CMake 2.8.10]: The CMake variables OPENTHREADS_DIR or OSG_DIR can now
 be used as well to influence detection, instead of needing to specify
 an environment variable.
-
+.sp
+Created by Eric Wing.
 .SS Findosg
 .sp
 \fBNOTE:\fP
@@ -22741,22 +22479,20 @@ endif()
 .UNINDENT
 .SS FindPerl
 .sp
-Find a Perl interpreter.
+Find perl
 .sp
-This module defines the following variables:
+this module looks for Perl
 .INDENT 0.0
-.TP
-.B \fBPERL_EXECUTABLE\fP
-The full path to Perl.
-.TP
-.B \fBPERL_FOUND\fP
-True if the Perl executable was found.
-.TP
-.B \fBPERL_VERSION_STRING\fP
-New in version 2.8.8.
-
+.INDENT 3.5
 .sp
-The version of Perl found.
+.nf
+.ft C
+PERL_EXECUTABLE     \- the full path to perl
+PERL_FOUND          \- If false, don\(aqt attempt to use perl.
+PERL_VERSION_STRING \- version of perl found (since CMake 2.8.8)
+.ft P
+.fi
+.UNINDENT
 .UNINDENT
 .SS FindPerlLibs
 .sp
@@ -26168,7 +25904,7 @@ Report problems to <\fI\%certi\-devel@nongnu.org\fP>
 Find Ruby
 .sp
 This module finds if Ruby is installed and determines where the
-include files and libraries are.  Ruby 1.8 through 3.3 are
+include files and libraries are.  Ruby 1.8 through 3.2 are
 supported.
 .sp
 The minimum required version of Ruby can be specified using the
@@ -27530,7 +27266,7 @@ wxWidgets_CONFIGURATION \- Configuration to use
 wxWidgets_EXCLUDE_COMMON_LIBRARIES
                         \- Set to TRUE to exclude linking of
                           commonly required libs (e.g., png tiff
-                          jpeg zlib regex expat scintilla lexilla).
+                          jpeg zlib regex expat).
 .ft P
 .fi
 .UNINDENT
@@ -27738,7 +27474,6 @@ X11_Xt_INCLUDE_PATH,             X11_Xt_LIB,             X11_Xt_FOUND,          
 X11_Xutil_INCLUDE_PATH,                                  X11_Xutil_FOUND,          X11::Xutil
 X11_Xv_INCLUDE_PATH,             X11_Xv_LIB,             X11_Xv_FOUND,             X11::Xv
 X11_dpms_INCLUDE_PATH,           (in X11_Xext_LIB),      X11_dpms_FOUND
-X11_Xdbe_INCLUDE_PATH,           (in X11_Xext_LIB),      X11_Xdbe_FOUND
 X11_XShm_INCLUDE_PATH,           (in X11_Xext_LIB),      X11_XShm_FOUND
 X11_Xshape_INCLUDE_PATH,         (in X11_Xext_LIB),      X11_Xshape_FOUND
 X11_XSync_INCLUDE_PATH,          (in X11_Xext_LIB),      X11_XSync_FOUND
@@ -27773,10 +27508,6 @@ New in version 3.27: Added the \fBxcb_composite\fP, \fBxcb_cursor\fP, \fBxcb_dam
 \fBxcb_render_util\fP, \fBxcb_res\fP, \fBxcb_screensaver\fP, \fBxcb_shape\fP,
 \fBxcb_shm\fP, \fBxcb_sync\fP, \fBxcb_xf86dri\fP, \fBxcb_xinerama\fP, \fBxcb_xinput\fP,
 \fBxcb_xrm\fP, \fBxcb_xvmc\fP, and \fBxcb_xv\fP libraries.
-
-.sp
-New in version 3.29: Added coverage of double buffer extension (variables
-\fBX11_Xdbe_INCLUDE_PATH\fP and \fBX11_Xdbe_FOUND\fP).
 
 .SS FindXalanC
 .sp
@@ -28824,7 +28555,7 @@ to the version of CMake that introduced the given API and less
 than the version of CMake that introduced its succeeding API.
 The value of the \fI\%CMAKE_MINIMUM_REQUIRED_VERSION\fP
 variable is used if no explicit version is specified.
-(As of CMake version 3.29.0 there is only one API version.)
+(As of CMake version 3.28.4 there is only one API version.)
 .sp
 \fBPROLOG\fP may be specified as text content to write at the start of the
 header. \fBEPILOG\fP may be specified as text content to write at the end
@@ -30294,6 +30025,6 @@ The documentation for the CPack RPM generator has moved here: \fI\%CPack RPM Gen
 The documentation for the CPack WIX generator has moved here:
 \fI\%CPack WIX Generator\fP
 .SH COPYRIGHT
-2000-2024 Kitware, Inc. and Contributors
+2000-2023 Kitware, Inc. and Contributors
 .\" Generated by docutils manpage writer.
 .

@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "CTEST" "1" "Mar 21, 2024" "3.29.0" "CMake"
+.TH "CTEST" "1" "Mar 20, 2024" "3.28.4" "CMake"
 .SH NAME
 ctest \- CTest Command-Line Reference
 .SS Contents
@@ -95,8 +95,6 @@ ctest \- CTest Command-Line Reference
 .IP \(bu 2
 \fI\%Dynamically\-Generated Resource Specification File\fP
 .UNINDENT
-.IP \(bu 2
-\fI\%Job Server Integration\fP
 .IP \(bu 2
 \fI\%See Also\fP
 .UNINDENT
@@ -221,27 +219,16 @@ will have no effect.
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-j [<level>], \-\-parallel [<level>]
-Run tests in parallel, optionally limited to a given level of parallelism.
+.B \-j <jobs>, \-\-parallel <jobs>
+Run the tests in parallel using the given number of jobs.
 .sp
-New in version 3.29: The \fB<level>\fP may be omitted, or \fB0\fP, in which case:
-.INDENT 7.0
-.IP \(bu 2
-Under \fI\%Job Server Integration\fP, parallelism is limited by
-available job tokens.
-.IP \(bu 2
-Otherwise, if the value is omitted, parallelism is limited
-by the number of processors, or 2, whichever is larger.
-.IP \(bu 2
-Otherwise, if the value is \fB0\fP, parallelism is unbounded.
-.UNINDENT
-
-.sp
-This option may instead be specified by the \fI\%CTEST_PARALLEL_LEVEL\fP
-environment variable.
+This option tells CTest to run the tests in parallel using given
+number of jobs. This option can also be set by setting the
+\fI\%CTEST_PARALLEL_LEVEL\fP environment variable.
 .sp
 This option can be used with the \fI\%PROCESSORS\fP test property.
-See the \fI\%Label and Subproject Summary\fP\&.
+.sp
+See \fI\%Label and Subproject Summary\fP\&.
 .UNINDENT
 .INDENT 0.0
 .TP
@@ -362,34 +349,6 @@ given regular expression.  When more than one \fB\-LE\fP option is given,
 a test will only be excluded if each regular expression matches at least one
 of the test\(aqs labels (i.e. the multiple \fB\-LE\fP labels form an \fBAND\fP
 relationship).  See \fI\%Label Matching\fP\&.
-.UNINDENT
-.INDENT 0.0
-.TP
-.B \-\-tests\-from\-file <filename>
-New in version 3.29.
-
-.sp
-Run tests listed in the given file.
-.sp
-This option tells CTest to run tests that are listed in the given file.
-The file must contain one exact test name per line.
-Lines that do not exactly match any test names are ignored.
-This option can be combined with the other options like
-\fB\-R\fP, \fB\-E\fP, \fB\-L\fP or \fB\-LE\fP\&.
-.UNINDENT
-.INDENT 0.0
-.TP
-.B \-\-exclude\-from\-file <filename>
-New in version 3.29.
-
-.sp
-Exclude tests listed in the given file.
-.sp
-This option tells CTest to NOT run tests that are listed in the given file.
-The file must contain one exact test name per line.
-Lines that do not exactly match any test names are ignored.
-This option can be combined with the other options like
-\fB\-R\fP, \fB\-E\fP, \fB\-L\fP or \fB\-LE\fP\&.
 .UNINDENT
 .INDENT 0.0
 .TP
@@ -526,9 +485,6 @@ See \fI\%Label and Subproject Summary\fP\&.
 .INDENT 0.0
 .TP
 .B \-\-test\-dir <dir>
-New in version 3.20.
-
-.sp
 Specify the directory in which to look for tests, typically a CMake project
 build directory. If not specified, the current directory is used.
 .UNINDENT
@@ -1166,18 +1122,6 @@ This is useful if the build will not finish in one day.
 Submit extra files to the dashboard.
 .sp
 This option will submit extra files to the dashboard.
-.UNINDENT
-.INDENT 0.0
-.TP
-.B \-\-http\-header <header>
-New in version 3.29.
-
-.sp
-Append HTTP header when submitting to the dashboard.
-.sp
-This option will cause CTest to append the specified header
-when submitting to the dashboard.
-This option may be specified more than once.
 .UNINDENT
 .INDENT 0.0
 .TP
@@ -2506,35 +2450,6 @@ exists, all tests that have \fI\%RESOURCE_GROUPS\fP set must have the
 fixture in their \fI\%FIXTURES_REQUIRED\fP, and a resource spec file may
 not be specified with the \fB\-\-resource\-spec\-file\fP argument or the
 \fI\%CTEST_RESOURCE_SPEC_FILE\fP variable.
-.SH JOB SERVER INTEGRATION
-.sp
-New in version 3.29.
-
-.sp
-On POSIX systems, when running under the context of a \fI\%Job Server\fP,
-CTest shares its job slots.  This is independent of the \fI\%PROCESSORS\fP
-test property, which still counts against CTest\(aqs \fI\%\-j\fP
-parallel level.  CTest acquires exactly one token from the job server before
-running each test, and returns it when the test finishes.
-.sp
-For example, consider the \fBMakefile\fP:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-test:
-	+ctest \-j 8
-
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-When invoked via \fBmake \-j 2 test\fP, \fBctest\fP connects to the job server,
-acquires a token for each test, and runs at most 2 tests concurrently.
-.sp
-On Windows systems, job server integration is not yet implemented.
 .SH SEE ALSO
 .sp
 The following resources are available to get help using CMake:
@@ -2557,6 +2472,6 @@ found on this web page.
 The Discourse Forum hosts discussion and questions about CMake.
 .UNINDENT
 .SH COPYRIGHT
-2000-2024 Kitware, Inc. and Contributors
+2000-2023 Kitware, Inc. and Contributors
 .\" Generated by docutils manpage writer.
 .
