@@ -129,7 +129,11 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		return;
 	}
 
+#ifdef GITHUB_REVISION
+	blog(LOG_INFO, "executeApiRequest (start) %s\n", funcName.c_str());
+#else
 	blog(LOG_INFO, "executeApiRequest (start) %s: %s\n", funcName.c_str(), params.c_str());
+#endif
 
 	std::string jsonReturnStr;
 
@@ -209,7 +213,11 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
-	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), jsonReturnStr.c_str());
+#ifdef GITHUB_REVISION
+	blog(LOG_INFO, "executeApiRequest (finish) %s\n", funcName.c_str());
+#else
+	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), params.c_str());
+#endif
 
 	// We're done, send callback
 	if (param1Value.int_value() > 0)
@@ -896,7 +904,7 @@ void PluginJsHandler::JS_DOCK_SETTITLE(const json11::Json &params, std::string &
 					QAction *action = reinterpret_cast<QAction *>(dock->property("actionptr").toULongLong());
 					action->setText(newTitle.c_str());
 					dock->setWindowTitle(newTitle.c_str());
-					out_jsonReturn = Json(Json::object({{"error", "success"}})).dump();
+					out_jsonReturn = Json(Json::object({{"status", "success"}})).dump();
 					break;
 				}
 			}
@@ -3026,6 +3034,7 @@ LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 
 void PluginJsHandler::onWmClose()
 {
+	stop();
 	QtGuiModifications::instance().stop();
 	PluginJsHandler::instance().saveSlabsBrowserDocks();
 }
