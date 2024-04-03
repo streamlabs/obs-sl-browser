@@ -12,7 +12,7 @@ Write-Output $currentPath
 Write-Output "Becomes..."
 $pathArray = $currentPath -split ";"
 $filteredPathArray = $pathArray -notmatch '\\CMake\\'
-$customCMakePath = "C:\github\obs30\plugins\obs-sl-browser\tools\cmake\bin"
+$customCMakePath = "${github_workspace}\ci\tools\cmake\bin"
 $newPath = $customCMakePath + ";" + ($filteredPathArray -join ";")
 [Environment]::SetEnvironmentVariable("PATH", $newPath, [EnvironmentVariableTarget]::Process)
 Write-Output $newPath
