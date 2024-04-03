@@ -24,12 +24,12 @@ jobs:
             ReleaseConfig: RelWithDebInfo
     env:
       OS_TAG: "win64"
-    steps:
-      - name: Run change cmake script
-        run: powershell -File ./ci/cmake_path.ps1
-        
+    steps:        
       - name: Checkout repository
         uses: actions/checkout@v2
+        
+      - name: Run change cmake script
+        run: powershell -File ./ci/cmake_path.ps1
          
       - name: Run build script
         run: powershell -File ./ci/pipeline.ps1 "${{ github.workspace }}" "${{ github.sha }}"
