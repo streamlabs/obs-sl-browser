@@ -10,7 +10,7 @@ $pathArray = $currentPath -split ";"
 $filteredPathArray = $pathArray -notmatch '\\CMake\\'
 
 # Add custom CMake path at the beginning
-$customCMakePath = "C:\github\obs30\plugins\obs-sl-browser\tools\cmake"
+$customCMakePath = "C:\github\obs30\plugins\obs-sl-browser\tools\cmake\bin"
 $newPath = $customCMakePath + ";" + ($filteredPathArray -join ";")
 
 # Set the modified PATH environment variable
