@@ -3,20 +3,31 @@ param(
     [string]$revision
 )
 
-Write-Output "Test 12 is $github_workspace"
-Write-Output "Workspace is $github_workspace"
-Write-Output "Github revision is $revision"
-Write-Output "${github_workspace}\tools\cmake\bin"
+# Define the custom CMake path, assuming $github_workspace is already defined
+$customCMakePath = "${github_workspace}/tools/cmake/bin"
+Write-Output "Setting cmake path to $customCMakePath..."
 
-# Workaround - Use our version of CMake
-$currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Process)
-$pathArray = $currentPath -split ";"
-$filteredPathArray = $pathArray -notmatch '\\CMake\\'
-$customCMakePath = "${github_workspace}\tools\cmake\bin"
-Write-Output "Setting cmake path to..."
-Write-Output $customCMakePath
-$newPath = $customCMakePath + ";" + ($filteredPathArray -join ";")
-[Environment]::SetEnvironmentVariable("PATH", $newPath, [EnvironmentVariableTarget]::Process)
+# Navigate to the custom CMake path
+Set-Location -Path $customCMakePath
+
+# Check if cmake.exe exists in the directory
+if (Test-Path -Path "./cmake.exe") {
+    Write-Output "cmake.exe found in $customCMakePath."
+} else {
+    Write-Output "cmake.exe not found in $customCMakePath."
+}
+
+# If cmake.exe is found, proceed with setting the PATH and other operations
+if (Test-Path -Path "./cmake.exe") {
+    $currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Process)
+    $filteredPathArray = $currentPath -split ";" -notmatch '\\CMake\\'
+    $newPath = $customCMakePath + ";" + ($filteredPathArray -join ";")
+    [Environment]::SetEnvironmentVariable("PATH", $newPath, [EnvironmentVariableTarget]::Process)
+    Write-Output "PATH updated to include $customCMakePath."
+} else {
+    Write-Output "Skipping PATH update due to missing cmake.exe."
+}
+
 Write-Output "Cmake version..."
 cmake --version
 
