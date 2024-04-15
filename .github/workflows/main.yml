@@ -25,11 +25,6 @@ jobs:
     env:
       OS_TAG: "win64"
     steps:
-      - name: Setup cmake
-        uses: jwlawson/actions-setup-cmake@v1.14
-        with:
-          cmake-version: '3.28.x'
-          
       - name: Checkout repository
         uses: actions/checkout@v2
          
