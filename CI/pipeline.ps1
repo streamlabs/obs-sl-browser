@@ -41,10 +41,10 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Begin
-$env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\cmake"
-$env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
-$env:gRPC_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\grpc"
-$env:utf8_range_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\utf8_range"
+$env:Protobuf_DIR = "c:\grpc\cmake"
+$env:absl_DIR = "c:\grpc\lib\cmake\absl"
+$env:gRPC_DIR = "c:\grpc\lib\cmake\grpc"
+$env:utf8_range_DIR = "c:\grpc\lib\cmake\utf8_range"
 
 Write-Output "${github_workspace}\..\grpc_dist\"
 
