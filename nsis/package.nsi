@@ -43,6 +43,12 @@ BrandingText "Streamlabs Plugin Package"
 
 ; Define the sections of the installer
 Section "MainSection" SEC01    
+   ; Read previous installation directory from the registry and delete plugin
+   ReadRegStr $R0 HKLM "Software\Streamlabs OBS Plugin" "InstallDir"
+   StrCmp $R0 "" doneDelete   
+   Delete "$R0\sl-browser-plugin.dll"
+   doneDelete:
+
    SetOutPath $INSTDIR
    File /r "${PACKAGE_DIR}\*.*"
 
@@ -61,14 +67,11 @@ Section "Uninstall"
    ; Read the installation directory from the registry
    ReadRegStr $INSTDIR HKLM "Software\Streamlabs OBS Plugin" "InstallDir"
 
-   ; Commands to remove the installed files
-   RMDir /r $INSTDIR
+   ; Delete plugin
+   Delete "$INSTDIR\sl-browser-plugin.dll"
 
-   ; Commands to remove the uninstaller itself
-   Delete $INSTDIR\Uninstall.exe
-
-   ; Remove the installation directory if empty
-   RMDir $INSTDIR
+   ; Remove uninstaller itself
+   Delete "$INSTDIR\Uninstall.exe"
 
    ; Clean up the registry entry
    DeleteRegKey HKLM "Software\Streamlabs OBS Plugin"
