@@ -77,7 +77,7 @@ Section "Uninstall"
    
    ; Check if the file is deleted
    IfFileExists "$INSTDIR\sl-browser-plugin.dll" 0 +2
-   MessageBox MB_ICONERROR "Error: Failed to delete plugin file. Make sure OBS is not running."
+   MessageBox MB_OK|MB_ICONEXCLAMATION "Error: Failed to delete plugin file. Make sure OBS is not running."
    Abort
    
    ; Read the installation directory from the registry
