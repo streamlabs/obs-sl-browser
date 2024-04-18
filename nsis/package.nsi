@@ -59,11 +59,12 @@ Section "MainSection" SEC01
    WriteUninstaller "$INSTDIR\Uninstall.exe"
    
    ; Write the installation path to the registry for uninstall purposes
-   WriteRegStr HKLM "${UNINST_KEY}" "DisplayName" "${PRODUCT_NAME}"  ; Name displayed in Add/Remove Programs
-   WriteRegStr HKLM "${UNINST_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'  ; Command for uninstall
-   WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" '"$INSTDIR\streamlabs.ico"'  ; Icon for Add/Remove Programs
-   WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "1.0"  ; Version number
-   WriteRegStr HKLM "${UNINST_KEY}" "Publisher" "Streamlabs"  ; Publisher name
+   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "DisplayName" "Streamlabs Plugin Package"
+   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "UninstallString" "$INSTDIR\Uninstall.exe"
+   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "DisplayIcon" "$INSTDIR\Uninstall.exe"
+   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "Publisher" "Streamlabs"
+   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "NoModify" 1
+   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "NoRepair" 1
 SectionEnd
 
 ; Language files (choose the languages you want to support)
@@ -81,9 +82,5 @@ Section "Uninstall"
    Delete "$INSTDIR\Uninstall.exe"
 
    ; Clean up the registry entry
-   DeleteRegKey HKLM "Software\Streamlabs OBS Plugin"
-   
-   ; Clean up the registry entry
-   DeleteRegKey HKLM "${UNINST_KEY}"
-   DeleteRegKey HKLM "Software\Streamlabs OBS Plugin"
+    DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg"
 SectionEnd
