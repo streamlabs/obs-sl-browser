@@ -76,9 +76,11 @@ Section "Uninstall"
    Delete "$INSTDIR\sl-browser-plugin.dll"
    
    ; Check if the file is deleted
-   IfFileExists "$INSTDIR\sl-browser-plugin.dll" 0 +2
-   MessageBox MB_OK|MB_ICONEXCLAMATION "Error: Failed to delete plugin file. Make sure OBS is not running."
-   Abort
+   IfFileExists "$INSTDIR\sl-browser-plugin.dll" 0 +3
+   ${If} 1
+      MessageBox MB_OK|MB_ICONEXCLAMATION "Error: Failed to delete plugin file. Make sure OBS is not running."
+      Abort
+   ${EndIf}
    
    ; Read the installation directory from the registry
    ReadRegStr $INSTDIR HKLM "Software\Streamlabs OBS Plugin" "InstallDir"
