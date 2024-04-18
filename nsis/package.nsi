@@ -13,7 +13,7 @@
 !endif
 
 ; Define the name of the installer as it will appear in Windows
-Name "Streamlabs Plugin for OBS"
+Name "Streamlabs Plugin Package"
 
 ; Specify the output installer file using the OUTPUT_NAME parameter
 Outfile "${OUTPUT_NAME}"
@@ -38,20 +38,38 @@ RequestExecutionLevel admin  ; Request admin rights
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
 !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
-BrandingText "Streamlabs Plugin for OBS" 
+BrandingText "Streamlabs Plugin Package" 
 !insertmacro MUI_PAGE_FINISH
-
 
 ; Define the sections of the installer
 Section "MainSection" SEC01    
-
-   ; Set the output path to the directory selected by the user or provided via command line
    SetOutPath $INSTDIR
-
-   ; Include the files from PACKAGE_DIR directory recursively
    File /r "${PACKAGE_DIR}\*.*"
 
+   ; Write the installation path to the registry
+   WriteRegStr HKLM "Software\Streamlabs OBS Plugin" "InstallDir" $INSTDIR
+
+   ; Write the uninstaller
+   WriteUninstaller "$INSTDIR\Uninstall.exe"
 SectionEnd
 
 ; Language files (choose the languages you want to support)
 !insertmacro MUI_LANGUAGE "English"
+
+; Define uninstaller section
+Section "Uninstall"
+   ; Read the installation directory from the registry
+   ReadRegStr $INSTDIR HKLM "Software\Streamlabs OBS Plugin" "InstallDir"
+
+   ; Commands to remove the installed files
+   RMDir /r $INSTDIR
+
+   ; Commands to remove the uninstaller itself
+   Delete $INSTDIR\Uninstall.exe
+
+   ; Remove the installation directory if empty
+   RMDir $INSTDIR
+
+   ; Clean up the registry entry
+   DeleteRegKey HKLM "Software\Streamlabs OBS Plugin"
+SectionEnd
