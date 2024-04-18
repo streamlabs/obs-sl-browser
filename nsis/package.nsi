@@ -72,19 +72,20 @@ SectionEnd
 
 ; Define uninstaller section
 Section "Uninstall"
+   ; Read the installation directory from the registry
+   ReadRegStr $INSTDIR HKLM "Software\Streamlabs OBS Plugin" "InstallDir"
+   
    ; Delete plugin
    Delete "$INSTDIR\sl-browser-plugin.dll"
    
    ; Check if the file is deleted
-   IfFileExists "$INSTDIR\sl-browser-plugin.dll" 0 +3
-   ${If} 1
-      MessageBox MB_OK|MB_ICONEXCLAMATION "Error: Failed to delete plugin file. Make sure OBS is not running."
-      Abort
-   ${EndIf}
+   IfFileExists "$INSTDIR\sl-browser-plugin.dll" file_exists file_not_exists
+file_exists:
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Error: Failed to delete plugin file. Make sure OBS is not running."
+    Abort
+file_not_exists:
+    ; Continue
    
-   ; Read the installation directory from the registry
-   ReadRegStr $INSTDIR HKLM "Software\Streamlabs OBS Plugin" "InstallDir"
-
    ; Remove uninstaller itself
    Delete "$INSTDIR\Uninstall.exe"
 
