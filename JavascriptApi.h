@@ -19,6 +19,7 @@ public:
 		JS_DELETE_FILES,
 		JS_DROP_FOLDER,
 		JS_QUERY_DOWNLOADS_FOLDER,
+		JS_GET_LOGS_REPORT_STRING,
 		JS_OBS_SOURCE_CREATE,
 		JS_OBS_SOURCE_DESTROY,
 		JS_DOCK_SETAREA,
@@ -237,6 +238,12 @@ public:
 			//	Returns comprehensive list of everything in our downloads folder
 			//		Example arg1 = [{ "path": "..." },]
 			{"fs_queryDownloadsFolder", JS_QUERY_DOWNLOADS_FOLDER},
+
+			// .(@function(arg1))
+			//	Returns a string that is a combination of log files
+			//		Example arg1 = { "content": "about 1-5mb of text" }
+			{"fs_getLogsReportString", JS_GET_LOGS_REPORT_STRING},
+
 
 			/***
 			* obs
