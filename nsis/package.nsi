@@ -49,6 +49,7 @@ Section "MainSection" SEC01
    Delete "$R0\sl-browser-plugin.dll"
    doneDelete:
 
+   ClearErrors
    SetOutPath $INSTDIR
    File /r "${PACKAGE_DIR}\*.*"
    IfErrors onError noError
