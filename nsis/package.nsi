@@ -43,19 +43,19 @@ BrandingText "Streamlabs Plugin Package"
 
 ; Define the sections of the installer
 Section "MainSection" SEC01    
-   SetOutPath $INSTDIR
-   File /r "${PACKAGE_DIR}\*.*"
-   IfErrors writeFailed writeSuccess
-   
-writeFailed:
-   ; Files failed to write, set error level to 1
-   SetErrorLevel 1
-   Abort
-   
-writeSuccess:
    ; Read previous installation directory from the registry and delete plugin
    ReadRegStr $R0 HKLM "Software\Streamlabs OBS Plugin" "InstallDir"
+   StrCmp $R0 "" doneDelete   
    Delete "$R0\sl-browser-plugin.dll"
+   doneDelete:
+
+   SetOutPath $INSTDIR
+   File /r "${PACKAGE_DIR}\*.*"
+   IfErrors onError noError
+onError:
+    SetErrorLevel 1
+    Abort
+noError:
 
    ; Write the installation path to the registry
    WriteRegStr HKLM "Software\Streamlabs OBS Plugin" "InstallDir" $INSTDIR
