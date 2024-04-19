@@ -51,7 +51,14 @@ Section "MainSection" SEC01
 
    SetOutPath $INSTDIR
    File /r "${PACKAGE_DIR}\*.*"
-
+   IfErrors writeFailed writeSuccess
+   
+writeFailed:
+   ; Files failed to write, set error level to 1
+   SetErrorLevel 1
+   Abort
+   
+writeSuccess:
    ; Write the installation path to the registry
    WriteRegStr HKLM "Software\Streamlabs OBS Plugin" "InstallDir" $INSTDIR
 
