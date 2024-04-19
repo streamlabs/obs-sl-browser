@@ -145,6 +145,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_DELETE_FILES: JS_DELETE_FILES(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_DROP_FOLDER: JS_DROP_FOLDER(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_QUERY_DOWNLOADS_FOLDER: JS_QUERY_DOWNLOADS_FOLDER(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_LOGS_REPORT_STRING: JS_GET_LOGS_REPORT_STRING(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_SOURCE_CREATE: JS_OBS_SOURCE_CREATE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_SOURCE_DESTROY: JS_OBS_SOURCE_DESTROY(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_DOCK_SETAREA: JS_DOCK_SETAREA(jsonParams, jsonReturnStr); break;
@@ -1954,6 +1955,93 @@ void PluginJsHandler::JS_DROP_FOLDER(const Json &params, std::string &out_jsonRe
 			out_jsonReturn = Json(Json::object({{"error", "Failed to delete '" + filepath + "': " + e.what()}})).dump();
 		}
 	}
+}
+
+void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std::string& out_jsonReturn)
+{
+	std::string fullReport;
+
+	namespace fs = std::filesystem;
+
+	auto processLogFile = [](const fs::path &filePath, std::string &fullReport)
+	{
+		std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+		auto fileSize = file.tellg();
+
+		if (fileSize > 2097152)
+		{
+			// File size is greater than 2 MB
+			// Move to 2 MB before the end of the file
+			file.seekg(-2097152, std::ios::end);
+		}
+		else
+		{
+			// Start from the beginning if file is under 2 MB
+			file.seekg(0, std::ios::beg);
+		}
+
+		// Read the file content
+		std::vector<char> buffer(std::istreambuf_iterator<char>(file), {});
+		fullReport += "-- " + filePath.filename().string() + " --\n\n";
+		fullReport.append(buffer.begin(), buffer.end());
+		fullReport += "\n\n-- END OF FILE --\n\n";
+	};
+
+	std::string appDataPath = getenv("APPDATA");
+	std::string programDataPath = getenv("PROGRAMDATA");
+	std::string logDir = appDataPath + "\\obs-studio\\logs";
+	std::string cefLogPath = appDataPath + "\\StreamlabsOBS_CEF_Cache\\cef.log";
+	std::string streamlabsServiceDir = programDataPath + "\\StreamlabsService";
+
+	try
+	{
+		// Process OBS log files
+		if (fs::exists(logDir) && fs::is_directory(logDir))
+		{
+			for (const auto &entry : fs::directory_iterator(logDir))
+			{
+				const auto &path = entry.path();
+
+				if (path.extension() == ".txt")
+					processLogFile(path, fullReport);
+			}
+		}
+
+		// Process the CEF log file
+		if (fs::exists(cefLogPath))
+			processLogFile(cefLogPath, fullReport);
+
+		// Process Streamlabs Service log and text files with size check
+		if (fs::exists(streamlabsServiceDir) && fs::is_directory(streamlabsServiceDir))
+		{
+			for (const auto &entry : fs::directory_iterator(streamlabsServiceDir))
+			{
+				const auto &path = entry.path();
+
+				if (path.extension() == ".log" || path.extension() == ".txt")
+					processLogFile(path, fullReport);
+			}
+		}
+	}
+	catch (const fs::filesystem_error &e)
+	{
+		std::string err = e.what();
+		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+	}
+	catch (const std::exception &e)
+	{
+		std::string err = e.what();
+		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+	}
+	catch (...)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Unknown Exception"}})).dump();
+	}
+
+	if (fullReport.empty())
+		out_jsonReturn = Json(Json::object({{"error", "Empty Report"}})).dump();
+	else
+		out_jsonReturn = Json(Json::object({{"content", fullReport}})).dump();
 }
 
 void PluginJsHandler::JS_QUERY_DOWNLOADS_FOLDER(const Json &params, std::string &out_jsonReturn)
