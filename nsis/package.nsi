@@ -55,7 +55,6 @@ writeFailed:
 writeSuccess:
    ; Read previous installation directory from the registry and delete plugin
    ReadRegStr $R0 HKLM "Software\Streamlabs OBS Plugin" "InstallDir"
-   StrCmp $R0 "" doneDelete   
    Delete "$R0\sl-browser-plugin.dll"
 
    ; Write the installation path to the registry
