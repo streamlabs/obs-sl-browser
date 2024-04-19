@@ -13,7 +13,7 @@
 !endif
 
 ; Define the name of the installer as it will appear in Windows
-Name "Streamlabs Plugin for OBS"
+Name "Streamlabs Plugin Package"
 
 ; Specify the output installer file using the OUTPUT_NAME parameter
 Outfile "${OUTPUT_NAME}"
@@ -38,20 +38,57 @@ RequestExecutionLevel admin  ; Request admin rights
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
 !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
-BrandingText "Streamlabs Plugin for OBS" 
+BrandingText "Streamlabs Plugin Package" 
 !insertmacro MUI_PAGE_FINISH
-
 
 ; Define the sections of the installer
 Section "MainSection" SEC01    
+   ; Read previous installation directory from the registry and delete plugin
+   ReadRegStr $R0 HKLM "Software\Streamlabs OBS Plugin" "InstallDir"
+   StrCmp $R0 "" doneDelete   
+   Delete "$R0\sl-browser-plugin.dll"
+   doneDelete:
 
-   ; Set the output path to the directory selected by the user or provided via command line
    SetOutPath $INSTDIR
-
-   ; Include the files from PACKAGE_DIR directory recursively
    File /r "${PACKAGE_DIR}\*.*"
 
+   ; Write the installation path to the registry
+   WriteRegStr HKLM "Software\Streamlabs OBS Plugin" "InstallDir" $INSTDIR
+
+   ; Write the uninstaller
+   WriteUninstaller "$INSTDIR\Uninstall.exe"
+   
+   ; Write the installation path to the registry for uninstall purposes
+   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "DisplayName" "Streamlabs Plugin Package"
+   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "UninstallString" "$INSTDIR\Uninstall.exe"
+   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "DisplayIcon" "$INSTDIR\Uninstall.exe"
+   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "Publisher" "Streamlabs"
+   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "NoModify" 1
+   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "NoRepair" 1
 SectionEnd
 
 ; Language files (choose the languages you want to support)
 !insertmacro MUI_LANGUAGE "English"
+
+; Define uninstaller section
+Section "Uninstall"
+   ; Read the installation directory from the registry
+   ReadRegStr $INSTDIR HKLM "Software\Streamlabs OBS Plugin" "InstallDir"
+   
+   ; Delete plugin
+   Delete "$INSTDIR\sl-browser-plugin.dll"
+   
+   ; Check if the file is deleted
+   IfFileExists "$INSTDIR\sl-browser-plugin.dll" file_exists file_not_exists
+file_exists:
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Error: Failed to delete plugin file. Make sure OBS is not running."
+    Abort
+file_not_exists:
+    ; Continue
+   
+   ; Remove uninstaller itself
+   Delete "$INSTDIR\Uninstall.exe"
+
+   ; Clean up the registry entry
+	DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg"
+SectionEnd
