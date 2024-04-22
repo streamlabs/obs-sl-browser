@@ -47,17 +47,24 @@ Section "MainSection" SEC01
    ReadRegStr $R0 HKLM "Software\Streamlabs OBS Plugin" "InstallDir"
    StrCmp $R0 "" doneDelete   
    Delete "$R0\sl-browser-plugin.dll"
-   doneDelete:
+ doneDelete:
 
    ClearErrors
    SetOutPath $INSTDIR
    File /r "${PACKAGE_DIR}\*.*"
+   IfErrors retry noError
+
+retry:
+   Sleep 1000 ; Wait for 1000 milliseconds (1 second)
+   SetOutPath $INSTDIR
+   File /r "${PACKAGE_DIR}\*.*"
    IfErrors onError noError
-onError:
+
+onError:   
     SetErrorLevel 1
     Abort
+	
 noError:
-
    ; Write the installation path to the registry
    WriteRegStr HKLM "Software\Streamlabs OBS Plugin" "InstallDir" $INSTDIR
 
