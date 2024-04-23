@@ -89,11 +89,6 @@ void SlBrowser::run(int argc, char *argv[])
 	std::thread(CheckForObsThread).detach();
 	std::thread(DebugInputThread).detach();
 
-	if (SlBrowser::getSavedHiddenState())
-		m_widget->hide();
-	else
-		m_widget->showNormal();
-
 	// Run Qt Application
 	int result = a.exec();
 }
@@ -119,16 +114,26 @@ void SlBrowser::CreateCefBrowser(int arg)
 	window_info.SetAsChild((HWND)app.m_widget->winId(), CefRect(0, 0, realWidth, realHeight));
 	app.m_browser = CefBrowserHost::CreateBrowserSync(window_info, app.browserClient.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), nullptr);
 
-	auto bringToTop = [] {
-		// For the next second keep the window on top
-		for (int i = 0; i < 10; ++i)
-		{
-			::SetForegroundWindow((HWND)SlBrowser::instance().m_widget->winId());
-			::Sleep(100);
-		}
-	};
+	if (SlBrowser::instance().getSavedHiddenState())
+	{
+		SlBrowser::instance().m_widget->hide();
+	}
+	else
+	{
+		SlBrowser::instance().m_widget->showNormal();
 
-	std::thread(bringToTop).detach();
+		auto bringToTop = []
+		{
+			// For the next second keep the window on top
+			for (int i = 0; i < 10; ++i)
+			{
+				::SetForegroundWindow((HWND)SlBrowser::instance().m_widget->winId());
+				::Sleep(100);
+			}
+		};
+
+		std::thread(bringToTop).detach();
+	}
 }
 
 void SlBrowser::browserInit()
