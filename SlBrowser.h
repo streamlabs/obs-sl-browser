@@ -52,6 +52,7 @@ private:
 
 	bool m_mainPageSuccess = false;
 	bool m_mainLoadingInProgress = false;
+	bool m_cefCreated = false;
 
 public:
 	// Disallow copying
