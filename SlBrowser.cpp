@@ -75,6 +75,9 @@ void SlBrowser::run(int argc, char *argv[])
 	// Create CEF Browser
 	auto manager_thread = thread(&SlBrowser::browserManagerThread, this);
 
+	while (!m_cefInit)
+		::Sleep(1);
+
 	// Create Qt Widget
 	m_widget = new SlBrowserWidget{};
 	m_widget->setWindowTitle("Streamlabs");
@@ -230,6 +233,7 @@ void SlBrowser::browserShutdown()
 void SlBrowser::browserManagerThread()
 {
 	browserInit();
+	m_cefInit = true;
 	CefRunMessageLoop();
 	browserShutdown();
 }
