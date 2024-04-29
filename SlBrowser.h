@@ -29,6 +29,7 @@ public:
 	CefRefPtr<BrowserClient> browserClient = nullptr;
 	int32_t m_obs64_PIDt = 0;
 	bool m_allowHideBrowser = true;
+	std::atomic<bool> m_cefInit = false;
 
 public:
 	static SlBrowser &instance()
