@@ -22,6 +22,8 @@
 #include <QVBoxLayout>
 #include <QObject>
 
+#include "QtPostTask.h"
+
 // Windows
 #include <Windows.h>
 
@@ -108,7 +110,10 @@ void QtGuiModifications::init()
 			}
 			else
 			{
-				obs_hotkey_trigger_routed_callback(id, pressed);
+				QtPostTask(
+					[id, pressed]() {
+						obs_hotkey_trigger_routed_callback(id, pressed);
+				});
 			}
 		},
 		nullptr);
