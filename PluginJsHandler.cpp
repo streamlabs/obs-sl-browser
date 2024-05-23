@@ -70,6 +70,7 @@ void PluginJsHandler::start()
 {
 	m_running = true;
 	m_workerThread = std::thread(&PluginJsHandler::workerThread, this);
+	m_freezeCheckThread = std::thread(&PluginJsHandler::freezeCheckThread, this);
 }
 
 void PluginJsHandler::stop()
@@ -78,6 +79,9 @@ void PluginJsHandler::stop()
 
 	if (m_workerThread.joinable())
 		m_workerThread.join();
+
+	if (m_freezeCheckThread.joinable())
+		m_freezeCheckThread.join();
 }
 
 void PluginJsHandler::pushApiRequest(const std::string &funcName, const std::string &params)
@@ -107,6 +111,47 @@ void PluginJsHandler::workerThread()
 			for (auto &itr : latestBatch)
 				executeApiRequest(itr.first, itr.second);
 		}
+	}
+}
+
+void PluginJsHandler::freezeCheckThread()
+{
+	while (m_running)
+	{
+		std::atomic<bool> threadActive = true;
+
+		std::thread([&] {
+			QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+			QMetaObject::invokeMethod(mainWindow, [mainWindow]() { printf("0"); }, Qt::BlockingQueuedConnection);
+			threadActive = false;
+		}).detach();
+
+		auto timeStart = std::chrono::steady_clock::now();
+
+		while (threadActive)
+		{
+			auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - timeStart).count();
+
+			if (elapsedTime > 30000)
+			{
+				blog(LOG_ERROR, "PluginJsHandler::freezeCheckThread - UI seems frozen.");
+				int result = MessageBoxA(0, "The UI is not responding.\nWould you like to try and close the program?", "Frozen", MB_YESNO | MB_ICONERROR);
+
+				if (result == IDYES)
+				{
+					// Try to invoke crash handler (works often enough to get reports we need)
+					*((unsigned int *)0) = 0xDEAD;
+					abort();
+				}
+
+				return;
+			}
+
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+
+		// Check every 10 seconds
+		std::this_thread::sleep_for(std::chrono::seconds(10));
 	}
 }
 
