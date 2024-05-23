@@ -35,6 +35,7 @@ private:
 	~PluginJsHandler();
 
 	void workerThread();
+	void freezeCheckThread();
 
 	void JS_QUERY_DOCKS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DOCK_EXECUTEJAVASCRIPT(const json11::Json &params, std::string &out_jsonReturn);
@@ -117,6 +118,7 @@ private:
 	std::atomic<bool> m_running = false;
 	std::vector<std::pair<std::string, std::string>> m_queudRequests;
 	std::thread m_workerThread;
+	std::thread m_freezeCheckThread;
 
 	bool m_restartApp = false;
 
