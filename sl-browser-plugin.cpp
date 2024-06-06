@@ -58,23 +58,45 @@ void obs_module_post_load(void)
 	
 	// Path to OBS log file, find the most recently updated log file
 	std::string logdir = os_get_config_path_ptr("obs-studio/logs/");
-	std::filesystem::directory_iterator dir_it(logdir);
 	std::filesystem::path latest_file;
 	auto latest_time = std::filesystem::file_time_type::min();
-	
-	// Find the most recently updated file
-	for (const auto &entry : dir_it)
+
+	try
 	{
-		if (entry.is_regular_file())
+		if (!std::filesystem::exists(logdir))
+			throw std::runtime_error("Log directory does not exist.");
+		if (!std::filesystem::is_directory(logdir))
+			throw std::runtime_error("Specified path is not a directory.");
+
+		std::filesystem::directory_iterator dir_it(logdir);
+
+		// Find the most recently updated file
+		for (const auto &entry : dir_it)
 		{
-			auto last_write_time = entry.last_write_time();
-			if (latest_file.empty() || last_write_time > latest_time)
+			if (entry.is_regular_file())
 			{
-				latest_file = entry.path();
-				latest_time = last_write_time;
+				auto last_write_time = entry.last_write_time();
+				if (latest_file.empty() || last_write_time > latest_time)
+				{
+					latest_file = entry.path();
+					latest_time = last_write_time;
+				}
 			}
 		}
 	}
+	catch (const std::filesystem::filesystem_error &e)
+	{
+		blog(LOG_ERROR, "obs-studio/logs/ - Filesystem error: ", e.what());
+	}
+	catch (const std::runtime_error &e)
+	{
+		blog(LOG_ERROR, "obs-studio/logs/ - Runtime error: ", e.what());
+	}
+	catch (...)
+	{
+		blog(LOG_ERROR, "obs-studio/logs/ - An unknown error occurred.");
+	}
+
 	
 	CrashHandler::instance().addLogfilePath(latest_file.string());
 		
