@@ -4,8 +4,6 @@ find_package(CEF REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(Detours REQUIRED)
 
-find_qt(COMPONENTS Widgets)
-
 include(FindGRPC.cmake)
 
 ## -- Grpc between plugin and proxy
