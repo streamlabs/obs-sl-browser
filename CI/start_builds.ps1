@@ -49,7 +49,7 @@ Write-Output "The next_rev value has been incremented successfully."
 #
 
 # URL to the OBS Versions JSON data
-$jsonUrl = "https://slobs-cdn.streamlabs.com/obsplugin/obsversions.json"
+$jsonUrl = "https://slobs-cdn.streamlabs.com/obsplugin/obsversions_internal.json"
 
 # Fetch the JSON content
 $jsonContent = Invoke-RestMethod -Uri $jsonUrl
