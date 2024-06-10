@@ -4,7 +4,7 @@ $Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
 $Env:AWS_DEFAULT_REGION = "us-west-2"
 
 # URL to the JSON data for known OBS versions 
-$urlJsonObsVersions = "https://slobs-cdn.streamlabs.com/obsplugin/obsversions.json"
+$urlJsonObsVersions = "https://slobs-cdn.streamlabs.com/obsplugin/obsversions_internal.json"
 
 # Fetch the JSON content
 $jsonContent = Invoke-RestMethod -Uri $urlJsonObsVersions
