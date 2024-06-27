@@ -30,14 +30,14 @@ void SlBrowserWidget::closeEvent(QCloseEvent *event) /*override*/
 	if (SlBrowser::instance().m_allowHideBrowser)
 		setHidden(true);
 
-	SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_widget->isHidden());
+	SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_mainBrowser.widget->isHidden());
 }
 
 void SlBrowserWidget::resizeEvent(QResizeEvent *event) /*override*/
 {
 	QWidget::resizeEvent(event);
 
-	if (SlBrowser::instance().m_browser != nullptr)
+	if (SlBrowser::instance().m_mainBrowser.browser != nullptr)
 	{
 		QSize size = this->size() * devicePixelRatioF();
 
@@ -53,7 +53,7 @@ void SlBrowserWidget::resizeEvent(QResizeEvent *event) /*override*/
 		auto QueueCEFTask = [](std::function<void()> task) { return CefPostTask(TID_UI, CefRefPtr<BrowserTask>(new BrowserTask(task))); };
 
 		QueueCEFTask([this, size]() {
-			CefWindowHandle handle = SlBrowser::instance().m_browser->GetHost()->GetWindowHandle();
+			CefWindowHandle handle = SlBrowser::instance().m_mainBrowser.browser->GetHost()->GetWindowHandle();
 
 			if (!handle)
 				return;

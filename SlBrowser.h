@@ -5,13 +5,20 @@
 
 #include <QWidget>
 
+struct BrowserElements
+{
+	QWidget *widget = nullptr;
+	CefRefPtr<CefBrowser> browser = nullptr;
+	CefRefPtr<BrowserClient> client = nullptr;
+};
+
 class SlBrowser
 {
 public:
 	void run(int argc, char *argv[]);
 
-	static void CreateCefBrowser(int arg);
-	static const char *getDefaultUrl() { return "https://obs-plugin.streamlabs.com"; }
+	static void CreateCefBrowser(BrowserElements* browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
+	static const char *getPluginHttpUrl() { return "https://obs-plugin.streamlabs.com"; }
 
 	bool getSavedHiddenState() const;
 	void saveHiddenState(const bool b) const;
@@ -23,10 +30,12 @@ public:
 	void setMainLoadingInProgress(const bool b) { m_mainLoadingInProgress = b; }
 
 public:
-	QWidget *m_widget = nullptr;
 	CefRefPtr<BrowserApp> m_app = nullptr;
-	CefRefPtr<CefBrowser> m_browser = nullptr;
-	CefRefPtr<BrowserClient> browserClient = nullptr;
+
+	BrowserElements m_mainBrowser;
+	BrowserElements m_appstoreBrowser;
+
+public:
 	int32_t m_obs64_PIDt = 0;
 	bool m_allowHideBrowser = true;
 	std::atomic<bool> m_cefInit = false;

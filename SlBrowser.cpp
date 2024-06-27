@@ -69,6 +69,10 @@ void SlBrowser::run(int argc, char *argv[])
 		printf("sl-proxy: failed to connected to plugin's grpc server, GetLastError = %d\n", GetLastError());
 		return;
 	}
+
+	// Background threads
+	std::thread(CheckForObsThread).detach();
+	std::thread(DebugInputThread).detach();
 	
 	QApplication a(argc, argv);
 
@@ -78,64 +82,70 @@ void SlBrowser::run(int argc, char *argv[])
 	while (!m_cefInit)
 		::Sleep(1);
 
-	// Create Qt Widget
-	m_widget = new SlBrowserWidget{};
-	m_widget->setWindowTitle("Streamlabs");
-	m_widget->setMinimumSize(320, 240);
-	m_widget->resize(1280, 720);
+	// Main browser
+	//
+
+	m_mainBrowser.widget = new SlBrowserWidget{};
+	m_mainBrowser.widget->setWindowTitle("Streamlabs");
+	m_mainBrowser.widget->setMinimumSize(320, 240);
+	m_mainBrowser.widget->resize(1280, 720);
 
 	// We have to show before creating CEF because it needs the HWND, and the HWND is not made until the QtWidget is shown at least once
-	m_widget->showMinimized();
+	m_mainBrowser.widget->showMinimized();
 
-	CefPostTask(TID_UI, base::BindOnce(&CreateCefBrowser, 5));
+	CefPostTask(TID_UI, base::BindOnce(&CreateCefBrowser, &m_mainBrowser, SlBrowser::getPluginHttpUrl(), SlBrowser::instance().getSavedHiddenState(), true));
 
-	std::thread(CheckForObsThread).detach();
-	std::thread(DebugInputThread).detach();
+	// Appstore (debugging)
+	//
+
+	m_appstoreBrowser.widget = new SlBrowserWidget{};
+	m_appstoreBrowser.widget->setWindowTitle("Streamlabs App Store");
+	m_appstoreBrowser.widget->setMinimumSize(320, 240);
+	m_appstoreBrowser.widget->resize(1280, 720);
+	m_appstoreBrowser.widget->showMinimized();
+	
+	CefPostTask(TID_UI, base::BindOnce(&CreateCefBrowser, &m_appstoreBrowser, "https://streamlabs.com/sl-desktop-app-store", false, false));
 
 	// Run Qt Application
 	int result = a.exec();
 }
 
-void SlBrowser::CreateCefBrowser(int arg)
+void SlBrowser::CreateCefBrowser(BrowserElements *browserElements, const std::string &url, const bool startHidden, const bool keepOnTop)
 {
-	auto &app = SlBrowser::instance();
-
 	CefWindowInfo window_info;
 	CefBrowserSettings browser_settings;
-	app.browserClient = new BrowserClient(false);
-
-	CefString url = SlBrowser::getDefaultUrl();
+	browserElements->client = new BrowserClient(false);
 
 	// Adjust for possible DPI 
-	int realWidth = app.m_widget->width();
-	int realHeight = app.m_widget->height();
-	qreal scaleFactor = app.m_widget->devicePixelRatioF();
+	int realWidth = browserElements->widget->width();
+	int realHeight = browserElements->widget->height();
+	qreal scaleFactor = browserElements->widget->devicePixelRatioF();
 	realWidth = static_cast<int>(realWidth * scaleFactor);
 	realHeight = static_cast<int>(realHeight * scaleFactor);
 
 	// Now set the parent of the CEF browser to the QWidget
-	window_info.SetAsChild((HWND)app.m_widget->winId(), CefRect(0, 0, realWidth, realHeight));
-	app.m_browser = CefBrowserHost::CreateBrowserSync(window_info, app.browserClient.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), nullptr);
+	window_info.SetAsChild((HWND)browserElements->widget->winId(), CefRect(0, 0, realWidth, realHeight));
+	browserElements->browser = CefBrowserHost::CreateBrowserSync(window_info, browserElements->client.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), nullptr);
 
-	if (SlBrowser::instance().getSavedHiddenState())
+	if (startHidden)
 	{
-		SlBrowser::instance().m_widget->hide();
+		browserElements->widget->hide();
 	}
 	else
 	{
-		SlBrowser::instance().m_widget->showNormal();
+		browserElements->widget->showNormal();
 
-		auto bringToTop = []
+		if (keepOnTop)
 		{
-			// For the next second keep the window on top
-			for (int i = 0; i < 10; ++i)
-			{
-				::SetForegroundWindow((HWND)SlBrowser::instance().m_widget->winId());
-				::Sleep(100);
-			}
-		};
-
-		std::thread(bringToTop).detach();
+			std::thread([] (BrowserElements *b) {
+				// For the next second keep the window on top
+				for (int i = 0; i < 10; ++i)
+				{
+					::SetForegroundWindow((HWND)b->widget->winId());
+					::Sleep(100);
+				}
+			}, browserElements).detach();
+		}
 	}
 }
 
@@ -337,7 +347,7 @@ void SlBrowser::DebugInputThread()
 		if (!url.empty())
 		{
 			std::cout << ";" << std::endl;
-			SlBrowser::instance().m_browser->GetMainFrame()->LoadURL(url);
+			SlBrowser::instance().m_mainBrowser.browser->GetMainFrame()->LoadURL(url);
 		}
 		else
 		{
