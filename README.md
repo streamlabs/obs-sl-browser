@@ -18,7 +18,7 @@ TODO
 4. Update submodules for the version
 > git submodule update
 5. Clone the plugin into the plugins subfolder
-> git clone --recurse-submodules https://github.com/stream-labs/obs-sl-browser plugins\obs-sl-browser
+> git clone --recurse-submodules git@github.com:stream-labs/obs-sl-browser.git plugins\obs-sl-browser
 6. Download and unpack the plugin dependencies (use the version from https://github.com/stream-labs/obs-sl-browser/blob/main/.github/workflows/main.yml)
 > set GRPC_VERSION=v1.58.0
 > start /WAIT /B /D %CD%\plugins\obs-sl-browser CI\install_deps.cmd
