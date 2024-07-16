@@ -44,7 +44,9 @@ TODO
 
 8. Add the plugin in the OBS-Studio CMake script (do it manually if the example command below does not work)
 
-    powershell -command "(Get-Content plugins\CMakeLists.txt).Replace('add_subdirectory(win-capture)', \"add_subdirectory(win-capture)\`r\`n    add_subdirectory(obs-sl-browser)\") | Set-Content plugins\CMakeLists.txt"
+    powershell -command "(Get-Content plugins\CMakeLists.txt).Replace('add_obs_plugin(win-capture PLATFORMS WINDOWS)', \"add_obs_plugin(win-capture PLATFORMS WINDOWS)\`r\`n  add_obs_plugin(obs-sl-browser PLATFORMS WINDOWS)\") | Set-Content plugins\CMakeLists.txt"
+
+    powershell -command "(Get-Content plugins\CMakeLists.txt).Replace('add_subdirectory(win-capture)', \"add_subdirectory(win-capture)\`r\`n  add_subdirectory(obs-sl-browser)\") | Set-Content plugins\CMakeLists.txt"
 
 9. Configure OBS-Studio the regular way (check https://github.com/obsproject/obs-studio/wiki/build-instructions-for-windows)
 
