@@ -215,12 +215,12 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 				break;
 			}
 
-			SlBrowser::instance().m_mainBrowser.widget->resize(w, h);
+			SlBrowser::instance().m_mainBrowser->widget->resize(w, h);
 			break;
 		}
 		case JavascriptApi::JS_BROWSER_BRING_FRONT:
 		{
-			HWND hwnd = HWND(SlBrowser::instance().m_mainBrowser.widget->winId());
+			HWND hwnd = HWND(SlBrowser::instance().m_mainBrowser->widget->winId());
 
 			if (::IsIconic(hwnd))
 				::ShowWindow(hwnd, SW_RESTORE);
@@ -239,7 +239,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			int x = argsWithoutFunc[0]->GetInt();
 			int y = argsWithoutFunc[1]->GetInt();
 
-			SlBrowser::instance().m_mainBrowser.widget->move(x, y);
+			SlBrowser::instance().m_mainBrowser->widget->move(x, y);
 			break;
 		}
 		case JavascriptApi::JS_BROWSER_SET_ALLOW_HIDE_BROWSER:
@@ -261,12 +261,12 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 				break;
 			}
 
-			SlBrowser::instance().m_mainBrowser.widget->setHidden(argsWithoutFunc[0]->GetBool());
-			SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_mainBrowser.widget->isHidden());
+			SlBrowser::instance().m_mainBrowser->widget->setHidden(argsWithoutFunc[0]->GetBool());
+			SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_mainBrowser->widget->isHidden());
 
-			if (!SlBrowser::instance().m_mainBrowser.widget->isHidden())
+			if (!SlBrowser::instance().m_mainBrowser->widget->isHidden())
 			{
-				HWND hwnd = HWND(SlBrowser::instance().m_mainBrowser.widget->winId());
+				HWND hwnd = HWND(SlBrowser::instance().m_mainBrowser->widget->winId());
 				WindowsFunctions::ForceForegroundWindow(hwnd);
 			}
 

@@ -7,7 +7,7 @@
 
 struct BrowserElements
 {
-	QWidget *widget = nullptr;
+	std::shared_ptr<QWidget> widget = nullptr;
 	CefRefPtr<CefBrowser> browser = nullptr;
 	CefRefPtr<BrowserClient> client = nullptr;
 };
@@ -16,9 +16,8 @@ class SlBrowser
 {
 public:
 	void run(int argc, char *argv[]);
-
-	static void CreateCefBrowser(BrowserElements* browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
-	static const char *getPluginHttpUrl() { return "https://obs-plugin.streamlabs.com"; }
+	void createAppStore();
+	void cleanupCefBrowser(std::shared_ptr<BrowserElements> browserElements);
 
 	bool getSavedHiddenState() const;
 	void saveHiddenState(const bool b) const;
@@ -29,11 +28,14 @@ public:
 	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
 	void setMainLoadingInProgress(const bool b) { m_mainLoadingInProgress = b; }
 
+	static const char *getPluginHttpUrl() { return "https://obs-plugin.streamlabs.com"; }
+	static void createCefBrowser(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
+
 public:
 	CefRefPtr<BrowserApp> m_app = nullptr;
 
-	BrowserElements m_mainBrowser;
-	BrowserElements m_appstoreBrowser;
+	std::shared_ptr<BrowserElements> m_mainBrowser;
+	std::shared_ptr<BrowserElements> m_appstoreBrowser;
 
 public:
 	int32_t m_obs64_PIDt = 0;
@@ -55,6 +57,8 @@ private:
 	void browserShutdown();
 	void browserManagerThread();
 
+	static void cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements);
+
 	std::wstring getCacheDir() const;
 
 	static void DebugInputThread();
@@ -63,6 +67,10 @@ private:
 	bool m_mainPageSuccess = false;
 	bool m_mainLoadingInProgress = false;
 	bool m_cefCreated = false;
+
+	std::mutex m_mutex;
+
+	std::unique_ptr<QApplication> m_qapp = nullptr;
 
 public:
 	// Disallow copying

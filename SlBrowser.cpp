@@ -74,7 +74,7 @@ void SlBrowser::run(int argc, char *argv[])
 	std::thread(CheckForObsThread).detach();
 	std::thread(DebugInputThread).detach();
 	
-	QApplication a(argc, argv);
+	m_qapp = std::make_unique<QApplication>(argc, argv);
 
 	// Create CEF Browser
 	auto manager_thread = thread(&SlBrowser::browserManagerThread, this);
@@ -85,38 +85,41 @@ void SlBrowser::run(int argc, char *argv[])
 	// Main browser
 	//
 
-	m_mainBrowser.widget = new SlBrowserWidget{};
-	m_mainBrowser.widget->setWindowTitle("Streamlabs");
-	m_mainBrowser.widget->setMinimumSize(320, 240);
-	m_mainBrowser.widget->resize(1280, 720);
+	m_mainBrowser = std::make_shared<BrowserElements>();
+	m_mainBrowser->widget = std::make_shared<SlBrowserWidget>();
+	m_mainBrowser->widget->setWindowTitle("Streamlabs");
+	m_mainBrowser->widget->setMinimumSize(320, 240);
+	m_mainBrowser->widget->resize(1280, 720);
 
 	// We have to show before creating CEF because it needs the HWND, and the HWND is not made until the QtWidget is shown at least once
-	m_mainBrowser.widget->showMinimized();
+	m_mainBrowser->widget->showMinimized();
 
-	CefPostTask(TID_UI, base::BindOnce(&CreateCefBrowser, &m_mainBrowser, SlBrowser::getPluginHttpUrl(), SlBrowser::instance().getSavedHiddenState(), true));
+	CefPostTask(TID_UI, base::BindOnce(&createCefBrowser, m_mainBrowser, SlBrowser::getPluginHttpUrl(), SlBrowser::instance().getSavedHiddenState(), true));
 
-	// Appstore (debugging)
+	// Appstore
 	//
 
-	m_appstoreBrowser.widget = new SlBrowserWidget{};
-	m_appstoreBrowser.widget->setWindowTitle("Streamlabs App Store");
-	m_appstoreBrowser.widget->setMinimumSize(320, 240);
-	m_appstoreBrowser.widget->resize(1280, 720);
-	m_appstoreBrowser.widget->showMinimized();
+	m_appstoreBrowser = std::make_shared<BrowserElements>();
+	m_appstoreBrowser->widget = std::make_shared<SlBrowserWidget>();
+	m_appstoreBrowser->widget->setWindowTitle("Streamlabs App Store");
+	m_appstoreBrowser->widget->setMinimumSize(320, 240);
+	m_appstoreBrowser->widget->resize(1280, 720);
+	m_appstoreBrowser->widget->showMinimized();
 	
-	CefPostTask(TID_UI, base::BindOnce(&CreateCefBrowser, &m_appstoreBrowser, "https://streamlabs.com/sl-desktop-app-store", false, false));
+	CefPostTask(TID_UI, base::BindOnce(&createCefBrowser, m_appstoreBrowser, "https://streamlabs.com/sl-desktop-app-store", false, false));
 
 	// Run Qt Application
-	int result = a.exec();
+	int result = m_qapp->exec();
 }
 
-void SlBrowser::CreateCefBrowser(BrowserElements *browserElements, const std::string &url, const bool startHidden, const bool keepOnTop)
+/*static*/
+void SlBrowser::createCefBrowser(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop)
 {
 	CefWindowInfo window_info;
 	CefBrowserSettings browser_settings;
 	browserElements->client = new BrowserClient(false);
 
-	// Adjust for possible DPI 
+	// Adjust for possible DPI
 	int realWidth = browserElements->widget->width();
 	int realHeight = browserElements->widget->height();
 	qreal scaleFactor = browserElements->widget->devicePixelRatioF();
@@ -125,7 +128,12 @@ void SlBrowser::CreateCefBrowser(BrowserElements *browserElements, const std::st
 
 	// Now set the parent of the CEF browser to the QWidget
 	window_info.SetAsChild((HWND)browserElements->widget->winId(), CefRect(0, 0, realWidth, realHeight));
-	browserElements->browser = CefBrowserHost::CreateBrowserSync(window_info, browserElements->client.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), nullptr);
+
+	// Create a unique request context for the new browser
+	CefRequestContextSettings request_context_settings;
+	CefRefPtr<CefRequestContext> request_context = CefRequestContext::CreateContext(request_context_settings, nullptr);
+
+	browserElements->browser = CefBrowserHost::CreateBrowserSync(window_info, browserElements->client.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), request_context);
 
 	if (startHidden)
 	{
@@ -137,14 +145,17 @@ void SlBrowser::CreateCefBrowser(BrowserElements *browserElements, const std::st
 
 		if (keepOnTop)
 		{
-			std::thread([] (BrowserElements *b) {
-				// For the next second keep the window on top
-				for (int i = 0; i < 10; ++i)
-				{
-					::SetForegroundWindow((HWND)b->widget->winId());
-					::Sleep(100);
-				}
-			}, browserElements).detach();
+			std::thread(
+				[](std::shared_ptr<BrowserElements> b) {
+					// For the next second keep the window on top
+					for (int i = 0; i < 10; ++i)
+					{
+						::SetForegroundWindow((HWND)b->widget->winId());
+						::Sleep(100);
+					}
+				},
+				browserElements)
+				.detach();
 		}
 	}
 }
@@ -231,6 +242,41 @@ void SlBrowser::browserInit()
 
 	// Register http://absolute/ scheme handler for older CEF builds which do not support file:// URLs
 	CefRegisterSchemeHandlerFactory("http", "absolute", new BrowserSchemeHandlerFactory());
+}
+
+/*static*/
+void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements)
+{
+	if (browserElements->browser)
+	{
+		CefRefPtr<CefBrowserHost> host = browserElements->browser->GetHost();
+
+		if (host)
+			host->CloseBrowser(true);
+
+		browserElements->browser = nullptr;
+	}
+
+	if (browserElements->client)
+	{
+		browserElements->client = nullptr;
+	}
+
+	auto window = browserElements->widget.get();
+
+	QMetaObject::invokeMethod(
+		window,
+		[window, browserElements]() {
+			browserElements->widget = nullptr;
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+
+void SlBrowser::cleanupCefBrowser(std::shared_ptr<BrowserElements> browserElements)
+{
+	// Post the cleanup task to the UI thread to ensure it runs in the correct thread context
+	//CefPostTask(TID_UI, base::BindOnce(&SlBrowser::cleanupCefBrowser_Internal, this, browserElements));
 }
 
 void SlBrowser::browserShutdown()
@@ -347,7 +393,7 @@ void SlBrowser::DebugInputThread()
 		if (!url.empty())
 		{
 			std::cout << ";" << std::endl;
-			SlBrowser::instance().m_mainBrowser.browser->GetMainFrame()->LoadURL(url);
+			SlBrowser::instance().m_mainBrowser->browser->GetMainFrame()->LoadURL(url);
 		}
 		else
 		{
