@@ -1,12 +1,10 @@
 cmake_minimum_required(VERSION 3.16...3.25)
 
-legacy_check()
-
 find_package(CEF REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(Detours REQUIRED)
 
-find_package(Qt6 REQUIRED Widgets)
+find_qt(COMPONENTS Widgets)
 
 include(FindGRPC.cmake)
 
