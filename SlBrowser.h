@@ -4,11 +4,13 @@
 #include "browser-app.hpp"
 
 #include <QWidget>
+#include <map>
 
 struct BrowserElements
 {
+	~BrowserElements() { QMetaObject::invokeMethod(widget, "deleteLater", Qt::QueuedConnection); }
 	int32_t uid = 0;
-	std::shared_ptr<QWidget> widget = nullptr;
+	QWidget* widget = nullptr;
 	CefRefPtr<CefBrowser> browser = nullptr;
 	CefRefPtr<BrowserClient> client = nullptr;
 };
@@ -16,32 +18,33 @@ struct BrowserElements
 class SlBrowser
 {
 public:
+	SlBrowser(const SlBrowser &) = delete;
+	SlBrowser &operator=(const SlBrowser &) = delete;
+
+public:
 	void run(int argc, char *argv[]);
 	void createAppStore();
-	void cleanupCefBrowser(std::shared_ptr<BrowserElements> browserElements);
+	void queueDestroyCefBrowser(const int32_t uuid);
+	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
+	void setMainLoadingInProgress(const bool b) { m_mainLoadingInProgress = b; }
+	void saveHiddenState(const bool b) const;
+	void createCefBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
 
 	bool getSavedHiddenState() const;
-	void saveHiddenState(const bool b) const;
-
 	bool getMainPageSuccess() const { return m_mainPageSuccess; }
 	bool getMainLoadingInProgress() const { return m_mainLoadingInProgress; }
 
-	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
-	void setMainLoadingInProgress(const bool b) { m_mainLoadingInProgress = b; }
+	std::string getLastError() { return m_lastError; }
 
 	static const char *getPluginHttpUrl() { return "https://obs-plugin.streamlabs.com"; }
-	static void createCefBrowser(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
 
 public:
-	CefRefPtr<BrowserApp> m_app = nullptr;
-
-	std::shared_ptr<BrowserElements> m_mainBrowser;
-	std::shared_ptr<BrowserElements> m_appstoreBrowser;
-
-public:
-	int32_t m_obs64_PIDt = 0;
 	bool m_allowHideBrowser = true;
+	int32_t m_obs64_PIDt = 0;
 	std::atomic<bool> m_cefInit = false;
+	CefRefPtr<BrowserApp> m_app = nullptr;
+	std::shared_ptr<BrowserElements> m_mainBrowser = nullptr;
+	std::map<int32_t, std::shared_ptr<BrowserElements>> m_browsers;
 
 public:
 	static SlBrowser &instance()
@@ -58,6 +61,7 @@ private:
 	void browserShutdown();
 	void browserManagerThread();
 
+	static void createCefBrowser_internal(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
 	static void cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements);
 
 	std::wstring getCacheDir() const;
@@ -70,11 +74,6 @@ private:
 	bool m_cefCreated = false;
 
 	std::mutex m_mutex;
-
+	std::string m_lastError;
 	std::unique_ptr<QApplication> m_qapp = nullptr;
-
-public:
-	// Disallow copying
-	SlBrowser(const SlBrowser &) = delete;
-	SlBrowser &operator=(const SlBrowser &) = delete;
 };

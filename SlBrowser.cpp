@@ -86,7 +86,7 @@ void SlBrowser::run(int argc, char *argv[])
 	//
 
 	m_mainBrowser = std::make_shared<BrowserElements>();
-	m_mainBrowser->widget = std::make_shared<SlBrowserWidget>();
+	m_mainBrowser->widget = new SlBrowserWidget;
 	m_mainBrowser->widget->setWindowTitle("Streamlabs");
 	m_mainBrowser->widget->setMinimumSize(320, 240);
 	m_mainBrowser->widget->resize(1280, 720);
@@ -94,26 +94,43 @@ void SlBrowser::run(int argc, char *argv[])
 	// We have to show before creating CEF because it needs the HWND, and the HWND is not made until the QtWidget is shown at least once
 	m_mainBrowser->widget->showMinimized();
 
-	CefPostTask(TID_UI, base::BindOnce(&createCefBrowser, m_mainBrowser, SlBrowser::getPluginHttpUrl(), SlBrowser::instance().getSavedHiddenState(), true));
+	createCefBrowser(0, m_mainBrowser, SlBrowser::getPluginHttpUrl(), SlBrowser::instance().getSavedHiddenState(), true);
 
 	// Appstore
 	//
 
-	m_appstoreBrowser = std::make_shared<BrowserElements>();
-	m_appstoreBrowser->widget = std::make_shared<SlBrowserWidget>();
-	m_appstoreBrowser->widget->setWindowTitle("Streamlabs App Store");
-	m_appstoreBrowser->widget->setMinimumSize(320, 240);
-	m_appstoreBrowser->widget->resize(1280, 720);
-	m_appstoreBrowser->widget->showMinimized();
-	
-	CefPostTask(TID_UI, base::BindOnce(&createCefBrowser, m_appstoreBrowser, "https://streamlabs.com/sl-desktop-app-store", false, false));
+	{
+		auto appstoreBrowser = std::make_shared<BrowserElements>();
+		appstoreBrowser->widget = new SlBrowserWidget;
+		appstoreBrowser->widget->setWindowTitle("Streamlabs App Store");
+		appstoreBrowser->widget->setMinimumSize(320, 240);
+		appstoreBrowser->widget->resize(1280, 720);
+		appstoreBrowser->widget->showMinimized();
+
+		createCefBrowser(1, appstoreBrowser, "https://streamlabs.com/sl-desktop-app-store", false, false);
+	}
 
 	// Run Qt Application
 	int result = m_qapp->exec();
 }
 
+void SlBrowser::createCefBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements, const std::string& url, const bool startHidden, const bool keepOnTop)
+{
+	std::lock_guard<std::mutex> g(m_mutex);
+
+	if (m_browsers.find(uuid) != m_browsers.end())
+	{
+		m_lastError = "createCefBrowser, uuid already exists";
+		return;
+	}
+
+	m_browsers[uuid] = browserElements;
+
+	CefPostTask(TID_UI, base::BindOnce(&createCefBrowser_internal, browserElements, url, startHidden, keepOnTop));
+}
+
 /*static*/
-void SlBrowser::createCefBrowser(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop)
+void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop)
 {
 	CefWindowInfo window_info;
 	CefBrowserSettings browser_settings;
@@ -244,6 +261,36 @@ void SlBrowser::browserInit()
 	CefRegisterSchemeHandlerFactory("http", "absolute", new BrowserSchemeHandlerFactory());
 }
 
+void SlBrowser::queueDestroyCefBrowser(const int32_t uid)
+{
+	if (uid == 0)
+	{
+		m_lastError = "queueDestroyCefBrowser, param is 0, which is the main browser, which may not be destroyed.";
+		return;
+	}
+
+	std::lock_guard<std::mutex> g(m_mutex);
+
+	auto browserElements = m_browsers.find(uid);
+
+	if (browserElements == m_browsers.end())
+	{
+		m_lastError = "queueDestroyCefBrowser, uid not found";
+		return;
+	}
+
+	shared_ptr<BrowserElements> ptr = browserElements->second;
+
+	if (ptr == nullptr)
+	{
+		m_lastError = "queueDestroyCefBrowser, internal error, the browser is null";
+		return;
+	}
+
+	m_browsers.erase(browserElements);
+	CefPostTask(TID_UI, base::BindOnce(&cleanupCefBrowser_Internal, ptr));
+}
+
 /*static*/
 void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements)
 {
@@ -258,25 +305,10 @@ void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> brow
 	}
 
 	if (browserElements->client)
-	{
 		browserElements->client = nullptr;
-	}
 
-	auto window = browserElements->widget.get();
-
-	QMetaObject::invokeMethod(
-		window,
-		[window, browserElements]() {
-			browserElements->widget = nullptr;
-		},
-		Qt::BlockingQueuedConnection);
-}
-
-
-void SlBrowser::cleanupCefBrowser(std::shared_ptr<BrowserElements> browserElements)
-{
-	// Post the cleanup task to the UI thread to ensure it runs in the correct thread context
-	//CefPostTask(TID_UI, base::BindOnce(&SlBrowser::cleanupCefBrowser_Internal, this, browserElements));
+	// This should be our last ref, deleting it. Possibility it won't always be the last ref?
+	browserElements = nullptr;
 }
 
 void SlBrowser::browserShutdown()
