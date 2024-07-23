@@ -118,6 +118,8 @@ void SlBrowser::createCefBrowser(const int32_t uuid, std::shared_ptr<BrowserElem
 {
 	std::lock_guard<std::mutex> g(m_mutex);
 
+	m_lastError.clear();
+
 	if (m_browsers.find(uuid) != m_browsers.end())
 	{
 		m_lastError = "createCefBrowser, uuid already exists";
@@ -263,13 +265,15 @@ void SlBrowser::browserInit()
 
 void SlBrowser::queueDestroyCefBrowser(const int32_t uid)
 {
+	std::lock_guard<std::mutex> g(m_mutex);
+
+	m_lastError.clear();
+
 	if (uid == 0)
 	{
 		m_lastError = "queueDestroyCefBrowser, param is 0, which is the main browser, which may not be destroyed.";
 		return;
 	}
-
-	std::lock_guard<std::mutex> g(m_mutex);
 
 	auto browserElements = m_browsers.find(uid);
 
@@ -306,9 +310,6 @@ void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> brow
 
 	if (browserElements->client)
 		browserElements->client = nullptr;
-
-	// This should be our last ref, deleting it. Possibility it won't always be the last ref?
-	browserElements = nullptr;
 }
 
 void SlBrowser::browserShutdown()
@@ -373,6 +374,31 @@ bool SlBrowser::getSavedHiddenState() const
 	file >> ch;
 
 	return ch == L'1';
+}
+
+std::shared_ptr<BrowserElements> SlBrowser::getBrowserElements(const int32_t uid)
+{
+	std::lock_guard<std::mutex> g(m_mutex);
+
+	m_lastError.clear();
+
+	auto browserElements = m_browsers.find(uid);
+
+	if (browserElements == m_browsers.end())
+	{
+		m_lastError = "getBrowserElements, uid not found";
+		return nullptr;
+	}
+
+	return browserElements->second;
+}
+
+std::string SlBrowser::popLastError()
+{
+	std::lock_guard<std::mutex> g(m_mutex);
+	auto ret = m_lastError;
+	m_lastError.clear();
+	return ret;
 }
 
 void SlBrowser::saveHiddenState(const bool b) const

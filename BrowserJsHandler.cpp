@@ -2,6 +2,8 @@
 #include "base64/base64.hpp"
 #include "json11/json11.hpp"
 
+#include "SlBrowserWidget.h"
+
 #include <QApplication>
 #include <QThread>
 #include <QToolTip>
@@ -52,8 +54,8 @@ void BrowserClient::JS_BROWSER_SET_WINDOW_POSITION(CefRefPtr<CefBrowser> browser
 		return;
 	}
 
-	int x = argsWithoutFunc[0]->GetInt();
-	int y = argsWithoutFunc[1]->GetInt();
+	int32_t x = argsWithoutFunc[0]->GetInt();
+	int32_t y = argsWithoutFunc[1]->GetInt();
 
 	SlBrowser::instance().m_mainBrowser->widget->move(x, y);
 }
@@ -89,20 +91,67 @@ void BrowserClient::JS_BROWSER_SET_HIDDEN_STATE(CefRefPtr<CefBrowser> browser, C
 
 void BrowserClient::JS_CREATE_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
 {
+	if (argsWithoutFunc.size() < 1)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return;
+	}
 
+	std::string url = argsWithoutFunc[0]->GetString();
+
+	auto elements = std::make_shared<BrowserElements>();
+	elements->widget = new SlBrowserWidget;
+	elements->widget->setWindowTitle("Streamlabs App Store");
+	elements->widget->setMinimumSize(320, 240);
+	elements->widget->resize(1280, 720);
+	elements->widget->showMinimized();
+
+	SlBrowser::instance().createCefBrowser(1, elements, url, false, false);
 }
 
 void BrowserClient::JS_DESTROY_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
 {
+	if (argsWithoutFunc.size() < 1)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return;
+	}
 
-}
+	int32_t uid = argsWithoutFunc[0]->GetInt();
+	SlBrowser::instance().queueDestroyCefBrowser(uid);
 
-void BrowserClient::JS_RESIZE_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
-{
+	std::string err = SlBrowser::instance().popLastError();
 
+	if (!err.empty())
+		jsonOutput = Json(Json::object({{"error", err}})).dump();
 }
 
 void BrowserClient::JS_LOAD_APP_URL(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
+{
+	if (argsWithoutFunc.size() < 2)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return;
+	}
+
+	int32_t uid = argsWithoutFunc[0]->GetInt();
+	std::string url = argsWithoutFunc[1]->GetString();
+
+	auto elementsPtr = SlBrowser::instance().getBrowserElements(uid);
+
+	if (elementsPtr == nullptr)
+	{
+		jsonOutput = Json(Json::object({{"error", SlBrowser::instance().popLastError() + ". Did not find " + std::to_string(uid)}})).dump();
+		return;
+	}
+
+	auto browserPtr = elementsPtr->browser;
+
+	if (auto mainFramePtr = browserPtr->GetMainFrame())
+		mainFramePtr->LoadURL(url);
+}
+
+void BrowserClient::JS_RESIZE_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
 {
 
 }

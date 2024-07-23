@@ -50,11 +50,6 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 
 	grpc::Status com_grpc_window_toggleVisibility(grpc::ServerContext *context, const grpc_window_toggleVisibility *request, grpc_empty_Reply *response) override
 	{
-		SlBrowser::instance().queueDestroyCefBrowser(1);
-
-		//if (SlBrowser::instance().m_appstoreBrowser->widget != nullptr)
-		//	SlBrowser::instance().cleanupCefBrowser(SlBrowser::instance().m_appstoreBrowser);
-
 		// If hidden
 		if (SlBrowser::instance().m_mainBrowser->widget->isHidden())
 		{

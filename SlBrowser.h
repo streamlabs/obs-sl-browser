@@ -34,7 +34,9 @@ public:
 	bool getMainPageSuccess() const { return m_mainPageSuccess; }
 	bool getMainLoadingInProgress() const { return m_mainLoadingInProgress; }
 
-	std::string getLastError() { return m_lastError; }
+	std::shared_ptr<BrowserElements> getBrowserElements(const int32_t uid);
+
+	std::string popLastError();
 
 	static const char *getPluginHttpUrl() { return "https://obs-plugin.streamlabs.com"; }
 
