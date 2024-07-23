@@ -175,127 +175,61 @@ CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
 	return nullptr;
 }
 
-bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
+bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
 {
-	const std::string &name = message->GetName();
-	CefRefPtr<CefListValue> input_args = message->GetArgumentList();
+    const std::string &name = message->GetName();
+    CefRefPtr<CefListValue> input_args = message->GetArgumentList();
 
-	if (!valid())
-		return false;
+    if (!valid())
+        return false;
 
-	int funcid = input_args->GetInt(0);
+    int funcid = input_args->GetInt(0);
 
-	if (JavascriptApi::isBrowserFunctionName(name))
-	{
-		std::string jsonOutput = "{}";
+    if (JavascriptApi::isBrowserFunctionName(name))
+    {
+        std::string jsonOutput = "{}";
 
-		std::vector <CefRefPtr<CefValue>> argsWithoutFunc;
+        std::vector<CefRefPtr<CefValue>> argsWithoutFunc;
 
-		for (u_long l = 1; l < input_args->GetSize(); l++)
-			argsWithoutFunc.push_back(input_args->GetValue(l));
+        for (u_long l = 1; l < input_args->GetSize(); l++)
+            argsWithoutFunc.push_back(input_args->GetValue(l));
 
-		// Stuff done right here and now to the browser
-		// Put this into a sub function if it gets bigger
-		switch (JavascriptApi::getFunctionId(name))
-		{
-		case JavascriptApi::JS_BROWSER_RESIZE_BROWSER:
-		{
-			if (argsWithoutFunc.size() < 2)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
+        switch (JavascriptApi::getFunctionId(name))
+        {
+        case JavascriptApi::JS_BROWSER_RESIZE_BROWSER: JS_BROWSER_RESIZE_BROWSER(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_BROWSER_BRING_FRONT: JS_BROWSER_BRING_FRONT(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_BROWSER_SET_WINDOW_POSITION: JS_BROWSER_SET_WINDOW_POSITION(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_BROWSER_SET_ALLOW_HIDE_BROWSER: JS_BROWSER_SET_ALLOW_HIDE_BROWSER(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_BROWSER_SET_HIDDEN_STATE: JS_BROWSER_SET_HIDDEN_STATE(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_CREATE_APP_WINDOW: JS_CREATE_APP_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_DESTROY_APP_WINDOW: JS_DESTROY_APP_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_RESIZE_APP_WINDOW: JS_RESIZE_APP_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_LOAD_APP_URL: JS_LOAD_APP_URL(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        default: jsonOutput = Json(Json::object({{"error", "Unknown function"}})).dump(); break;
+        }
 
-			int w = argsWithoutFunc[0]->GetInt();
-			int h = argsWithoutFunc[1]->GetInt();
+        CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
+        CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
+        execute_args->SetInt(0, funcid);
+        execute_args->SetString(1, jsonOutput);
 
-			if (w < 200 || h < 200 || w > 8096 || h > 8096)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
+        SendBrowserProcessMessage(browser, PID_RENDERER, msg);
+    }
+    else
+    {
+        RegisterCallback(funcid, browser);
 
-			SlBrowser::instance().m_mainBrowser->widget->resize(w, h);
-			break;
-		}
-		case JavascriptApi::JS_BROWSER_BRING_FRONT:
-		{
-			HWND hwnd = HWND(SlBrowser::instance().m_mainBrowser->widget->winId());
+        if (!GrpcBrowser::instance().getClient()->send_js_api(name, cefListValueToJSONString(input_args)))
+        {
+            // todo; handle
+            abort();
+            return false;
+        }
+    }
 
-			if (::IsIconic(hwnd))
-				::ShowWindow(hwnd, SW_RESTORE);
-
-			WindowsFunctions::ForceForegroundWindow(hwnd);
-			break;
-		}
-		case JavascriptApi::JS_BROWSER_SET_WINDOW_POSITION:
-		{
-			if (argsWithoutFunc.size() < 2)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			int x = argsWithoutFunc[0]->GetInt();
-			int y = argsWithoutFunc[1]->GetInt();
-
-			SlBrowser::instance().m_mainBrowser->widget->move(x, y);
-			break;
-		}
-		case JavascriptApi::JS_BROWSER_SET_ALLOW_HIDE_BROWSER:
-		{
-			if (argsWithoutFunc.size() < 1)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			SlBrowser::instance().m_allowHideBrowser = argsWithoutFunc[0]->GetBool();
-			break;
-		}
-		case JavascriptApi::JS_BROWSER_SET_HIDDEN_STATE:
-		{
-			if (argsWithoutFunc.size() < 1)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			SlBrowser::instance().m_mainBrowser->widget->setHidden(argsWithoutFunc[0]->GetBool());
-			SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_mainBrowser->widget->isHidden());
-
-			if (!SlBrowser::instance().m_mainBrowser->widget->isHidden())
-			{
-				HWND hwnd = HWND(SlBrowser::instance().m_mainBrowser->widget->winId());
-				WindowsFunctions::ForceForegroundWindow(hwnd);
-			}
-
-			break;
-		}
-		}
-
-		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
-		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
-		execute_args->SetInt(0, funcid);
-		execute_args->SetString(1, jsonOutput);
-
-		SendBrowserProcessMessage(browser, PID_RENDERER, msg);
-	}
-	else
-	{
-		RegisterCallback(funcid, browser);
-
-		if (!GrpcBrowser::instance().getClient()->send_js_api(name, cefListValueToJSONString(input_args)))
-		{
-			// todo; handle
-			abort();
-			return false;
-		}
-	}
-
-
-	return true;
+    return true;
 }
+
 
 void BrowserClient::GetViewRect(CefRefPtr<CefBrowser>, CefRect &rect)
 {

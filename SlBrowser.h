@@ -7,6 +7,7 @@
 
 struct BrowserElements
 {
+	int32_t uid = 0;
 	std::shared_ptr<QWidget> widget = nullptr;
 	CefRefPtr<CefBrowser> browser = nullptr;
 	CefRefPtr<BrowserClient> client = nullptr;

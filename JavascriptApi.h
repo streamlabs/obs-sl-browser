@@ -88,6 +88,10 @@ public:
 		JS_QT_SET_JS_ON_CLICK_STREAM,
 		JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON,
 		JS_BROWSER_SET_HIDDEN_STATE,
+		JS_CREATE_APP_WINDOW,
+		JS_DESTROY_APP_WINDOW,
+		JS_RESIZE_APP_WINDOW,
+		JS_LOAD_APP_URL,
 	};
 
 public:
@@ -481,27 +485,40 @@ public:
 		// None of the api function belows are blocking, they return immediatelly, but can accept a function as arg1 thats invoked when work is complete, which should allow await/promise structure
 		static std::map<std::string, JSFuncs> names =
 		{
-			/**
-			* Browser Window
-			*/
-			
-			// .(@function(arg1), x, y)`
-			{"browser_resizeBrowser", JS_BROWSER_RESIZE_BROWSER},
+		    /**
+		    * Browser Window
+		    */
+    
+		    // .(@function(arg1), x, y)`
+		    {"browser_resizeBrowser", JS_BROWSER_RESIZE_BROWSER},
 
-			// .(@function(arg1))`
-			//	DEV NOTE: THIS FUNCTION CAN NEVER BE RENAMED !!
-			{"browser_bringToFront", JS_BROWSER_BRING_FRONT},
+		    // .(@function(arg1))`
+		    //  DEV NOTE: THIS FUNCTION CAN NEVER BE RENAMED !!
+		    {"browser_bringToFront", JS_BROWSER_BRING_FRONT},
 
-			// .(@function(arg1), x, y)`
-			{"browser_setWindowPosition", JS_BROWSER_SET_WINDOW_POSITION},
+		    // .(@function(arg1), x, y)`
+		    {"browser_setWindowPosition", JS_BROWSER_SET_WINDOW_POSITION},
 
-			// .(@function(arg1), bool)`
-			{"browser_setAllowHideBrowser", JS_BROWSER_SET_ALLOW_HIDE_BROWSER},
+		    // .(@function(arg1), bool)`
+		    {"browser_setAllowHideBrowser", JS_BROWSER_SET_ALLOW_HIDE_BROWSER},
 
-			// .(@function(arg1), bool)`
-			//	DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
-			{"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
+		    // .(@function(arg1), bool)`
+		    //  DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
+		    {"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
+
+		    // .(@function(arg1), uid)
+		    {"create_app_window", JS_CREATE_APP_WINDOW},
+
+		    // .(@function(arg1), uid)
+		    {"detroy_app_window", JS_DESTROY_APP_WINDOW},
+
+		    // .(@function(arg1), uid, x, y)
+		    {"resize_app_window", JS_RESIZE_APP_WINDOW},
+
+		    // .(@function(arg1), uid, url)
+		    {"load_app_url", JS_LOAD_APP_URL},
 		};
+
 
 		return names;
 	}

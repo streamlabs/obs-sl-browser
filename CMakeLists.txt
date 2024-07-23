@@ -68,6 +68,7 @@ target_sources(
           SlBrowserWidget.cpp
           browser-app.cpp
           browser-app.hpp
+          BrowserJsHandler.cpp
           browser-client.cpp
           browser-client.hpp
           browser-scheme.cpp
