@@ -2009,7 +2009,7 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 
 	namespace fs = std::filesystem;
 
-	const std::size_t maxLogFileSize = 2097152;
+	#define maxLogFileSize 2097152
 
 	auto processLogFile = [](const fs::path &filePath, std::string &fullReport)
 	{
