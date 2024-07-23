@@ -2009,16 +2009,18 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 
 	namespace fs = std::filesystem;
 
+	const std::size_t maxLogFileSize = 2097152;
+
 	auto processLogFile = [](const fs::path &filePath, std::string &fullReport)
 	{
 		std::ifstream file(filePath, std::ios::binary | std::ios::ate);
 		auto fileSize = file.tellg();
 
-		if (fileSize > 2097152)
+		if (fileSize > maxLogFileSize)
 		{
 			// File size is greater than 2 MB
 			// Move to 2 MB before the end of the file
-			file.seekg(-2097152, std::ios::end);
+			file.seekg(-maxLogFileSize, std::ios::end);
 		}
 		else
 		{
@@ -2041,15 +2043,35 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 
 	try
 	{
+		std::size_t currentLogDirSize = 0;
+
 		// Process OBS log files
 		if (fs::exists(logDir) && fs::is_directory(logDir))
 		{
-			for (const auto &entry : fs::directory_iterator(logDir))
+			std::vector<fs::directory_entry> entries(fs::directory_iterator(logDir), {});
+			std::sort(entries.begin(), entries.end(), [](const fs::directory_entry &a, const fs::directory_entry &b) { return fs::last_write_time(a) > fs::last_write_time(b); });
+
+			for (const auto &entry : entries)
 			{
 				const auto &path = entry.path();
-
 				if (path.extension() == ".txt")
+				{
+					std::ifstream file(path, std::ios::binary | std::ios::ate);
+					auto fileSize = file.tellg();
+
+					if (currentLogDirSize + fileSize > maxLogFileSize)
+					{
+						fullReport += "-- " + path.filename().string() + " --\n\n";
+						fullReport += "File too large to fit in report.\n\n";
+						continue;
+					}
+
 					processLogFile(path, fullReport);
+					currentLogDirSize += fileSize;
+
+					if (currentLogDirSize >= maxLogFileSize)
+						break;
+				}
 			}
 		}
 
@@ -2089,6 +2111,7 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 	else
 		out_jsonReturn = Json(Json::object({{"content", fullReport}})).dump();
 }
+
 
 void PluginJsHandler::JS_QUERY_DOWNLOADS_FOLDER(const Json &params, std::string &out_jsonReturn)
 {
