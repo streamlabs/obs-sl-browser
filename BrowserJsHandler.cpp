@@ -153,5 +153,24 @@ void BrowserClient::JS_LOAD_APP_URL(CefRefPtr<CefBrowser> browser, CefRefPtr<Cef
 
 void BrowserClient::JS_RESIZE_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
 {
+	if (argsWithoutFunc.size() < 3)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return;
+	}
 
+	int32_t uid = argsWithoutFunc[0]->GetInt();
+	int32_t w = argsWithoutFunc[1]->GetInt();
+	int32_t h = argsWithoutFunc[1]->GetInt();
+
+	auto elementsPtr = SlBrowser::instance().getBrowserElements(uid);
+
+	if (elementsPtr == nullptr)
+	{
+		jsonOutput = Json(Json::object({{"error", SlBrowser::instance().popLastError() + ". Did not find " + std::to_string(uid)}})).dump();
+		return;
+	}
+
+	if (auto widget = elementsPtr->widget)
+		widget->resize(x, y);
 }

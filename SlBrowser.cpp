@@ -100,14 +100,14 @@ void SlBrowser::run(int argc, char *argv[])
 	//
 
 	{
-		auto appstoreBrowser = std::make_shared<BrowserElements>();
-		appstoreBrowser->widget = new SlBrowserWidget;
-		appstoreBrowser->widget->setWindowTitle("Streamlabs App Store");
-		appstoreBrowser->widget->setMinimumSize(320, 240);
-		appstoreBrowser->widget->resize(1280, 720);
-		appstoreBrowser->widget->showMinimized();
-
-		createCefBrowser(1, appstoreBrowser, "https://streamlabs.com/sl-desktop-app-store", false, false);
+		//auto appstoreBrowser = std::make_shared<BrowserElements>();
+		//appstoreBrowser->widget = new SlBrowserWidget;
+		//appstoreBrowser->widget->setWindowTitle("Streamlabs App Store");
+		//appstoreBrowser->widget->setMinimumSize(320, 240);
+		//appstoreBrowser->widget->resize(1280, 720);
+		//appstoreBrowser->widget->showMinimized();
+		//
+		//createCefBrowser(1, appstoreBrowser, "https://streamlabs.com/sl-desktop-app-store", false, false);
 	}
 
 	// Run Qt Application
