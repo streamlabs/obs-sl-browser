@@ -53,15 +53,6 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefRefPtr<CefV8Context> context)
 {
-	/**
-
-	    // Get the URL of the current frame
-	    std::string url = frame->GetURL();
-
-	    // Check if the URL meets your criteria
-
-	*/
-
 	CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
 
 	CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);

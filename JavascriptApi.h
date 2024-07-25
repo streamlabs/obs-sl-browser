@@ -88,10 +88,13 @@ public:
 		JS_QT_SET_JS_ON_CLICK_STREAM,
 		JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON,
 		JS_BROWSER_SET_HIDDEN_STATE,
-		JS_CREATE_APP_WINDOW,
-		JS_DESTROY_APP_WINDOW,
-		JS_RESIZE_APP_WINDOW,
-		JS_LOAD_APP_URL,
+		JS_TABS_CREATE_WINDOW,
+		JS_TABS_DESTROY_WINDOW,
+		JS_TABS_RESIZE_WINDOW,
+		JS_TABS_LOAD_URL,
+		JS_TABS_HIDE_WINDOW,
+		JS_TABS_SHOW_WINDOW,
+		JS_TABS_IS_WINDOW_HIDDEN,
 	};
 
 public:
@@ -506,19 +509,31 @@ public:
 		    //  DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
 		    {"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
 
-		    // .(@function(arg1), uid)
-		    {"create_app_window", JS_CREATE_APP_WINDOW},
+		    //
+		    //
+		    
+		    // .(@function(arg1), uid, url)
+		    {"tabs_createWindow", JS_TABS_CREATE_WINDOW},
 
 		    // .(@function(arg1), uid)
-		    {"detroy_app_window", JS_DESTROY_APP_WINDOW},
+		    {"tabs_destroyWindow", JS_TABS_DESTROY_WINDOW},
 
 		    // .(@function(arg1), uid, x, y)
-		    {"resize_app_window", JS_RESIZE_APP_WINDOW},
+		    {"tabs_resizeWindow", JS_TABS_RESIZE_WINDOW},
 
 		    // .(@function(arg1), uid, url)
-		    {"load_app_url", JS_LOAD_APP_URL},
-		};
+		    {"tabs_loadUrl", JS_TABS_LOAD_URL},
 
+		    // .(@function(arg1), uid)
+		    {"tabs_hideWindow", JS_TABS_HIDE_WINDOW},
+
+		    // .(@function(arg1), uid)
+		    {"tabs_showWindow", JS_TABS_SHOW_WINDOW},
+
+		    // .(@function(arg1))
+		    //		Example arg1 = { "result": boolean }
+		    {"tabs_getIsWindowHidden", JS_TABS_IS_WINDOW_HIDDEN},
+		};
 
 		return names;
 	}

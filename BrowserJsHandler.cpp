@@ -89,15 +89,16 @@ void BrowserClient::JS_BROWSER_SET_HIDDEN_STATE(CefRefPtr<CefBrowser> browser, C
 	}
 }
 
-void BrowserClient::JS_CREATE_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
+void BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
 {
-	if (argsWithoutFunc.size() < 1)
+	if (argsWithoutFunc.size() < 2)
 	{
 		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
 		return;
 	}
 
-	std::string url = argsWithoutFunc[0]->GetString();
+	int uid = argsWithoutFunc[0]->GetInt();
+	std::string url = argsWithoutFunc[1]->GetString();
 
 	auto elements = std::make_shared<BrowserElements>();
 	elements->widget = new SlBrowserWidget;
@@ -106,10 +107,15 @@ void BrowserClient::JS_CREATE_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPt
 	elements->widget->resize(1280, 720);
 	elements->widget->showMinimized();
 
-	SlBrowser::instance().createCefBrowser(1, elements, url, false, false);
+	SlBrowser::instance().createCefBrowser(uid, elements, url, false, false);
+
+	std::string err = SlBrowser::instance().popLastError();
+
+	if (!err.empty())
+		jsonOutput = Json(Json::object({{"error", err}})).dump();
 }
 
-void BrowserClient::JS_DESTROY_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
+void BrowserClient::JS_TABS_DESTROY_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
 {
 	if (argsWithoutFunc.size() < 1)
 	{
@@ -126,7 +132,7 @@ void BrowserClient::JS_DESTROY_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefP
 		jsonOutput = Json(Json::object({{"error", err}})).dump();
 }
 
-void BrowserClient::JS_LOAD_APP_URL(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
+void BrowserClient::JS_TABS_LOAD_URL(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
 {
 	if (argsWithoutFunc.size() < 2)
 	{
@@ -151,7 +157,7 @@ void BrowserClient::JS_LOAD_APP_URL(CefRefPtr<CefBrowser> browser, CefRefPtr<Cef
 		mainFramePtr->LoadURL(url);
 }
 
-void BrowserClient::JS_RESIZE_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
+void BrowserClient::JS_TABS_RESIZE_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
 {
 	if (argsWithoutFunc.size() < 3)
 	{
@@ -172,5 +178,74 @@ void BrowserClient::JS_RESIZE_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPt
 	}
 
 	if (auto widget = elementsPtr->widget)
-		widget->resize(x, y);
+		widget->resize(w, h);
+}
+
+void BrowserClient::JS_TABS_HIDE_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
+{
+	if (argsWithoutFunc.size() < 1)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return;
+	}
+
+	int32_t uid = argsWithoutFunc[0]->GetInt();
+
+	auto elementsPtr = SlBrowser::instance().getBrowserElements(uid);
+
+	if (elementsPtr == nullptr)
+	{
+		jsonOutput = Json(Json::object({{"error", SlBrowser::instance().popLastError() + ". Did not find " + std::to_string(uid)}})).dump();
+		return;
+	}
+
+	if (auto widget = elementsPtr->widget)
+		widget->hide();
+}
+
+void BrowserClient::JS_TABS_SHOW_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
+{
+	if (argsWithoutFunc.size() < 1)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return;
+	}
+
+	int32_t uid = argsWithoutFunc[0]->GetInt();
+
+	auto elementsPtr = SlBrowser::instance().getBrowserElements(uid);
+
+	if (elementsPtr == nullptr)
+	{
+		jsonOutput = Json(Json::object({{"error", SlBrowser::instance().popLastError() + ". Did not find " + std::to_string(uid)}})).dump();
+		return;
+	}
+
+	if (auto widget = elementsPtr->widget)
+		widget->show();
+}
+
+void BrowserClient::JS_TABS_IS_WINDOW_HIDDEN(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput)
+{
+	if (argsWithoutFunc.size() < 1)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return;
+	}
+
+	int32_t uid = argsWithoutFunc[0]->GetInt();
+
+	auto elementsPtr = SlBrowser::instance().getBrowserElements(uid);
+
+	if (elementsPtr == nullptr)
+	{
+		jsonOutput = Json(Json::object({{"error", SlBrowser::instance().popLastError() + ". Did not find " + std::to_string(uid)}})).dump();
+		return;
+	}
+
+	if (auto widget = elementsPtr->widget)
+		jsonOutput = Json(Json::object({{"result", widget->isHidden()}})).dump();
+	else
+		jsonOutput = Json(Json::object({{"error", "Internal error, null ptr"}})).dump();
+
 }

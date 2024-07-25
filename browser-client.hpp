@@ -93,8 +93,11 @@ private:
 	void JS_BROWSER_SET_WINDOW_POSITION(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput);
 	void JS_BROWSER_SET_ALLOW_HIDE_BROWSER(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput);
 	void JS_BROWSER_SET_HIDDEN_STATE(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput);
-	void JS_CREATE_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput);
-	void JS_DESTROY_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput);
-	void JS_RESIZE_APP_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput);
-	void JS_LOAD_APP_URL(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput);
+	void JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput);
+	void JS_TABS_DESTROY_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput);
+	void JS_TABS_RESIZE_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput);
+	void JS_TABS_LOAD_URL(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput);
+	void JS_TABS_HIDE_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput);
+	void JS_TABS_SHOW_WINDOW(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput);
+	void JS_TABS_IS_WINDOW_HIDDEN(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput);
 };

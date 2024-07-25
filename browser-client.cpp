@@ -201,10 +201,10 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
         case JavascriptApi::JS_BROWSER_SET_WINDOW_POSITION: JS_BROWSER_SET_WINDOW_POSITION(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
         case JavascriptApi::JS_BROWSER_SET_ALLOW_HIDE_BROWSER: JS_BROWSER_SET_ALLOW_HIDE_BROWSER(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
         case JavascriptApi::JS_BROWSER_SET_HIDDEN_STATE: JS_BROWSER_SET_HIDDEN_STATE(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_CREATE_APP_WINDOW: JS_CREATE_APP_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_DESTROY_APP_WINDOW: JS_DESTROY_APP_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_RESIZE_APP_WINDOW: JS_RESIZE_APP_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_LOAD_APP_URL: JS_LOAD_APP_URL(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_TABS_CREATE_WINDOW: JS_TABS_CREATE_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_TABS_DESTROY_WINDOW: JS_TABS_DESTROY_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_TABS_RESIZE_WINDOW: JS_TABS_RESIZE_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+        case JavascriptApi::JS_TABS_LOAD_URL: JS_TABS_LOAD_URL(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
         default: jsonOutput = Json(Json::object({{"error", "Unknown function"}})).dump(); break;
         }
 
