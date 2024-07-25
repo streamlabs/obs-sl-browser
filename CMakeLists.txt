@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.16...3.25)
 
+# OBS 28.x.x?
+if (NOT COMMAND legacy_check)
+  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/cmake/legacy.cmake)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/legacy.cmake)
+  endif()
+  return()
+endif()
+
 legacy_check()
 
 find_package(CEF REQUIRED)
