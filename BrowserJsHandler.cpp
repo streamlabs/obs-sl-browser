@@ -247,5 +247,4 @@ void BrowserClient::JS_TABS_IS_WINDOW_HIDDEN(CefRefPtr<CefBrowser> browser, CefR
 		jsonOutput = Json(Json::object({{"result", widget->isHidden()}})).dump();
 	else
 		jsonOutput = Json(Json::object({{"error", "Internal error, null ptr"}})).dump();
-
 }
