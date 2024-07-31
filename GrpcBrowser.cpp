@@ -62,7 +62,7 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 				if (auto browser = SlBrowser::instance().m_mainBrowser->browser)
 				{
 					if (auto frame = SlBrowser::instance().m_mainBrowser->browser->GetMainFrame())
-						frame->LoadURL(SlBrowser::getPluginHttpUrl());
+						frame->LoadURL(URL::getPluginHttpUrl());
 				}
 			}
 

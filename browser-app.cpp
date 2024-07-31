@@ -1,9 +1,9 @@
 #include "browser-app.hpp"
 #include "browser-version.h"
 #include "JavascriptApi.h"
+#include "URL.h"
 
 #include <json11/json11.hpp>
-
 #include <windows.h>
 
 using namespace json11;
@@ -51,19 +51,35 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 	command_line->AppendSwitchWithValue("autoplay-policy", "no-user-gesture-required");
 }
 
-void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefRefPtr<CefV8Context> context)
+void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
-	CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
+	AllocConsole();
+	freopen("conin$", "r", stdin);
+	freopen("conout$", "w", stdout);
+	freopen("conout$", "w", stderr);
+		
+	std::string url = frame->GetURL();
 
-	CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
-	globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
-	slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
+	// Remove trailing slash from url if it exists
+	if (!url.empty() && url.back() == '/')
+		url.pop_back();
 
-	for (auto &itr : JavascriptApi::getPluginFunctionNames())
-		slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+	static bool isMainPluginWindow = url == std::string(URL::getPluginHttpUrl());
 
-	for (auto &itr : JavascriptApi::getBrowserFunctionNames())
-		slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);	
+	if (isMainPluginWindow)
+	{
+		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
+
+		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
+		globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
+		slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		for (auto &itr : JavascriptApi::getPluginFunctionNames())
+			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		for (auto &itr : JavascriptApi::getBrowserFunctionNames())
+			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+	}
 }
 
 bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message)

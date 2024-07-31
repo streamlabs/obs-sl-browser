@@ -2,6 +2,7 @@
 
 #include "browser-client.hpp"
 #include "browser-app.hpp"
+#include "URL.h"
 
 #include <QWidget>
 #include <map>
@@ -37,8 +38,6 @@ public:
 	std::shared_ptr<BrowserElements> getBrowserElements(const int32_t uid);
 
 	std::string popLastError();
-
-	static const char *getPluginHttpUrl() { return "https://obs-plugin.streamlabs.com"; }
 
 public:
 	bool m_allowHideBrowser = true;

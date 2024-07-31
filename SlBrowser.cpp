@@ -94,7 +94,7 @@ void SlBrowser::run(int argc, char *argv[])
 	// We have to show before creating CEF because it needs the HWND, and the HWND is not made until the QtWidget is shown at least once
 	m_mainBrowser->widget->showMinimized();
 
-	createCefBrowser(0, m_mainBrowser, SlBrowser::getPluginHttpUrl(), SlBrowser::instance().getSavedHiddenState(), true);
+	createCefBrowser(0, m_mainBrowser, URL::getPluginHttpUrl(), SlBrowser::instance().getSavedHiddenState(), true);
 
 	// Appstore
 	//
@@ -151,6 +151,12 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 	// Create a unique request context for the new browser
 	CefRequestContextSettings request_context_settings;
 	CefRefPtr<CefRequestContext> request_context = CefRequestContext::CreateContext(request_context_settings, nullptr);
+
+	static int32_t counter = 0;
+	++counter;
+
+	CefRefPtr<CefCommandLine> command_line = CefCommandLine::GetGlobalCommandLine();
+	command_line->AppendSwitchWithValue("custom-arg", std::to_string(counter));
 
 	browserElements->browser = CefBrowserHost::CreateBrowserSync(window_info, browserElements->client.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), request_context);
 
