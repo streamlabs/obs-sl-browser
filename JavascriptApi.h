@@ -95,6 +95,11 @@ public:
 		JS_TABS_HIDE_WINDOW,
 		JS_TABS_SHOW_WINDOW,
 		JS_TABS_IS_WINDOW_HIDDEN,
+		JS_TAB_SEND_STRING_TO_MAIN,
+		JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS,
+		JS_MAIN_SEND_STRING_TO_TAB,
+		JS_TABS_REGISTER_MSG_RECEIVER,
+		JS_TABS_GET_WINDOW_CEF_IDENTIFIER
 	};
 
 public:
@@ -530,17 +535,43 @@ public:
 		    // .(@function(arg1), uid)
 		    {"tabs_showWindow", JS_TABS_SHOW_WINDOW},
 
+		    // .(@function(arg1), uid)
+		    {"tabs_getWindowCefId", JS_TABS_GET_WINDOW_CEF_IDENTIFIER},
+
+		    // .(@function(arg1), str, uid)
+		    {"tabs_sendStringToTab", JS_MAIN_SEND_STRING_TO_TAB},
+
 		    // .(@function(arg1))
 		    //		Example arg1 = { "result": boolean }
 		    {"tabs_getIsWindowHidden", JS_TABS_IS_WINDOW_HIDDEN},
+
+		    // .(@function(arg1))
+		    {"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
+		    
 		};
 
 		return names;
 	}
 
-	static bool isValidFunctionName(const std::string &str)
+	static std::map<std::string, JSFuncs> &getBrowserTabsFunctionNames()
 	{
-		return isPluginFunctionName(str) || isBrowserFunctionName(str); 
+		// None of the api function belows are blocking, they return immediatelly, but can accept a function as arg1 thats invoked when work is complete, which should allow await/promise structure
+		static std::map<std::string, JSFuncs> names =
+		{
+			/**
+			* Browser Tabs
+			*/
+
+			// .(@function(arg1), str)
+			{"tab_sendStringToMain", JS_TAB_SEND_STRING_TO_MAIN},
+
+			// .(@function(arg1))
+			{"tab_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
+
+			
+		};
+
+		return names;
 	}
 
 	static bool isPluginFunctionName(const std::string &str)
@@ -552,6 +583,12 @@ public:
 	static bool isBrowserFunctionName(const std::string &str)
 	{
 		auto ref = getBrowserFunctionNames();
+		return ref.find(str) != ref.end();
+	}
+	
+	static bool isBrowserTabFunctionName(const std::string &str)
+	{
+		auto ref = getBrowserTabsFunctionNames();
 		return ref.find(str) != ref.end();
 	}
 

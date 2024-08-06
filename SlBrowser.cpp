@@ -382,6 +382,14 @@ bool SlBrowser::getSavedHiddenState() const
 	return ch == L'1';
 }
 
+int32_t SlBrowser::getBrowserCefId(const int32_t uid)
+{
+	if (auto ptr = getBrowserElements(uid))
+		return ptr->browser->GetIdentifier();
+
+	return 0;
+}
+
 std::shared_ptr<BrowserElements> SlBrowser::getBrowserElements(const int32_t uid)
 {
 	std::lock_guard<std::mutex> g(m_mutex);
@@ -456,7 +464,7 @@ void SlBrowser::DebugInputThread()
 
 		if (!url.empty())
 		{
-			std::cout << ";" << std::endl;
+			std::cout << SlBrowser::instance().m_mainBrowser->browser->GetIdentifier() << std::endl;
 			SlBrowser::instance().m_mainBrowser->browser->GetMainFrame()->LoadURL(url);
 		}
 		else

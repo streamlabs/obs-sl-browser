@@ -175,6 +175,16 @@ CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
 	return nullptr;
 }
 
+void BrowserClient::AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid)
+{
+	m_tabReceiverDictionary[browserCefId] = funcid;
+}
+
+int32_t BrowserClient::GetReceiverFuncIdForBrowser(const int32_t browserCefId)
+{
+	return m_tabReceiverDictionary[browserCefId];
+}
+
 bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
 {
     const std::string &name = message->GetName();
@@ -185,7 +195,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 
     int funcid = input_args->GetInt(0);
 
-    if (JavascriptApi::isBrowserFunctionName(name))
+    if (JavascriptApi::isBrowserFunctionName(name) || JavascriptApi::isBrowserTabFunctionName(name))
     {
         std::string jsonOutput = "{}";
 
@@ -194,26 +204,41 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
         for (u_long l = 1; l < input_args->GetSize(); l++)
             argsWithoutFunc.push_back(input_args->GetValue(l));
 
+	//case JavascriptApi::JS_TABS_SEND_STRING_TO_MAIN:
+	//case JavascriptApi::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS:
+	//case JavascriptApi::JS_TABS_REGISTER_MSG_RECEIVER:
+
+	bool retVal = 0;
+	std::string internalMsgType = "executeCallback";
+	
         switch (JavascriptApi::getFunctionId(name))
-        {
-        case JavascriptApi::JS_BROWSER_RESIZE_BROWSER: JS_BROWSER_RESIZE_BROWSER(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_BROWSER_BRING_FRONT: JS_BROWSER_BRING_FRONT(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_BROWSER_SET_WINDOW_POSITION: JS_BROWSER_SET_WINDOW_POSITION(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_BROWSER_SET_ALLOW_HIDE_BROWSER: JS_BROWSER_SET_ALLOW_HIDE_BROWSER(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_BROWSER_SET_HIDDEN_STATE: JS_BROWSER_SET_HIDDEN_STATE(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_TABS_CREATE_WINDOW: JS_TABS_CREATE_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_TABS_DESTROY_WINDOW: JS_TABS_DESTROY_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_TABS_RESIZE_WINDOW: JS_TABS_RESIZE_WINDOW(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
-        case JavascriptApi::JS_TABS_LOAD_URL: JS_TABS_LOAD_URL(browser, frame, processId, argsWithoutFunc, jsonOutput); break;
+	{
+	case JavascriptApi::JS_MAIN_SEND_STRING_TO_TAB: retVal = JS_MAIN_SEND_STRING_TO_TAB(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+	case JavascriptApi::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS: retVal = JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+	case JavascriptApi::JS_TABS_REGISTER_MSG_RECEIVER: retVal = JS_TABS_REGISTER_MSG_RECEIVER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+	case JavascriptApi::JS_TAB_SEND_STRING_TO_MAIN: retVal = JS_TAB_SEND_STRING_TO_MAIN(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+        case JavascriptApi::JS_BROWSER_RESIZE_BROWSER: retVal = JS_BROWSER_RESIZE_BROWSER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+        case JavascriptApi::JS_BROWSER_BRING_FRONT: retVal = JS_BROWSER_BRING_FRONT(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+        case JavascriptApi::JS_BROWSER_SET_WINDOW_POSITION: retVal = JS_BROWSER_SET_WINDOW_POSITION(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+        case JavascriptApi::JS_BROWSER_SET_ALLOW_HIDE_BROWSER: retVal = JS_BROWSER_SET_ALLOW_HIDE_BROWSER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+        case JavascriptApi::JS_BROWSER_SET_HIDDEN_STATE: retVal = JS_BROWSER_SET_HIDDEN_STATE(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+        case JavascriptApi::JS_TABS_CREATE_WINDOW: retVal = JS_TABS_CREATE_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+        case JavascriptApi::JS_TABS_DESTROY_WINDOW: retVal = JS_TABS_DESTROY_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+        case JavascriptApi::JS_TABS_RESIZE_WINDOW: retVal = JS_TABS_RESIZE_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+        case JavascriptApi::JS_TABS_LOAD_URL: retVal = JS_TABS_LOAD_URL(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+	case JavascriptApi::JS_TABS_GET_WINDOW_CEF_IDENTIFIER: retVal = JS_TABS_GET_WINDOW_CEF_IDENTIFIER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
         default: jsonOutput = Json(Json::object({{"error", "Unknown function"}})).dump(); break;
         }
 
-        CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
-        CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
-        execute_args->SetInt(0, funcid);
-        execute_args->SetString(1, jsonOutput);
+	if (retVal)
+	{
+		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create(internalMsgType);
+		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
+		execute_args->SetInt(0, funcid);
+		execute_args->SetString(1, jsonOutput);
 
-        SendBrowserProcessMessage(browser, PID_RENDERER, msg);
+		SendBrowserProcessMessage(browser, PID_RENDERER, msg);
+	}
     }
     else
     {

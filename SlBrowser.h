@@ -35,6 +35,8 @@ public:
 	bool getMainPageSuccess() const { return m_mainPageSuccess; }
 	bool getMainLoadingInProgress() const { return m_mainLoadingInProgress; }
 
+	int32_t getBrowserCefId(const int32_t uid);
+
 	std::shared_ptr<BrowserElements> getBrowserElements(const int32_t uid);
 
 	std::string popLastError();
