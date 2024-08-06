@@ -293,6 +293,7 @@ bool BrowserClient::JS_TABS_GET_WINDOW_CEF_IDENTIFIER(CefRefPtr<CefBrowser> &bro
 		return true;
 	}
 
+	jsonOutput = Json(Json::object({{"result", result}})).dump();
 	return true;
 }
 
@@ -326,19 +327,10 @@ bool BrowserClient::JS_TAB_SEND_STRING_TO_MAIN(CefRefPtr<CefBrowser> &browser, i
 
 	std::string msgStr = argsWithoutFunc[0]->GetString();
 
-	AllocConsole();
-	freopen("conin$", "r", stdin);
-	freopen("conout$", "w", stdout);
-	freopen("conout$", "w", stderr);
-
-	printf("Was sending to %d\n", browser->GetIdentifier());
-
 	browser = ptr->browser;
 	internalMsgType = "executeCallback_NoDelete";
 	funcId = GetReceiverFuncIdForBrowser(browser->GetIdentifier());
 	jsonOutput = msgStr;
-
-	printf("Now sending to %d\n", browser->GetIdentifier());
 	return true;
 }
 
@@ -367,19 +359,16 @@ bool BrowserClient::JS_MAIN_SEND_STRING_TO_TAB(CefRefPtr<CefBrowser> &browser, i
 	}
 
 	std::string msgStr = argsWithoutFunc[1]->GetString();
-
-	AllocConsole();
-	freopen("conin$", "r", stdin);
-	freopen("conout$", "w", stdout);
-	freopen("conout$", "w", stderr);
-
-	printf("Was sending to %d\n", browser->GetIdentifier());
+	
+	int32_t derp = browser->GetIdentifier();
+	printf("%d\n", derp);
 
 	browser = ptr->browser;
 	internalMsgType = "executeCallback_NoDelete";
 	funcId = GetReceiverFuncIdForBrowser(browser->GetIdentifier());
 	jsonOutput = msgStr;
 
-	printf("Now sending to %d\n", browser->GetIdentifier());
+	derp = browser->GetIdentifier();
+	printf("%d\n", derp);
 	return true;
 }

@@ -535,15 +535,16 @@ public:
 		    // .(@function(arg1), uid)
 		    {"tabs_showWindow", JS_TABS_SHOW_WINDOW},
 
+		    // .(@function(arg1))
+		    //		Example arg1 = { "result": boolean }
+		    {"tabs_getIsWindowHidden", JS_TABS_IS_WINDOW_HIDDEN},
+
 		    // .(@function(arg1), uid)
+		    //		Example arg1 = { "result": int32 }
 		    {"tabs_getWindowCefId", JS_TABS_GET_WINDOW_CEF_IDENTIFIER},
 
 		    // .(@function(arg1), str, uid)
 		    {"tabs_sendStringToTab", JS_MAIN_SEND_STRING_TO_TAB},
-
-		    // .(@function(arg1))
-		    //		Example arg1 = { "result": boolean }
-		    {"tabs_getIsWindowHidden", JS_TABS_IS_WINDOW_HIDDEN},
 
 		    // .(@function(arg1))
 		    {"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},

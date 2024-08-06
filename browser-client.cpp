@@ -204,10 +204,6 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
         for (u_long l = 1; l < input_args->GetSize(); l++)
             argsWithoutFunc.push_back(input_args->GetValue(l));
 
-	//case JavascriptApi::JS_TABS_SEND_STRING_TO_MAIN:
-	//case JavascriptApi::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS:
-	//case JavascriptApi::JS_TABS_REGISTER_MSG_RECEIVER:
-
 	bool retVal = 0;
 	std::string internalMsgType = "executeCallback";
 	

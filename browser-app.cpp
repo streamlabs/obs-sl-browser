@@ -59,14 +59,7 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 	if (!url.empty() && url.back() == '/')
 		url.pop_back();
 
-	AllocConsole();
-	freopen("conin$", "r", stdin);
-	freopen("conout$", "w", stdout);
-	freopen("conout$", "w", stderr);
-
 	m_isMainPluginWindow = browser->GetIdentifier() == 1;
-
-	printf("m_isMainPluginWindow = %d\n", m_isMainPluginWindow);
 
 	m_functionNames.clear();
 
