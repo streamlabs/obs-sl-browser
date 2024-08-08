@@ -607,6 +607,12 @@ public:
 		if (itr != ref.end())
 			return itr->second;
 
+		ref = getBrowserTabsFunctionNames();
+		itr = ref.find(funcName);
+
+		if (itr != ref.end())
+			return itr->second;
+
 		return JS_INVALID;
 	}
 };
