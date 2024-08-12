@@ -38,6 +38,7 @@ public:
 	int32_t getBrowserCefId(const int32_t uid);
 
 	std::shared_ptr<BrowserElements> getBrowserElements(const int32_t uid);
+	const std::map<int32_t, std::shared_ptr<BrowserElements>> &getExtraBrowsers() const { return m_browsers; }
 
 	std::string popLastError();
 

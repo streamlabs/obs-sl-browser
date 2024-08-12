@@ -363,7 +363,6 @@ bool BrowserClient::JS_MAIN_SEND_STRING_TO_TAB(CefRefPtr<CefBrowser> &browser, i
 	std::string msgStr = argsWithoutFunc[1]->GetString();
 	
 	int32_t derp = browser->GetIdentifier();
-	printf("%d\n", derp);
 
 	browser = ptr->browser;
 	internalMsgType = "executeCallback_NoDelete";
@@ -371,6 +370,67 @@ bool BrowserClient::JS_MAIN_SEND_STRING_TO_TAB(CefRefPtr<CefBrowser> &browser, i
 	jsonOutput = msgStr;
 
 	derp = browser->GetIdentifier();
-	printf("%d\n", derp);
+	return true;
+}
+
+bool BrowserClient::JS_TABS_EXECUTE_JS(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput, std::string& internalMsgType)
+{
+	if (argsWithoutFunc.size() < 2)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return true;
+	}
+
+	int32_t uid = argsWithoutFunc[0]->GetInt();
+
+	if (uid == 0)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return true;
+	}
+
+	std::shared_ptr<BrowserElements> ptr = SlBrowser::instance().getBrowserElements(uid);
+
+	if (ptr == nullptr)
+	{
+		jsonOutput = Json(Json::object({{"error", "uid not found"}})).dump();
+		return true;
+	}
+
+	std::string code = argsWithoutFunc[1]->GetString();
+
+	if (auto browser = ptr->browser)
+	{
+		if (auto fr = browser->GetMainFrame())
+			fr->ExecuteJavaScript(code, fr->GetURL(), 0);
+	}
+
+	return true;
+}
+
+bool BrowserClient::JS_TABS_QUERY_ALL(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput, std::string& internalMsgType)
+{
+	const std::map<int32_t, std::shared_ptr<BrowserElements>> &browsers = SlBrowser::instance().getExtraBrowsers();
+
+	Json::array jsonArray;
+
+	for (const auto &pair : browsers)
+	{
+		int32_t uid = pair.first;
+		std::shared_ptr<BrowserElements> browserElement = pair.second;
+
+		if (browserElement && browserElement->browser)
+		{
+			// Get the URL of the main frame of the browser
+			if (auto fr = browserElement->browser->GetMainFrame())
+			{
+				std::string url = fr->GetURL();
+				Json::object jsonObj = {{"uid", uid}, {"url", url}};
+				jsonArray.push_back(jsonObj);
+			}
+		}
+	}
+
+	jsonOutput = Json(jsonArray).dump();
 	return true;
 }

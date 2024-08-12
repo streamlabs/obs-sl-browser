@@ -92,6 +92,7 @@ public:
 		JS_TABS_DESTROY_WINDOW,
 		JS_TABS_RESIZE_WINDOW,
 		JS_TABS_LOAD_URL,
+		JS_TABS_EXECUTE_JS,
 		JS_TABS_HIDE_WINDOW,
 		JS_TABS_SHOW_WINDOW,
 		JS_TABS_IS_WINDOW_HIDDEN,
@@ -99,7 +100,8 @@ public:
 		JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS,
 		JS_MAIN_SEND_STRING_TO_TAB,
 		JS_TABS_REGISTER_MSG_RECEIVER,
-		JS_TABS_GET_WINDOW_CEF_IDENTIFIER
+		JS_TABS_GET_WINDOW_CEF_IDENTIFIER,
+		JS_TABS_QUERY_ALL,
 	};
 
 public:
@@ -529,6 +531,9 @@ public:
 		    // .(@function(arg1), uid, url)
 		    {"tabs_loadUrl", JS_TABS_LOAD_URL},
 
+		    // .(@function(arg1), uid, str_code)
+		    {"tabs_executeJs", JS_TABS_EXECUTE_JS},
+
 		    // .(@function(arg1), uid)
 		    {"tabs_hideWindow", JS_TABS_HIDE_WINDOW},
 
@@ -548,6 +553,10 @@ public:
 
 		    // .(@function(arg1))
 		    {"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
+
+		    // .(@function(arg1))
+		    //		Example arg1 = [{ "uid": int32, "url": str }, ..]
+		    {"tabs_queryAll", JS_TABS_QUERY_ALL},
 		    
 		};
 
@@ -568,7 +577,6 @@ public:
 
 			// .(@function(arg1))
 			{"tab_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
-
 			
 		};
 
