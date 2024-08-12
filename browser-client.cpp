@@ -175,13 +175,17 @@ CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
 	return nullptr;
 }
 
+std::map<int32_t, int32_t> BrowserClient::m_tabReceiverDictionary;
+
 void BrowserClient::AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid)
 {
+	std::lock_guard<std::mutex> grd(m_mutex);
 	m_tabReceiverDictionary[browserCefId] = funcid;
 }
 
 int32_t BrowserClient::GetReceiverFuncIdForBrowser(const int32_t browserCefId)
 {
+	std::lock_guard<std::mutex> grd(m_mutex);
 	return m_tabReceiverDictionary[browserCefId];
 }
 
@@ -252,7 +256,6 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 
     return true;
 }
-
 
 void BrowserClient::GetViewRect(CefRefPtr<CefBrowser>, CefRect &rect)
 {

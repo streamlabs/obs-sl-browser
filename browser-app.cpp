@@ -141,6 +141,8 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 			m_callbackMap[callBackId] = {arguments[0], CefV8Context::GetCurrentContext()};
 		}
 
+		CefRefPtr<CefBrowser> browser = CefV8Context::GetCurrentContext()->GetBrowser();
+
 		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create(name);
 		CefRefPtr<CefListValue> args = msg->GetArgumentList();
 		args->SetInt(0, callBackId);
@@ -164,7 +166,6 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 				args->SetDouble(pos, arguments[l]->GetDoubleValue());
 		}
 
-		CefRefPtr<CefBrowser> browser = CefV8Context::GetCurrentContext()->GetBrowser();
 		SendBrowserProcessMessage(browser, PID_BROWSER, msg);
 	}
 	else

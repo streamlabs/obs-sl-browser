@@ -576,7 +576,7 @@ public:
 			{"tab_sendStringToMain", JS_TAB_SEND_STRING_TO_MAIN},
 
 			// .(@function(arg1))
-			{"tab_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
+			{"tab_registerMsgReceiver", JS_TABS_REGISTER_MSG_RECEIVER},
 			
 		};
 

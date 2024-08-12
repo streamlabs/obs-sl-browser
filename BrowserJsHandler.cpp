@@ -306,7 +306,15 @@ bool BrowserClient::JS_TABS_REGISTER_MSG_RECEIVER(CefRefPtr<CefBrowser> &browser
 
 bool BrowserClient::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
-	AssignMsgReceiverFunc(browser->GetIdentifier(), funcId);
+	std::shared_ptr<BrowserElements> ptr = SlBrowser::instance().getBrowserElements(0);
+
+	if (ptr == nullptr)
+	{
+		jsonOutput = Json(Json::object({{"error", "main not found"}})).dump();
+		return true;
+	}
+
+	AssignMsgReceiverFunc(ptr->browser->GetIdentifier(), funcId);
 	internalMsgType = "executeCallback_NoDelete";
 	return true;
 }

@@ -87,10 +87,12 @@ private:
 	bool m_reroute_audio = true;
 	std::recursive_mutex m_recursiveMutex;
 	std::map<int32_t, CefRefPtr<CefBrowser>> m_callbackDictionary;
-	std::map<int32_t, int32_t> m_tabReceiverDictionary;
 
 	CefRefPtr<CefBrowser> m_Browser;
 	CefRefPtr<CefBrowser> m_MostRecentRenderKnowOf = nullptr;
+
+	std::mutex m_mutex;
+	static std::map<int32_t, int32_t> m_tabReceiverDictionary;
 
 private:
 	bool JS_BROWSER_RESIZE_BROWSER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
@@ -112,6 +114,4 @@ private:
 	bool JS_MAIN_SEND_STRING_TO_TAB(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
 	bool JS_TABS_EXECUTE_JS(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
 	bool JS_TABS_QUERY_ALL(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
-	
-	
 };
