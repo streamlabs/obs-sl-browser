@@ -277,6 +277,11 @@ bool BrowserClient::JS_TABS_IS_WINDOW_HIDDEN(CefRefPtr<CefBrowser>& browser, int
 
 bool BrowserClient::JS_TABS_GET_WINDOW_CEF_IDENTIFIER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
+	if (argsWithoutFunc.size() < 1)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return true;
+	}
 	int32_t uid = argsWithoutFunc[0]->GetInt();
 
 	if (uid == 0)

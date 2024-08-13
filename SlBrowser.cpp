@@ -41,6 +41,11 @@ SlBrowser::SlBrowser() {}
 
 SlBrowser::~SlBrowser() {}
 
+BrowserElements::~BrowserElements()
+{
+	CefPostTask(TID_UI, base::BindOnce(&queueCleanupQtObj, widget));
+}
+
 void SlBrowser::run(int argc, char *argv[])
 {
 	QCoreApplication::addLibraryPath("../../bin/64bit/");

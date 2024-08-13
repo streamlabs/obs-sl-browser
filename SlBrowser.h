@@ -9,11 +9,13 @@
 
 struct BrowserElements
 {
-	~BrowserElements() { QMetaObject::invokeMethod(widget, "deleteLater", Qt::QueuedConnection); }
+	~BrowserElements();
 	int32_t uid = 0;
 	QWidget* widget = nullptr;
 	CefRefPtr<CefBrowser> browser = nullptr;
 	CefRefPtr<BrowserClient> client = nullptr;
+
+	static void queueCleanupQtObj(QWidget *widget) { QMetaObject::invokeMethod(widget, "deleteLater", Qt::QueuedConnection); }
 };
 
 class SlBrowser
