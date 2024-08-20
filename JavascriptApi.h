@@ -519,25 +519,25 @@ public:
 		    //
 		    //
 		    
-		    // .(@function(arg1), uid, url)
+		    // .(@function(arg1), uidINT, url)
 		    {"tabs_createWindow", JS_TABS_CREATE_WINDOW},
 
-		    // .(@function(arg1), uid)
+		    // .(@function(arg1), uidINT)
 		    {"tabs_destroyWindow", JS_TABS_DESTROY_WINDOW},
 
-		    // .(@function(arg1), uid, x, y)
+		    // .(@function(arg1), uidINT, x, y)
 		    {"tabs_resizeWindow", JS_TABS_RESIZE_WINDOW},
 
-		    // .(@function(arg1), uid, url)
+		    // .(@function(arg1), uidINT, url)
 		    {"tabs_loadUrl", JS_TABS_LOAD_URL},
 
-		    // .(@function(arg1), uid, str_code)
+		    // .(@function(arg1), uidINT, codeStr)
 		    {"tabs_executeJs", JS_TABS_EXECUTE_JS},
 
-		    // .(@function(arg1), uid)
+		    // .(@function(arg1), uidINT)
 		    {"tabs_hideWindow", JS_TABS_HIDE_WINDOW},
 
-		    // .(@function(arg1), uid)
+		    // .(@function(arg1), uidINT)
 		    {"tabs_showWindow", JS_TABS_SHOW_WINDOW},
 
 		    // .(@function(arg1))
