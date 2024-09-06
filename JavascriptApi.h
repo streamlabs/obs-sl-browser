@@ -47,6 +47,7 @@ public:
 		JS_QUERY_ALL_SOURCES,
 		JS_QUERY_SCENES,
 		JS_SOURCE_GET_PROPERTIES,
+		JS_SOURCE_SET_PROPERTIES,
 		JS_SOURCE_GET_SETTINGS,
 		JS_SOURCE_SET_SETTINGS,
 		JS_GET_SCENE_COLLECTIONS,
@@ -317,9 +318,12 @@ public:
 			//		Example arg1 = [ { "name": ".", "type": 0, "id": "." }, ... ]
 			{"obs_enum_scenes", JS_ENUM_SCENES},
 
-			// .(@function(arg1)
-			//	Not yet implemented
+			// .(@function(arg1), @sourceName)
 			{"obs_source_get_properties_json", JS_SOURCE_GET_PROPERTIES},
+
+			// .(@function(arg1), @sourceName)
+			//		Example arg1 = [ { "property_name": "a", "value": int, str, float, etc whatever - it needs to be the type OBS expects }, { ... } ]
+			{"obs_source_set_properties_json", JS_SOURCE_SET_PROPERTIES},
 
 			// .(@function(arg1), @sourceName)
 			//	Iterates the settings of a source and returns them as a json strong

@@ -216,6 +216,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_CREATE_SCENE: JS_CREATE_SCENE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SCENE_ADD: JS_SCENE_ADD(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SOURCE_GET_PROPERTIES: JS_SOURCE_GET_PROPERTIES(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SOURCE_SET_PROPERTIES: JS_SOURCE_SET_PROPERTIES(jsonParams, jsonReturnStr); break;			
 		case JavascriptApi::JS_SOURCE_GET_SETTINGS: JS_SOURCE_GET_SETTINGS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SOURCE_SET_SETTINGS: JS_SOURCE_SET_SETTINGS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_INSTALL_FONT: JS_INSTALL_FONT(jsonParams, jsonReturnStr); break;
@@ -1444,6 +1445,83 @@ void PluginJsHandler::JS_SCENE_ADD(const json11::Json& params, std::string& out_
 				obs_sceneitem_t *scene_item = obs_scene_add(scene_obj, source);
 				if (!scene_item)
 					out_jsonReturn = Json(Json::object({{"error", "Failed to add source to scene"}})).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SOURCE_SET_PROPERTIES(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+
+	std::string source_name = param2Value.string_value();
+	std::string payloadJson = param3Value.string_value();
+	
+	std::vector<json11::Json> formattedJsonArray;
+	std::string err;
+	json11::Json parsedJson = json11::Json::parse(payloadJson, err);
+
+	if (!parsedJson.is_array())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "invalid param is not a json array" }})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, source_name, parsedJson, &out_jsonReturn]() {
+			OBSSourceAutoRelease existingSource = obs_get_source_by_name(source_name.c_str());
+
+			if (existingSource == nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Source not found: " + source_name}})).dump();
+				return;
+			}
+
+			for (const auto &item : parsedJson.array_items())
+			{
+				std::string propertyName = item["property_name"].string_value();
+				// we dont know the value yet
+				// std::string value = item["value"].string_value();
+
+				obs_data_t *settings = obs_source_get_settings(existingSource);
+				obs_properties_t *prp = obs_source_properties(existingSource);
+
+				const char *buf = nullptr;
+				for (obs_property_t *p = obs_properties_first(prp); (p != nullptr); obs_property_next(&p))
+				{
+					Json::object propJson;
+					const char *name = obs_property_name(p);
+					auto type = obs_property_get_type(p);
+
+					// Found match
+					if (name != nullptr && std::string(name) == propertyName)
+					{
+						switch (type)
+						{
+							case OBS_PROPERTY_BUTTON:
+							case OBS_PROPERTY_FONT:
+							case OBS_PROPERTY_EDITABLE_LIST:
+							case OBS_PROPERTY_FRAME_RATE:
+							case OBS_PROPERTY_GROUP:
+							case OBS_PROPERTY_LIST:
+								break;
+								
+							case OBS_PROPERTY_BOOL: //obs_data_get_bool(settings, name)
+							case OBS_PROPERTY_INT:   // (int)obs_data_get_int(settings, name);
+							case OBS_PROPERTY_FLOAT: // obs_data_get_double(settings, name)
+							case OBS_PROPERTY_TEXT:  // obs_data_get_string(settings, name)
+							case OBS_PROPERTY_PATH:  // bs_data_get_string(settings, name)
+							case OBS_PROPERTY_COLOR: // obs_data_get_int(settings, name);
+							case OBS_PROPERTY_COLOR_ALPHA: // obs_data_get_int(settings, name);
+								break;
+						}
+					}
+				}
 			}
 		},
 		Qt::BlockingQueuedConnection);
