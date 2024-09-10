@@ -159,6 +159,23 @@ void BrowserClient::RegisterCallback(const int functionId, CefRefPtr<CefBrowser>
 	m_MostRecentRenderKnowOf = browser;
 }
 
+void BrowserClient::RemoveBrowserFromCallback(CefRefPtr<CefBrowser> browser)
+{
+	std::lock_guard<std::recursive_mutex> grd(m_recursiveMutex);
+
+	if (m_MostRecentRenderKnowOf != nullptr && m_MostRecentRenderKnowOf->GetIdentifier() == browser->GetIdentifier())
+		m_MostRecentRenderKnowOf = nullptr;
+
+	for (auto itr = m_callbackDictionary.begin(); itr != m_callbackDictionary.end(); ++itr)
+	{
+		if (itr->second->GetIdentifier() == browser->GetIdentifier())
+		{
+			m_callbackDictionary.erase(itr);
+			return;
+		}
+	}
+}
+
 CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
 {
 	std::lock_guard<std::recursive_mutex> grd(m_recursiveMutex);
@@ -363,3 +380,13 @@ bool BrowserClient::OnConsoleMessage(CefRefPtr<CefBrowser>, cef_log_severity_t l
 {
 	return false;
 }
+
+//void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser)
+//{
+//
+//}
+//
+//bool BrowserClient::DoClose(CefRefPtr<CefBrowser> browser)
+//{
+//
+//}

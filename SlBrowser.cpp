@@ -311,14 +311,16 @@ void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> brow
 {
 	if (browserElements->browser)
 	{
-		CefRefPtr<CefBrowserHost> host = browserElements->browser->GetHost();
+		browserElements->browser->GetMainFrame()->LoadURL("about:blank");
 
-		if (host)
-			host->CloseBrowser(true);
+		if (browserElements->client)
+			browserElements->client->RemoveBrowserFromCallback(browserElements->browser);
 
+		printf("Reference count before closing browser: %d\n", browserElements->browser->GetHost()->HasOneRef());
+		browserElements->browser->GetHost()->CloseBrowser(true);
 		browserElements->browser = nullptr;
 	}
-
+	
 	if (browserElements->client)
 		browserElements->client = nullptr;
 }

@@ -71,6 +71,7 @@ public:
 	CefRefPtr<CefBrowser> GetMostRecentRenderKnown();
 	CefRefPtr<CefBrowser> PopCallback(const int functionId);
 	void RegisterCallback(const int functionId, CefRefPtr<CefBrowser> browser);
+	void RemoveBrowserFromCallback(CefRefPtr<CefBrowser> browser);
 
 public:
 	static std::string cefListValueToJSONString(CefRefPtr<CefListValue> listValue);
@@ -88,7 +89,6 @@ private:
 	std::recursive_mutex m_recursiveMutex;
 	std::map<int32_t, CefRefPtr<CefBrowser>> m_callbackDictionary;
 
-	CefRefPtr<CefBrowser> m_Browser;
 	CefRefPtr<CefBrowser> m_MostRecentRenderKnowOf = nullptr;
 
 	std::mutex m_mutex;
