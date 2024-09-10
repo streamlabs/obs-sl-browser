@@ -244,7 +244,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
         case JavascriptApi::JS_TABS_RESIZE_WINDOW: retVal = JS_TABS_RESIZE_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
         case JavascriptApi::JS_TABS_LOAD_URL: retVal = JS_TABS_LOAD_URL(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
 	case JavascriptApi::JS_TABS_GET_WINDOW_CEF_IDENTIFIER: retVal = JS_TABS_GET_WINDOW_CEF_IDENTIFIER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
-	case JavascriptApi::JS_TABS_EXECUTE_JS: retVal = JS_TABS_GET_WINDOW_CEF_IDENTIFIER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+	case JavascriptApi::JS_TABS_EXECUTE_JS: retVal = JS_TABS_EXECUTE_JS(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
 	case JavascriptApi::JS_TABS_QUERY_ALL: retVal = JS_TABS_QUERY_ALL(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
 	default: jsonOutput = Json(Json::object({{"error", "Unknown function"}})).dump(); break;
         }
