@@ -15,7 +15,7 @@ struct BrowserElements
 	CefRefPtr<CefBrowser> browser = nullptr;
 	CefRefPtr<BrowserClient> client = nullptr;
 
-	static void queueCleanupQtObj(QWidget *widget) { QMetaObject::invokeMethod(widget, "deleteLater", Qt::QueuedConnection); }
+	static void queueCleanupQtObj(QWidget *widget) { if (widget != nullptr) { QMetaObject::invokeMethod(widget, "deleteLater", Qt::QueuedConnection); } }
 };
 
 class SlBrowser

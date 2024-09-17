@@ -294,7 +294,7 @@ void SlBrowser::queueDestroyCefBrowser(const int32_t uid)
 		return;
 	}
 
-	shared_ptr<BrowserElements> ptr = browserElements->second;
+	std::shared_ptr<BrowserElements> ptr = browserElements->second;
 
 	if (ptr == nullptr)
 	{
@@ -302,8 +302,18 @@ void SlBrowser::queueDestroyCefBrowser(const int32_t uid)
 		return;
 	}
 
+	QWidget *mainWindow = m_mainBrowser->widget;
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[ptr]() {
+			delete ptr->widget;
+			ptr->widget = nullptr;
+			CefPostTask(TID_UI, base::BindOnce(&cleanupCefBrowser_Internal, ptr));
+		},
+		Qt::QueuedConnection);
+
 	m_browsers.erase(browserElements);
-	CefPostTask(TID_UI, base::BindOnce(&cleanupCefBrowser_Internal, ptr));
 }
 
 /*static*/
@@ -315,7 +325,7 @@ void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> brow
 
 		if (browserElements->client)
 			browserElements->client->RemoveBrowserFromCallback(browserElements->browser);
-
+ 
 		printf("Reference count before closing browser: %d\n", browserElements->browser->GetHost()->HasOneRef());
 		browserElements->browser->GetHost()->CloseBrowser(true);
 		browserElements->browser = nullptr;
