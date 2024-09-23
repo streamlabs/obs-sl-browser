@@ -104,6 +104,7 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 		CefRefPtr<CefListValue> arguments = message->GetArgumentList();
 		int callbackID = arguments->GetInt(0);
 		CefString jsonString = arguments->GetString(1);
+		int uuid = arguments->GetInt(2);
 
 		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
 
@@ -113,6 +114,10 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 			CefV8ValueList args;
 			args.push_back(CefV8Value::CreateString(jsonString));
+
+			if (uuid != 0)
+				args.push_back(CefV8Value::CreateInt(uuid));
+
 			function->ExecuteFunctionWithContext(context, nullptr, args);
 
 			if (message->GetName() != "executeCallback_NoDelete")

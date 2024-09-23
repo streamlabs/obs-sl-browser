@@ -244,7 +244,16 @@ bool BrowserClient::JS_TABS_SHOW_WINDOW(CefRefPtr<CefBrowser>& browser, int32_t&
 	}
 
 	if (auto widget = elementsPtr->widget)
+	{
 		widget->show();
+
+		HWND hwnd = HWND(widget->winId());
+
+		if (::IsIconic(hwnd))
+			::ShowWindow(hwnd, SW_RESTORE);
+
+		WindowsFunctions::ForceForegroundWindow(hwnd);
+	}
 
 	return true;
 }

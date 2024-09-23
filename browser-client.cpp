@@ -227,6 +227,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 
 	bool retVal = true;
 	std::string internalMsgType = "executeCallback";
+	const int32_t browserUuid = SlBrowser::instance().getUuidFromCefId(browser->GetIdentifier());
 	
         switch (JavascriptApi::getFunctionId(name))
 	{
@@ -258,6 +259,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
 		execute_args->SetInt(0, funcid);
 		execute_args->SetString(1, jsonOutput);
+		execute_args->SetInt(2, browserUuid);
 
 		SendBrowserProcessMessage(browser, PID_RENDERER, msg);
 	}

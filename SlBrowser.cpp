@@ -398,6 +398,21 @@ bool SlBrowser::getSavedHiddenState() const
 	return ch == L'1';
 }
 
+int32_t SlBrowser::getUuidFromCefId(const int32_t cefId)
+{
+	std::lock_guard<std::mutex> g(m_mutex);
+
+	int32_t result = 0;
+
+	for (auto& itr : m_browsers)
+	{
+		if (itr.second->browser->GetIdentifier() == cefId)
+			return itr.first;
+	}
+
+	return 0;
+}
+
 int32_t SlBrowser::getBrowserCefId(const int32_t uid)
 {
 	if (auto ptr = getBrowserElements(uid))
