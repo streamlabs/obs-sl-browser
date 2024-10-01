@@ -492,7 +492,9 @@ public:
 
 		return names;
 	}
-
+	 
+	// Executing a function from a tab will result in 2 args for the callback @function(arg1, arg2) 
+	 
 	// Control over our the browser
 	static std::map<std::string, JSFuncs> &getBrowserFunctionNames()
 	{
@@ -555,7 +557,7 @@ public:
 		    // .(@function(arg1), str, uid)
 		    {"tabs_sendStringToTab", JS_MAIN_SEND_STRING_TO_TAB},
 
-		    // .(@function(arg1))
+		    // .(@function(arg1, arg2))
 		    {"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
 
 		    // .(@function(arg1))
@@ -576,10 +578,10 @@ public:
 			* Browser Tabs
 			*/
 
-			// .(@function(arg1), str)
+			// .(@function(arg1, arg2), str)
 			{"tab_sendStringToMain", JS_TAB_SEND_STRING_TO_MAIN},
 
-			// .(@function(arg1))
+			// .(@function(arg1, arg2))
 			{"tab_registerMsgReceiver", JS_TABS_REGISTER_MSG_RECEIVER},
 			
 		};
