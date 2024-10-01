@@ -28,8 +28,9 @@ $signedArchiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision-signed.zip"
 Get-ChildItem -Path "archive" -File -Recurse |
   Where-Object { $signExtensions.Contains($_.Extension) } |
   ForEach-Object {
-    $fullName = $_.FullName
-    & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $certFile /p $certPass "$fullName"
+    Write-Host "NSIS compilation failed"
+    # $fullName = $_.FullName
+    # & $signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /f $certFile /p $certPass "$fullName"
   }
 
 # Remove the certificate before any file operations are performed
