@@ -395,6 +395,84 @@ bool BrowserClient::JS_MAIN_SEND_STRING_TO_TAB(CefRefPtr<CefBrowser> &browser, i
 	return true;
 }
 
+bool BrowserClient::JS_TABS_SET_ICON(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+{
+	if (argsWithoutFunc.size() < 2)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return true;
+	}
+
+	int32_t uid = argsWithoutFunc[0]->GetInt();
+
+	if (uid == 0)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return true;
+	}
+
+	std::shared_ptr<BrowserElements> ptr = SlBrowser::instance().getBrowserElements(uid);
+
+	if (ptr == nullptr)
+	{
+		jsonOutput = Json(Json::object({{"error", "uid not found"}})).dump();
+		return true;
+	}
+
+	std::string path = argsWithoutFunc[1]->GetString();
+
+	QWidget *mainWindow = SlBrowser::instance().m_mainBrowser->widget;
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[path, ptr]() {
+			QIcon icon2(path.c_str());
+			ptr->widget->window()->setWindowIcon(icon2);
+		},
+		Qt::QueuedConnection);
+
+	return true;
+}
+
+bool BrowserClient::JS_TABS_SET_TITLE(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+{
+	if (argsWithoutFunc.size() < 2)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return true;
+	}
+
+	int32_t uid = argsWithoutFunc[0]->GetInt();
+
+	if (uid == 0)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return true;
+	}
+
+	std::shared_ptr<BrowserElements> ptr = SlBrowser::instance().getBrowserElements(uid);
+
+	if (ptr == nullptr)
+	{
+		jsonOutput = Json(Json::object({{"error", "uid not found"}})).dump();
+		return true;
+	}
+
+	std::string text = argsWithoutFunc[1]->GetString();
+
+	QWidget *mainWindow = SlBrowser::instance().m_mainBrowser->widget;
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[text, ptr]()
+		{
+			ptr->widget->window()->setWindowTitle(text.c_str());
+		},
+		Qt::QueuedConnection);
+
+	return true;
+}
+
 bool BrowserClient::JS_TABS_EXECUTE_JS(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput, std::string& internalMsgType)
 {
 	if (argsWithoutFunc.size() < 2)

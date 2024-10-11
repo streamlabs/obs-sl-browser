@@ -228,7 +228,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 	bool retVal = true;
 	std::string internalMsgType = "executeCallback";
 	const int32_t browserUuid = SlBrowser::instance().getUuidFromCefId(browser->GetIdentifier());
-	
+
         switch (JavascriptApi::getFunctionId(name))
 	{
 	case JavascriptApi::JS_MAIN_SEND_STRING_TO_TAB: retVal = JS_MAIN_SEND_STRING_TO_TAB(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
@@ -250,6 +250,8 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 	case JavascriptApi::JS_TABS_SHOW_WINDOW: retVal = JS_TABS_SHOW_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
 	case JavascriptApi::JS_TABS_HIDE_WINDOW: retVal = JS_TABS_HIDE_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
 	case JavascriptApi::JS_TABS_IS_WINDOW_HIDDEN: retVal = JS_TABS_IS_WINDOW_HIDDEN(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+	case JavascriptApi::JS_TABS_SET_ICON: retVal = JS_TABS_SET_ICON(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+	case JavascriptApi::JS_TABS_SET_TITLE: retVal = JS_TABS_SET_TITLE(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
 	default: jsonOutput = Json(Json::object({{"error", "Unknown function"}})).dump(); break;
         }
 

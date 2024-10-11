@@ -103,6 +103,8 @@ public:
 		JS_TABS_REGISTER_MSG_RECEIVER,
 		JS_TABS_GET_WINDOW_CEF_IDENTIFIER,
 		JS_TABS_QUERY_ALL,
+		JS_TABS_SET_ICON,
+		JS_TABS_SET_TITLE,
 	};
 
 public:
@@ -563,7 +565,13 @@ public:
 		    // .(@function(arg1))
 		    //		Example arg1 = [{ "uid": int32, "url": str }, ..]
 		    {"tabs_queryAll", JS_TABS_QUERY_ALL},
+
+		    // .(@function(arg1), uidINT, pathStr)
+		    //		pathStr can be a .png path
+		    {"tabs_setIcon", JS_TABS_SET_ICON},
 		    
+		    // .(@function(arg1), uidINT, titleStr)
+		    {"tabs_setTitle", JS_TABS_SET_TITLE},
 		};
 
 		return names;
