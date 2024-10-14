@@ -527,7 +527,7 @@ public:
 		    //
 		    //
 		    
-		    // .(@function(arg1), uidINT, url)
+		    // .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional))
 		    {"tabs_createWindow", JS_TABS_CREATE_WINDOW},
 
 		    // .(@function(arg1), uidINT)

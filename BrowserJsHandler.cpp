@@ -111,12 +111,27 @@ bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser>& browser, int32_
 
 	int uid = argsWithoutFunc[0]->GetInt();
 	std::string url = argsWithoutFunc[1]->GetString();
+	std::string title = "Streamlabs App Store";
+	std::string iconPath;
+
+	if (argsWithoutFunc.size() >= 3)
+		title = argsWithoutFunc[2]->GetString();
+
+	if (argsWithoutFunc.size() >= 4)
+		iconPath = argsWithoutFunc[3]->GetString();
 
 	auto elements = std::make_shared<BrowserElements>();
 	elements->widget = new SlBrowserWidget;
-	elements->widget->setWindowTitle("Streamlabs App Store");
+	elements->widget->setWindowTitle(title.c_str());
 	elements->widget->setMinimumSize(320, 240);
 	elements->widget->resize(1280, 720);
+
+	if (!iconPath.empty())
+	{
+		QIcon icon2(iconPath.c_str());
+		elements->widget->window()->setWindowIcon(icon2);
+	}
+
 	elements->widget->showMinimized();
 
 	SlBrowser::instance().createCefBrowser(uid, elements, url, false, false);
