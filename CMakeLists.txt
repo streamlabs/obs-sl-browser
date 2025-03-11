@@ -11,7 +11,7 @@ include(FindGRPC.cmake)
 ## -- Grpc between plugin and proxy
 
 # Proto file
-get_filename_component(papi_proto "sl_browser_api.proto" ABSOLUTE) 
+get_filename_component(papi_proto "sl_browser_api.proto" ABSOLUTE)
 get_filename_component(papi_proto_path "${papi_proto}" PATH)
 
 message ("${CMAKE_CURRENT_BINARY_DIR}")
@@ -85,7 +85,7 @@ target_sources(
           deps/signal-restore.hpp
 		      ${papi_proto_srcs}
 		      ${papi_grpc_srcs})
-          
+
 target_include_directories(sl-browser PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/deps")
 
 target_compile_features(sl-browser PRIVATE cxx_std_17)
@@ -94,15 +94,15 @@ target_link_libraries(sl-browser PRIVATE CEF::Wrapper CEF::Library d3d11 dxgi)
 target_link_libraries(sl-browser PRIVATE Qt::Widgets Qt::Core Qt::Gui)
 target_link_libraries(sl-browser PRIVATE Detours::Detours)
 
-target_link_libraries(sl-browser PRIVATE 
+target_link_libraries(sl-browser PRIVATE
 	  papi_grpc_proto
 	  ${_REFLECTION}
 	  ${_GRPC_GRPCPP}
 	  ${_PROTOBUF_LIBPROTOBUF})
 
-target_link_options(sl-browser PRIVATE 
+target_link_options(sl-browser PRIVATE
   "/IGNORE:4099" # Ignore PDB warnings
-  "/IGNORE:4098" 
+  "/IGNORE:4098"
 )
 
 target_compile_options(sl-browser PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
@@ -163,11 +163,11 @@ target_compile_definitions(sl-browser-plugin PRIVATE BROWSER_AVAILABLE)
 
 target_link_libraries(sl-browser-plugin PRIVATE papi_grpc_proto)
 
-target_link_options(sl-browser-plugin PRIVATE 
+target_link_options(sl-browser-plugin PRIVATE
   "/IGNORE:4099" # Ignore PDB warnings
-  "/IGNORE:4098" 
+  "/IGNORE:4098"
 )
-target_compile_options(sl-browser-plugin PRIVATE 
+target_compile_options(sl-browser-plugin PRIVATE
   "/wd4996" # 'obs_frontend_add_dock': was declared deprecated
 )
 
@@ -186,7 +186,7 @@ target_link_libraries(sl-browser-page PRIVATE CEF::Library)
 
 target_include_directories(sl-browser-page PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/deps
                                                     ${CMAKE_CURRENT_SOURCE_DIR}/sl-browser-page)
-                                                    
+
 target_sources(sl-browser-page PRIVATE sl-browser-page.manifest)
 
 target_compile_features(sl-browser-page PRIVATE cxx_std_17)
