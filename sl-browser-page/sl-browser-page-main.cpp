@@ -80,8 +80,9 @@ int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	std::thread shutdown_check;
 
 	CefMainArgs mainArgs(nullptr);
-	if (!SetHighDPIv2Scaling())
-		CefEnableHighDPISupport();
+	// FIXME: This function has been removed, https://github.com/chromiumembedded/cef/issues/3452
+	// if (!SetHighDPIv2Scaling())
+	// 	CefEnableHighDPISupport();
 
 	CefRefPtr<CefCommandLine> command_line = CefCommandLine::CreateCommandLine();
 	command_line->InitFromString(::GetCommandLineW());
