@@ -54,20 +54,21 @@ public:
 		JS_GET_SCENE_COLLECTIONS,
 		JS_GET_CURRENT_SCENE_COLLECTION,
 		JS_SET_CURRENT_SCENE_COLLECTION,
-		JS_ADD_SCENE_COLLECTION,		
+		JS_ADD_SCENE_COLLECTION,
 		JS_SET_SCENEITEM_POS,
 		JS_SET_SCENEITEM_ROT,
 		JS_SET_SCENEITEM_CROP,
 		JS_SET_SCENEITEM_SCALE_FILTER,
 		JS_SET_SCENEITEM_BLENDING_MODE,
 		JS_SET_SCENEITEM_BLENDING_METHOD,
-		JS_SET_SCALE,				
+		JS_SET_SCALE,
 		JS_GET_SCENEITEM_POS,
 		JS_GET_SCENEITEM_ROT,
 		JS_GET_SCENEITEM_CROP,
 		JS_GET_SCENEITEM_SCALE_FILTER,
 		JS_GET_SCENEITEM_BLENDING_MODE,
 		JS_GET_SCENEITEM_BLENDING_METHOD,
+		JS_SET_SCENEITEM_VISIBILITY,
 		JS_GET_SCALE,
 		JS_GET_SOURCE_DIMENSIONS,
 		JS_GET_CANVAS_DIMENSIONS,
@@ -187,12 +188,12 @@ public:
 			//		Example arg1 = {"error", "activeModalWidget"}
 			//			arg1 = {"status", "success"}
 			//			(the button cannot be pressed if popups are locking up the GUI)
-			// 
+			//
 			//	Note that the "Start Stream" button is always the same button regardless of the stream running, the GUI text changes but it's always the same object even when it swaps to "Stop Streaming"
 			//
 			//	NOTE: the "Start Stream" button in OBS sometimes throws a popup, and this function wont call back that popup is done
 			{"qt_click_stream_button", JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON},
-			
+
 			/***
 			* Windows
 			*/
@@ -222,7 +223,7 @@ public:
 			// .(@function(arg1), @filepath)
 			//	Performs 'AddFontResourceA' from the WinApi to the filepath in question
 			{"fs_installFont", JS_INSTALL_FONT},
-			
+
 			// .(@function(arg1), @filepath)
 			//	Returns the contents of a file as a string. If the filesize is over 1mb this will return an error
 			//		Example arg1 = { "contents": "..." }
@@ -280,7 +281,7 @@ public:
 			{"obs_get_current_scene", JS_GET_CURRENT_SCENE},
 
 			// .(@function(arg1), @sceneName)
-			//	Peforms literally obs_scene_create(sceneName) 
+			//	Peforms literally obs_scene_create(sceneName)
 			{"obs_create_scene", JS_CREATE_SCENE},
 
 			// .(@function(arg1), @sceneName, @sourceName)
@@ -317,7 +318,7 @@ public:
 			// .(@function(arg1), @json_settings, @sourceName)
 			//	Applies the json data into the source settings
 			{"obs_source_set_settings_json", JS_SOURCE_SET_SETTINGS},
-			
+
 			// .(@function(arg1))
 			//		Example arg1 = [{ "name": "..." },]
 			{"obs_get_scene_collections", JS_GET_SCENE_COLLECTIONS},
@@ -337,6 +338,9 @@ public:
 
 			// .(@function(arg1), @sceneName, @sourceName, @decimal_rot)
 			{"obs_sceneitem_set_rot", JS_SET_SCENEITEM_ROT},
+
+			// .(@function(arg1), @sceneName, @sourceName, @visible)
+			{"obs_sceneitem_set_visibility", JS_SET_SCENEITEM_VISIBILITY},
 
 			// .(@function(arg1), @sceneName, @sourceName, @int_left, @int_top, @int_right, @int_bottom)
 			{"obs_sceneitem_set_crop", JS_SET_SCENEITEM_CROP},
@@ -449,7 +453,7 @@ public:
 			// .(@function(arg1), port, expectedReferer, redirectUrl)
 			//	Only one can exist at a time (do we need multiple? lmk)
 			//	'port', ie http://localhost:port, if you assign port 0 then the OS will choose one (value is returned in function arg1)
-			//	'expectedReferer' is the prefix you want chopped off leading to the token. If the you set this to "/?" and the incoming HTTP request is "GET /?success=true HTTP/1.1", you get back "success=true" - you get everything up to " HTTP/1.1" in that example. 
+			//	'expectedReferer' is the prefix you want chopped off leading to the token. If the you set this to "/?" and the incoming HTTP request is "GET /?success=true HTTP/1.1", you get back "success=true" - you get everything up to " HTTP/1.1" in that example.
 			//	'redirectUrl' is where you want them to be redirected to whenever accessing 'http://localhost:port'
 			//		Example arg1 = { "port": 12345 }
 			//
@@ -494,7 +498,7 @@ public:
 			/**
 			* Browser Window
 			*/
-			
+
 			// .(@function(arg1), x, y)`
 			{"browser_resizeBrowser", JS_BROWSER_RESIZE_BROWSER},
 
@@ -518,7 +522,7 @@ public:
 
 	static bool isValidFunctionName(const std::string &str)
 	{
-		return isPluginFunctionName(str) || isBrowserFunctionName(str); 
+		return isPluginFunctionName(str) || isBrowserFunctionName(str);
 	}
 
 	static bool isPluginFunctionName(const std::string &str)
