@@ -28,6 +28,7 @@ void BrowserApp::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_li
 
 void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefCommandLine> command_line)
 {
+	command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:9123");
 	bool enableGPU = command_line->HasSwitch("enable-gpu");
 	CefString type = command_line->GetSwitchValue("type");
 
