@@ -69,7 +69,7 @@ void SlBrowser::run(int argc, char *argv[])
 		printf("sl-proxy: failed to connected to plugin's grpc server, GetLastError = %d\n", GetLastError());
 		return;
 	}
-	
+
 	QApplication a(argc, argv);
 
 	// Create CEF Browser
@@ -106,7 +106,7 @@ void SlBrowser::CreateCefBrowser(int arg)
 
 	CefString url = SlBrowser::getDefaultUrl();
 
-	// Adjust for possible DPI 
+	// Adjust for possible DPI
 	int realWidth = app.m_widget->width();
 	int realHeight = app.m_widget->height();
 	qreal scaleFactor = app.m_widget->devicePixelRatioF();
