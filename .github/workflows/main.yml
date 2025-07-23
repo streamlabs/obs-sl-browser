@@ -31,45 +31,78 @@ jobs:
           cmake-version: '3.28.x'
 
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run build script
         run: powershell -File ./ci/pipeline.ps1 "${{ github.workspace }}" "${{ github.sha }}"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           aws-region: us-west-2
 
-      - name: Upload Zip
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: slplugin-archive
+          name: unsigned_archive
           path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
 
   sign_binaries:
     name: Sign Binaries and Build Installer
-    runs-on: windows-latest
+    runs-on: signing
     environment: Release
     needs: [win64]
     steps:
-      - uses: actions/checkout@v3
+      - name: List existing files
+        run: |
+          Get-ChildItem -Force
+
+      - name: Clean workspace
+        run: |
+          echo "Cleaning workspace..."
+          Remove-Item * -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item .* -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Download Archive
         uses: actions/download-artifact@v4
         with:
-          name: slplugin-archive
+          name: unsigned_archive
+          path: .
 
-      - name: Extract and Sign
-        env:
-          CODE_SIGNING_CERTIFICATE: ${{ secrets.CODE_SIGNING_CERTIFICATE }}
-          CODE_SIGNING_PASSWORD: ${{ secrets.CODE_SIGNING_PASSWORD }}
-        run: powershell -File ./ci/sign.ps1 "${{ github.workspace }}" "${{ github.sha }}"
+      - name: Extract archive
+        run: 7z x slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z -oarchive
+
+      - name: List files
+        run: |
+          Get-ChildItem -Force -Recurse
+
+      - name: Sign binaries
+        run: |
+          Get-ChildItem -Path archive -Recurse -File | Where-Object { @(".exe", ".dll").Contains($_.Extension) } | ForEach-Object { logisign client --client logitech-cpg-sign-client --app streamlabs --files $_.FullName }
+
+      - name: Clean files
+        run: |
+          Get-ChildItem -Path archive -Recurse -File | Where-Object { -not @(".exe", ".dll", ".png").Contains($_.Extension) } | Remove-Item -Force
+
+      - name: Make installer
+        shell: pwsh
+        run: ./ci/make_installer.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
+
+      - name: Sign installer
+        run: |
+          logisign client --client logitech-cpg-sign-client --app streamlabs --files slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+
+      - name: Make signed zip
+        shell: pwsh
+        run: ./ci/make_signed_zip.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
