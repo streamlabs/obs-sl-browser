@@ -32,7 +32,7 @@ x64/
 ipch/
 GeneratedFiles/
 .moc/
-
+grpc_dist/
 /other/
 
 #make stuff

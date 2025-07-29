@@ -1,0 +1,53 @@
+diff --git a/libftl/handshake.c b/libftl/handshake.c
+index f268797..2b33a67 100644
+--- a/libftl/handshake.c
++++ b/libftl/handshake.c
+@@ -150,7 +150,7 @@ ftl_status_t _ingest_connect(ftl_stream_configuration_private_t *ftl) {
+ 
+     if (!ftl_get_hmac(ftl->ingest_socket, ftl->key, ftl->hmacBuffer)) {
+       FTL_LOG(ftl, FTL_LOG_ERROR, "could not get a signed HMAC!");
+-      response_code = FTL_INGEST_NO_RESPONSE;
++      response_code = FTL_INGEST_RESP_UNKNOWN;
+       break;
+     }
+ 
+@@ -228,26 +228,26 @@ ftl_status_t _ingest_connect(ftl_stream_configuration_private_t *ftl) {
+     ftl_set_state(ftl, FTL_CONNECTED);
+ 
+     if (os_semaphore_create(&ftl->connection_thread_shutdown, "/ConnectionThreadShutdown", O_CREAT, 0) < 0) {
+-        response_code = FTL_MALLOC_FAILURE;
++        response_code = FTL_INGEST_RESP_UNKNOWN;
+         break;
+     }
+ 
+     if (os_semaphore_create(&ftl->keepalive_thread_shutdown, "/KeepAliveThreadShutdown", O_CREAT, 0) < 0) {
+-        response_code = FTL_MALLOC_FAILURE;
++        response_code = FTL_INGEST_RESP_UNKNOWN;
+         break;
+     }
+ 
+     ftl_set_state(ftl, FTL_CXN_STATUS_THRD);
+     if ((os_create_thread(&ftl->connection_thread, NULL, connection_status_thread, ftl)) != 0) {
+       ftl_clear_state(ftl, FTL_CXN_STATUS_THRD);
+-      response_code = FTL_MALLOC_FAILURE;
++      response_code = FTL_INGEST_RESP_UNKNOWN;
+       break;
+     }
+ 
+     ftl_set_state(ftl, FTL_KEEPALIVE_THRD);
+     if ((os_create_thread(&ftl->keepalive_thread, NULL, control_keepalive_thread, ftl)) != 0) {
+       ftl_clear_state(ftl, FTL_KEEPALIVE_THRD);\
+-      response_code = FTL_MALLOC_FAILURE;
++      response_code = FTL_INGEST_RESP_UNKNOWN;
+       break;
+     }
+ 
+@@ -598,7 +598,7 @@ ftl_status_t _log_response(ftl_stream_configuration_private_t *ftl, int response
+     case FTL_INGEST_RESP_UNKNOWN:
+         FTL_LOG(ftl, FTL_LOG_ERROR, "Ingest unknown response.");
+         return FTL_INTERNAL_ERROR;
+-  }    
++  }
+ 
+   return FTL_UNKNOWN_ERROR_CODE;
+ }
