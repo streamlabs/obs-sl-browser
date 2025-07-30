@@ -44,7 +44,7 @@ jobs:
           aws-region: us-west-2
 
       - name: Upload Zip
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: slplugin-archive
           path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Download Archive
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: slplugin-archive
 
