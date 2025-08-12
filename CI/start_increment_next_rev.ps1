@@ -5,7 +5,7 @@ param(
 Write-Output "Starting increment_next_rev..."
 
 # Repository details
-$owner = "stream-labs"
+$owner = "streamlabs"
 $repo = "obs-sl-browser"
 $workflowFileName = "increment_next_rev.yml"
 $branch = "main"

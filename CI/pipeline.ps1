@@ -104,7 +104,7 @@ $currentDirFullPath = (Get-Location).Path
 
 # Clone symbols store scripts
 Write-Output "-- Symbols"
-git clone --recursive --branch "no-http-source" https://github.com/stream-labs/symsrv-scripts.git
+git clone --recursive --branch "no-http-source" https://github.com/streamlabs/symsrv-scripts.git
 
 # Run symbols (re-try for 5 minutes)
 cd symsrv-scripts
