@@ -38,6 +38,8 @@ public:
 		JS_STOP_WEBSERVER,
 		JS_LAUNCH_OS_BROWSER_URL,
 		JS_GET_AUTH_TOKEN,
+		JS_SOURCE_FILTER_ADD,
+		JS_SOURCE_FILTER_REMOVE,
 		JS_CLEAR_AUTH_TOKEN,
 		JS_SET_CURRENT_SCENE,
 		JS_GET_CURRENT_SCENE,
@@ -431,6 +433,14 @@ public:
 			//	Returns the boolean value of the named obs function
 			//		Example arg1 = { "value": true }
 			{"obs_frontend_streaming_active", JS_GET_IS_OBS_STREAMING},
+
+			// .(@function(arg1), @sourceName_target, @sourceName_filter)
+			//	Attaches the filter to a source.
+			{"obs_source_filter_add", JS_SOURCE_FILTER_ADD},
+
+			// .(@function(arg1), @sourceName_target, @sourceName_filter)
+			//	Removes a filter from a source.
+			{"obs_source_filter_remove", JS_SOURCE_FILTER_REMOVE},
 
 			/***
 			* Web
