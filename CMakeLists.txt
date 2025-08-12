@@ -1,14 +1,4 @@
-cmake_minimum_required(VERSION 3.16...3.25)
-
-# OBS 28.x.x?
-if (NOT COMMAND legacy_check)
-  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/cmake/legacy.cmake)
-    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/legacy.cmake)
-  endif()
-  return()
-endif()
-
-legacy_check()
+cmake_minimum_required(VERSION 3.28...3.31)
 
 find_package(CEF REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -59,6 +49,7 @@ target_link_libraries(papi_grpc_proto
 ## -- Browser Proxy Process
 
 add_executable(sl-browser WIN32)
+add_executable(OBS::sl-browser ALIAS sl-browser)
 
 #target_compile_definitions(sl-browser PRIVATE SL_OBS_VERSION="")
 #target_compile_definitions(sl-browser PRIVATE GITHUB_REVISION="")
@@ -124,9 +115,13 @@ add_custom_command(
           $<TARGET_FILE_DIR:sl-browser>/streamlabs-app-icon.png
 )
 
+set(OBS_EXECUTABLE_DESTINATION "${OBS_PLUGIN_DESTINATION}")
+set_target_properties_obs(sl-browser PROPERTIES FOLDER plugins/sl-browser PREFIX "" OUTPUT_NAME sl-browser)
+
 ## -- Plugin loaded by obs
 
 add_library(sl-browser-plugin MODULE)
+add_library(OBS::sl-browser-plugin ALIAS sl-browser-plugin)
 
 target_sources(
   sl-browser-plugin
@@ -147,6 +142,7 @@ target_sources(
     ${papi_grpc_srcs}
 )
 
+target_link_libraries(sl-browser-plugin PRIVATE OBS::libobs OBS::frontend-api)
 target_link_libraries(sl-browser-plugin PRIVATE Detours::Detours)
 target_link_libraries(sl-browser-plugin PRIVATE ZLIB::ZLIB)
 target_link_libraries(sl-browser-plugin PRIVATE Qt::Widgets)
@@ -165,14 +161,7 @@ target_compile_definitions(sl-browser-plugin PRIVATE BROWSER_AVAILABLE)
 #target_compile_definitions(sl-browser-plugin PRIVATE GITHUB_REVISION="")
 #target_compile_definitions(sl-browser-plugin PRIVATE SL_REVISION="")
 
-target_link_libraries(sl-browser-plugin PRIVATE OBS::libobs OBS::frontend-api)
-target_link_libraries(sl-browser-plugin PRIVATE ZLIB::ZLIB)
-
-target_link_libraries(sl-browser-plugin PRIVATE
-  papi_grpc_proto
-  ${_REFLECTION}
-  ${_GRPC_GRPCPP}
-  ${_PROTOBUF_LIBPROTOBUF})
+target_link_libraries(sl-browser-plugin PRIVATE papi_grpc_proto)
 
 target_link_options(sl-browser-plugin PRIVATE 
   "/IGNORE:4099" # Ignore PDB warnings
@@ -188,6 +177,7 @@ target_compile_definitions(sl-browser-plugin PRIVATE NOMINMAX)
 ## -- Helper proxy children
 
 add_executable(sl-browser-page)
+add_executable(OBS::sl-browser-page ALIAS sl-browser-page)
 
 target_sources(sl-browser-page PRIVATE cef-headers.hpp sl-browser-page/sl-browser-page-main.cpp browser-app.cpp
                                         browser-app.hpp deps/json11/json11.cpp deps/json11/json11.hpp)
@@ -211,3 +201,8 @@ endif()
 target_compile_definitions(sl-browser-page PRIVATE ENABLE_BROWSER_SHARED_TEXTURE)
 target_compile_options(sl-browser-page PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
 target_link_options(sl-browser-page PRIVATE "LINKER:/IGNORE:4099" "LINKER:/SUBSYSTEM:WINDOWS")
+
+set(OBS_EXECUTABLE_DESTINATION "${OBS_PLUGIN_DESTINATION}")
+set_target_properties_obs(sl-browser-page PROPERTIES FOLDER plugins/sl-browser PREFIX "" OUTPUT_NAME sl-browser-page)
+
+set_target_properties_obs(sl-browser-plugin PROPERTIES FOLDER plugins/sl-browser PREFIX "")
