@@ -3,7 +3,7 @@ param(
 )
 
 # Repository details
-$owner = "stream-labs"
+$owner = "streamlabs"
 $repo = "obs-sl-browser"
 $branch = "main"
 $workflowFileName = "interal_meta.yml"
