@@ -149,7 +149,7 @@ void obs_module_post_load(void)
 	bool browserGood = false;
 	int32_t myListenPort = chooseProxyPort();
 	int32_t targetListenPort = chooseProxyPort();
-
+ 
 	blog(LOG_INFO, "%s: Sending %d and %d to proxy", obs_module_description(), myListenPort, targetListenPort);
 
 	STARTUPINFOW si;
@@ -160,13 +160,16 @@ void obs_module_post_load(void)
 	{
 		try
 		{
-			const char *module_path = obs_get_module_binary_path(obs_current_module());
+			char absolute_path[MAX_PATH];
+			GetFullPathNameA(obs_get_module_binary_path(obs_current_module()), MAX_PATH, absolute_path, NULL);
 
-			if (!module_path)
+			if (!absolute_path)
 				return;
-
-			std::wstring process_path = std::filesystem::u8path(module_path).remove_filename().wstring() + L"/sl-browser.exe";
+			blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load Module path: %s", absolute_path);
+			std::wstring process_path = std::filesystem::u8path(absolute_path).remove_filename().wstring() + L"/sl-browser.exe";
 			std::wstring startparams = L"sl-browser " + std::to_wstring(GetCurrentProcessId()) + L" " + std::to_wstring(myListenPort) + L" " + std::to_wstring(targetListenPort);
+			blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load process_path: %s", process_path.c_str());
+			blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load startparams: %s", startparams.c_str());
 			browserGood = CreateProcessW(process_path.c_str(), (LPWSTR)startparams.c_str(), NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &g_browserProcessInfo);
 		}
 		catch (...)
@@ -184,6 +187,9 @@ void obs_module_post_load(void)
 			CloseHandle(g_browserProcessInfo.hProcess);
 			CloseHandle(g_browserProcessInfo.hThread);
 		}
+		blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load exit startServer");
+	} else {
+		blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load failed to start server");
 	}
 
 	std::string errorMsg = "Failed to initialize plugin " + std::string(obs_module_description()) + "\nRestart the application and try again.";
