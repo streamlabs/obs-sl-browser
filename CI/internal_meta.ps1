@@ -1,6 +1,6 @@
 # Clone the GitHub repository locally (adjust the path as needed)
 $repoPath = ".\obs-sl-browser-temp"
-$repoUrl = "https://github.com/stream-labs/obs-sl-browser.git"
+$repoUrl = "https://github.com/streamlabs/obs-sl-browser.git"
 
 # Ensure the directory does not already exist to avoid errors
 if (-Not (Test-Path -Path $repoPath)) {
