@@ -57,6 +57,7 @@ public:
 		JS_ADD_SCENE_COLLECTION,		
 		JS_SET_SCENEITEM_POS,
 		JS_SET_SCENEITEM_ROT,
+		JS_SET_SCENEITEM_VISIBILITY,
 		JS_SET_SCENEITEM_CROP,
 		JS_SET_SCENEITEM_SCALE_FILTER,
 		JS_SET_SCENEITEM_BLENDING_MODE,
@@ -395,6 +396,9 @@ public:
 			// .(@function(arg1), @sceneName, @sourceName)
 			//		Example arg1 = { "blending_method": 0 }
 			{"obs_sceneitem_get_blending_method", JS_GET_SCENEITEM_BLENDING_METHOD},
+
+			// .(@function(arg1), @sceneName, @sourceName, @visible)
+			{"obs_sceneitem_set_visibility", JS_SET_SCENEITEM_VISIBILITY},				
 
 			// .(@function(arg1), @sourceName)
 			//		Example arg1 = { "width": 0, "height": 0 }
