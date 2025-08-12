@@ -225,6 +225,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_ADD_SCENE_COLLECTION: JS_ADD_SCENE_COLLECTION(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_POS: JS_SET_SCENEITEM_POS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_ROT: JS_SET_SCENEITEM_ROT(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_SCENEITEM_VISIBILITY: JS_SET_SCENEITEM_VISIBILITY(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_CROP: JS_SET_SCENEITEM_CROP(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_SCALE_FILTER: JS_SET_SCENEITEM_SCALE_FILTER(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_BLENDING_MODE: JS_SET_SCENEITEM_BLENDING_MODE(jsonParams, jsonReturnStr); break;
@@ -2442,6 +2443,50 @@ void PluginJsHandler::JS_SET_SCENEITEM_POS(const json11::Json &params, std::stri
 				pos.x = x;
 				pos.y = y;
 				obs_sceneitem_set_pos(scene_item, &pos);
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SET_SCENEITEM_VISIBILITY(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+	const bool is_visible = param4Value.bool_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, is_visible, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed find the source in that scene"}})).dump();
+					return;
+				}
+
+				obs_sceneitem_set_visible(scene_item, is_visible);
 			}
 		},
 		Qt::BlockingQueuedConnection);
