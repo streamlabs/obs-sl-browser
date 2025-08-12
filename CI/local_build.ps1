@@ -22,4 +22,5 @@ Move-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser"
 
 # Build
 #.\CI\build-windows.ps1
+$env:CI = 'true'
 .\.github\scripts\Build-Windows.ps1
