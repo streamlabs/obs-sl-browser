@@ -60,7 +60,7 @@ foreach ($branchName in $branchNames) {
 	Write-Host "Processing branch: $branchName"
 	
 	# Repository details
-	$owner = "stream-labs"
+	$owner = "streamlabs"
 	$repo = "obs-sl-browser"
 	$workflowFileName = "main.yml"
 	$branch = "$branchName"
