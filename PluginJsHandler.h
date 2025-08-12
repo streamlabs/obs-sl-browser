@@ -78,6 +78,7 @@ private:
 	void JS_ADD_SCENE_COLLECTION(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SET_SCENEITEM_POS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SET_SCENEITEM_ROT(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SET_SCENEITEM_VISIBILITY(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SET_SCENEITEM_CROP(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SET_SCENEITEM_SCALE_FILTER(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SET_SCENEITEM_BLENDING_MODE(const json11::Json &params, std::string &out_jsonReturn);
