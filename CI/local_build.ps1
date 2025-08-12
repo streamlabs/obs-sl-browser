@@ -20,4 +20,5 @@ Add-Content -Path $cmakeListsPath -Value $addSubdirectoryLine
 Move-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser"
 
 # Build
-.\CI\build-windows.ps1
+#.\CI\build-windows.ps1
+.\.github\scripts\Build-Windows.ps1
