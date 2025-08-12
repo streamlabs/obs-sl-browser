@@ -1,6 +1,6 @@
 # Clone obs-sl-browser repositor
 $branchBrowserName = "update_signing_process2"
-git clone --recursive --branch $branchName https://github.com/streamlabs/obs-sl-browser.git
+git clone --recursive --branch $branchBrowserName https://github.com/streamlabs/obs-sl-browser.git
 
 # Read the obs.ver file to get the branch name
 $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
