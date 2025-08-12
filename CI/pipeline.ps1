@@ -148,7 +148,7 @@ if ($LASTEXITCODE -ne 0) {
 # Clone symbols store scripts
 Write-Output "-- Symbols"
 cd ..\
-git clone --recursive --branch "no-http-source" https://github.com/stream-labs/symsrv-scripts.git
+git clone --recursive --branch "no-http-source" https://github.com/streamlabs/symsrv-scripts.git
 
 # Run symbols (re-try for 5 minutes)
 cd symsrv-scripts
