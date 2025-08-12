@@ -90,7 +90,7 @@ jobs:
           Get-ChildItem -Path archive -Recurse -File | Where-Object { -not @(".exe", ".dll", ".png").Contains($_.Extension) } | Remove-Item -Force
 
       - name: Make installer
-        shell: pwsh
+        shell: powershell
         run: ./ci/make_installer.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
 
       - name: Sign installer
@@ -98,7 +98,7 @@ jobs:
           logisign client --client logitech-cpg-sign-client --app streamlabs --files slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
 
       - name: Make signed zip
-        shell: pwsh
+        shell: powershell
         run: ./ci/make_signed_zip.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
 
       - name: Configure AWS credentials
