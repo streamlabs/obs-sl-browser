@@ -49,6 +49,12 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 	}
 
 	command_line->AppendSwitchWithValue("autoplay-policy", "no-user-gesture-required");
+
+	if (command_line->HasSwitch("sl-browser-debug"))
+	{
+		CefString debug_value = command_line->GetSwitchValue("sl-browser-debug");
+		command_line->AppendSwitchWithValue("remote-allow-origins", debug_value);
+	}
 }
 
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefRefPtr<CefV8Context> context)
