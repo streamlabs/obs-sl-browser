@@ -254,7 +254,9 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_GET_IS_OBS_STREAMING: JS_GET_IS_OBS_STREAMING(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SAVE_SL_BROWSER_DOCKS: JS_SAVE_SL_BROWSER_DOCKS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_QT_SET_JS_ON_CLICK_STREAM: JS_QT_SET_JS_ON_CLICK_STREAM(jsonParams, jsonReturnStr); break;
-		case JavascriptApi::JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON: JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(jsonParams, jsonReturnStr); break;		
+		case JavascriptApi::JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON: JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SOURCE_FILTER_ADD: JS_SOURCE_FILTER_ADD(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SOURCE_FILTER_REMOVE: JS_SOURCE_FILTER_REMOVE(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -1186,6 +1188,70 @@ void PluginJsHandler::JS_SAVE_SL_BROWSER_DOCKS(const json11::Json& params, std::
 void PluginJsHandler::JS_GET_IS_OBS_STREAMING(const json11::Json &params, std::string &out_jsonReturn)
 {
 	out_jsonReturn = Json(Json::object({{"value", obs_frontend_streaming_active()}})).dump();
+}
+
+void PluginJsHandler::JS_SOURCE_FILTER_ADD(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	std::string sourceName = param2Value.string_value();
+	std::string filterName = param3Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(mainWindow, [mainWindow, sourceName, filterName, &out_jsonReturn]() {
+		OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
+
+		if (!source)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
+			return;
+		}
+
+		OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
+
+		if (!filter)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
+			return;
+		}
+
+		obs_source_filter_add(source, filter);
+		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+	});
+}
+
+void PluginJsHandler::JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	std::string sourceName = param2Value.string_value();
+	std::string filterName = param3Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(mainWindow, [mainWindow, sourceName, filterName, &out_jsonReturn]() {
+		OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
+
+		if (!source)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
+			return;
+		}
+
+		OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
+
+		if (!filter)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
+			return;
+		}
+
+		obs_source_filter_remove(source, filter);
+		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+	});
 }
 
 void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::string &out_jsonReturn)
