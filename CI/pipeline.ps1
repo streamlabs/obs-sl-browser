@@ -94,7 +94,8 @@ Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Rec
 
 # Build
 try {
-    .\CI\build-windows.ps1 -ErrorAction Stop
+    $env:CI = 'true'
+    .\.github\scripts\Build-Windows.ps1 -ErrorAction Stop
 }
 catch {
     # Handle the error
