@@ -32,7 +32,7 @@ Remove-Item -Path $zipFile
 cd ..\
 
 # Clone symbol scripts
-git clone --recursive --branch "no-http-source" https://github.com/stream-labs/symsrv-scripts.git
+git clone --recursive --branch "no-http-source" https://github.com/streamlabs/symsrv-scripts.git
 
 # Run symbols
 cd symsrv-scripts
