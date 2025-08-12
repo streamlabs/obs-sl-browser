@@ -1,5 +1,5 @@
 # Clone obs-sl-browser repository
-git clone --recursive https://github.com/stream-labs/obs-sl-browser.git
+git clone --recursive https://github.com/streamlabs/obs-sl-browser.git
 
 # Read the obs.ver file to get the branch name
 $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
