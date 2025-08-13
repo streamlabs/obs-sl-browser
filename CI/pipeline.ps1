@@ -124,7 +124,7 @@ else {
     exit 1
 }
 
-# Add new line to CMakeLists.txt in obs-studio\plugins
+# Add to top of CMakeLists.txt in obs-studio\plugins
 $cmakeListsPath = ".\plugins\CMakeLists.txt"
 $addSubdirectoryLine = "add_subdirectory(obs-sl-browser)"
 $cmakeListsContent = Get-Content -Path $cmakeListsPath
@@ -144,7 +144,7 @@ $currentDirFullPath = (Get-Location).Path
 
 # Clone symbols store scripts
 Write-Output "-- Symbols"
-git clone --recursive --branch "no-http-source" https://github.com/stream-labs/symsrv-scripts.git
+git clone --recursive --branch "no-http-source" https://github.com/streamlabs/symsrv-scripts.git
 
 # Run symbols (re-try for 5 minutes)
 cd symsrv-scripts
