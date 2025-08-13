@@ -124,7 +124,7 @@ else {
     exit 1
 }
 
-# Add new line to CMakeLists.txt in obs-studio\plugins
+# Add to top of CMakeLists.txt in obs-studio\plugins
 $cmakeListsPath = ".\plugins\CMakeLists.txt"
 $addSubdirectoryLine = "add_subdirectory(obs-sl-browser)"
 $cmakeListsContent = Get-Content -Path $cmakeListsPath
