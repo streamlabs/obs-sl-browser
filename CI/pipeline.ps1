@@ -74,8 +74,8 @@ cd ..\
 # Read the obs.ver file to get the branch name
 $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
 
-Write-Output (dir)
 Write-Output "Running git clone --recursive --branch ${branchName} https://github.com/obsproject/obs-studio.git"
+Write-Output (dir)
 
 # Clone obs-studio repository with the branch name
 git clone --recursive --branch $branchName https://github.com/obsproject/obs-studio.git
