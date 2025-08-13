@@ -13,7 +13,7 @@ env:
   RELEASE_BUCKET: "slobs-cdn.streamlabs.com/obsplugin/intermediary_packages/"
 
 jobs:
-  win64:
+  win64_build:
     name: 'Windows 64-bit'
     runs-on: windows-latest
     strategy:
@@ -49,11 +49,38 @@ jobs:
           name: unsigned_archive
           path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
 
+  pre_sign_binaries:
+    name: Pre-Sign Binaries
+    runs-on: signing
+    needs: win64_build
+    steps:
+      - name: List existing files
+        run: |
+          Get-ChildItem -Force
+
+      - name: Clean workspace
+        run: |
+          echo "Cleaning workspace..."
+          Remove-Item * -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item .* -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Archive
+        uses: actions/download-artifact@v4
+        with:
+          name: unsigned_archive
+
+      - name: List existing files again
+        run: |
+          Get-ChildItem -Force
+
   sign_binaries:
     name: Sign Binaries and Build Installer
     runs-on: signing
     environment: Release
-    needs: [win64]
+    needs: [win64_build]
     steps:
       - name: List existing files
         run: |
