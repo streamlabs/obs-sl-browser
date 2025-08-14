@@ -17,6 +17,10 @@
 
 - Run `./ci/start_builds.ps1` with a parameter for your GitHub PAT.
 
+## Creating Internal Builds
+
+To create internal builds, simply follow the publishing steps below and then stop after finishing 'Create Internal Meta'.
+
 ## Publishing
 
 Always follow these steps in order
