@@ -1,4 +1,4 @@
-## Build Instructions
+## Local Build Instructions
 
 1. Build OBS (clone recursive).
 2. Copy this project into the OBS `plugins` folder.
@@ -12,3 +12,22 @@
 - To apply these changes to other version branches:
   - Checkout and update the local `main` branch.
   - Run `.\ci\rebase.ps1`.
+ 
+## Building All Versions to AWS
+
+- Run `./ci/start_builds.ps1` with a parameter for your GitHub PAT.
+
+## Creating Internal Builds
+
+To create internal builds, simply follow the publishing steps below and then stop after finishing 'Create Internal Meta'.
+
+## Publishing
+
+Always follow these steps in order
+
+1. Rebase
+2. Build All
+3. Run 'Create Internal Meta' github action
+4. Run 'Publish'
+
+After publishing, the public metadata that defines which revision is the latest needs to be updated. See updater service readme.
