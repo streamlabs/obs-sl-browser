@@ -24,8 +24,8 @@ foreach ($branch in $branchNames) {
     git -C $repoPath checkout $branch
     git -C $repoPath pull
 
-    # Fetch the last 25 revisions for the branch
-    $commits = git -C $repoPath log -25 --pretty=format:"%H %ct" | ForEach-Object {
+    # Fetch the last 200 revisions for the branch
+    $commits = git -C $repoPath log -200 --pretty=format:"%H %ct" | ForEach-Object {
         $parts = $_ -split " "
         @{
             sha = $parts[0]
