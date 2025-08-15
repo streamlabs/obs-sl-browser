@@ -38,6 +38,8 @@ public:
 		JS_STOP_WEBSERVER,
 		JS_LAUNCH_OS_BROWSER_URL,
 		JS_GET_AUTH_TOKEN,
+		JS_SOURCE_FILTER_ADD,
+		JS_SOURCE_FILTER_REMOVE,
 		JS_CLEAR_AUTH_TOKEN,
 		JS_SET_CURRENT_SCENE,
 		JS_GET_CURRENT_SCENE,
@@ -56,6 +58,7 @@ public:
 		JS_ADD_SCENE_COLLECTION,		
 		JS_SET_SCENEITEM_POS,
 		JS_SET_SCENEITEM_ROT,
+		JS_SET_SCENEITEM_VISIBILITY,
 		JS_SET_SCENEITEM_CROP,
 		JS_SET_SCENEITEM_SCALE_FILTER,
 		JS_SET_SCENEITEM_BLENDING_MODE,
@@ -414,6 +417,9 @@ public:
 			//		Example arg1 = { "blending_method": 0 }
 			{"obs_sceneitem_get_blending_method", JS_GET_SCENEITEM_BLENDING_METHOD},
 
+			// .(@function(arg1), @sceneName, @sourceName, @visible)
+			{"obs_sceneitem_set_visibility", JS_SET_SCENEITEM_VISIBILITY},				
+
 			// .(@function(arg1), @sourceName)
 			//		Example arg1 = { "width": 0, "height": 0 }
 			{"obs_source_get_dimensions", JS_GET_SOURCE_DIMENSIONS},
@@ -451,6 +457,14 @@ public:
 			//	Returns the boolean value of the named obs function
 			//		Example arg1 = { "value": true }
 			{"obs_frontend_streaming_active", JS_GET_IS_OBS_STREAMING},
+
+			// .(@function(arg1), @sourceName_target, @sourceName_filter)
+			//	Attaches the filter to a source.
+			{"obs_source_filter_add", JS_SOURCE_FILTER_ADD},
+
+			// .(@function(arg1), @sourceName_target, @sourceName_filter)
+			//	Removes a filter from a source.
+			{"obs_source_filter_remove", JS_SOURCE_FILTER_REMOVE},
 
 			/***
 			* Web

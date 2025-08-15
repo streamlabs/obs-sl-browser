@@ -84,6 +84,46 @@ Rename-Item -Path ".\obs-studio" -NewName $revision
 cd $revision
 git submodule update --init --recursive
 
+# Apply patch to OBS Studio
+Write-Output "Applying patch to OBS Studio..."
+$obsPatchFile = [System.IO.Path]::GetFullPath("..\obs-sl-browser\ci\obs-build.patch")
+if (Test-Path -Path $obsPatchFile) {
+    try {
+        git apply --ignore-whitespace --verbose $obsPatchFile
+        Write-Output "OBS Studio patch applied successfully."
+    }
+    catch {
+        Write-Error "Failed to apply OBS Studio patch: $($_.Exception.Message)"
+        exit 1
+    }
+}
+else {
+    Write-Error "OBS Studio patch file not found at $obsPatchFile"
+    exit 1
+}
+
+# Apply patch to ftl-sdk submodule
+Write-Output "Applying patch to ftl-sdk submodule..."
+$ftlPatchFile = [System.IO.Path]::GetFullPath("..\obs-sl-browser\ci\ftl-build.patch")
+$ftlSubmodulePath = "plugins\obs-outputs\ftl-sdk"
+if (Test-Path -Path $ftlPatchFile) {
+    try {
+        Push-Location $ftlSubmodulePath
+        git apply --ignore-whitespace --verbose $ftlPatchFile
+        Write-Output "ftl-sdk patch applied successfully."
+        Pop-Location
+    }
+    catch {
+        Write-Error "Failed to apply ftl-sdk patch: $($_.Exception.Message)"
+        Pop-Location
+        exit 1
+    }
+}
+else {
+    Write-Error "ftl-sdk patch file not found at $ftlPatchFile"
+    exit 1
+}
+
 # Add to top of CMakeLists.txt in obs-studio\plugins
 $cmakeListsPath = ".\plugins\CMakeLists.txt"
 $addSubdirectoryLine = "add_subdirectory(obs-sl-browser)"
@@ -104,7 +144,7 @@ $currentDirFullPath = (Get-Location).Path
 
 # Clone symbols store scripts
 Write-Output "-- Symbols"
-git clone --recursive --branch "no-http-source" https://github.com/stream-labs/symsrv-scripts.git
+git clone --recursive --branch "no-http-source" https://github.com/streamlabs/symsrv-scripts.git
 
 # Run symbols (re-try for 5 minutes)
 cd symsrv-scripts

@@ -226,6 +226,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_ADD_SCENE_COLLECTION: JS_ADD_SCENE_COLLECTION(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_POS: JS_SET_SCENEITEM_POS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_ROT: JS_SET_SCENEITEM_ROT(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SET_SCENEITEM_VISIBILITY: JS_SET_SCENEITEM_VISIBILITY(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_CROP: JS_SET_SCENEITEM_CROP(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_SCALE_FILTER: JS_SET_SCENEITEM_SCALE_FILTER(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SET_SCENEITEM_BLENDING_MODE: JS_SET_SCENEITEM_BLENDING_MODE(jsonParams, jsonReturnStr); break;
@@ -255,7 +256,9 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_GET_IS_OBS_STREAMING: JS_GET_IS_OBS_STREAMING(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SAVE_SL_BROWSER_DOCKS: JS_SAVE_SL_BROWSER_DOCKS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_QT_SET_JS_ON_CLICK_STREAM: JS_QT_SET_JS_ON_CLICK_STREAM(jsonParams, jsonReturnStr); break;
-		case JavascriptApi::JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON: JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(jsonParams, jsonReturnStr); break;		
+		case JavascriptApi::JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON: JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SOURCE_FILTER_ADD: JS_SOURCE_FILTER_ADD(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SOURCE_FILTER_REMOVE: JS_SOURCE_FILTER_REMOVE(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -1189,6 +1192,70 @@ void PluginJsHandler::JS_GET_IS_OBS_STREAMING(const json11::Json &params, std::s
 	out_jsonReturn = Json(Json::object({{"value", obs_frontend_streaming_active()}})).dump();
 }
 
+void PluginJsHandler::JS_SOURCE_FILTER_ADD(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	std::string sourceName = param2Value.string_value();
+	std::string filterName = param3Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(mainWindow, [mainWindow, sourceName, filterName, &out_jsonReturn]() {
+		OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
+
+		if (!source)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
+			return;
+		}
+
+		OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
+
+		if (!filter)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
+			return;
+		}
+
+		obs_source_filter_add(source, filter);
+		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+	});
+}
+
+void PluginJsHandler::JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	std::string sourceName = param2Value.string_value();
+	std::string filterName = param3Value.string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(mainWindow, [mainWindow, sourceName, filterName, &out_jsonReturn]() {
+		OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
+
+		if (!source)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
+			return;
+		}
+
+		OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
+
+		if (!filter)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
+			return;
+		}
+
+		obs_source_filter_remove(source, filter);
+		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+	});
+}
+
 void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::string &out_jsonReturn)
 {
 	const auto &param2Value = params["param2"];
@@ -2087,16 +2154,18 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 
 	namespace fs = std::filesystem;
 
+	#define maxLogFileSize 2097152
+
 	auto processLogFile = [](const fs::path &filePath, std::string &fullReport)
 	{
 		std::ifstream file(filePath, std::ios::binary | std::ios::ate);
 		auto fileSize = file.tellg();
 
-		if (fileSize > 2097152)
+		if (fileSize > maxLogFileSize)
 		{
 			// File size is greater than 2 MB
 			// Move to 2 MB before the end of the file
-			file.seekg(-2097152, std::ios::end);
+			file.seekg(-maxLogFileSize, std::ios::end);
 		}
 		else
 		{
@@ -2119,15 +2188,35 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 
 	try
 	{
+		std::size_t currentLogDirSize = 0;
+
 		// Process OBS log files
 		if (fs::exists(logDir) && fs::is_directory(logDir))
 		{
-			for (const auto &entry : fs::directory_iterator(logDir))
+			std::vector<fs::directory_entry> entries(fs::directory_iterator(logDir), {});
+			std::sort(entries.begin(), entries.end(), [](const fs::directory_entry &a, const fs::directory_entry &b) { return fs::last_write_time(a) > fs::last_write_time(b); });
+
+			for (const auto &entry : entries)
 			{
 				const auto &path = entry.path();
-
 				if (path.extension() == ".txt")
+				{
+					std::ifstream file(path, std::ios::binary | std::ios::ate);
+					auto fileSize = file.tellg();
+
+					if (currentLogDirSize + fileSize > maxLogFileSize)
+					{
+						fullReport += "-- " + path.filename().string() + " --\n\n";
+						fullReport += "File too large to fit in report.\n\n";
+						continue;
+					}
+
 					processLogFile(path, fullReport);
+					currentLogDirSize += fileSize;
+
+					if (currentLogDirSize >= maxLogFileSize)
+						break;
+				}
 			}
 		}
 
@@ -2167,6 +2256,7 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 	else
 		out_jsonReturn = Json(Json::object({{"content", fullReport}})).dump();
 }
+
 
 void PluginJsHandler::JS_QUERY_DOWNLOADS_FOLDER(const Json &params, std::string &out_jsonReturn)
 {
@@ -2431,6 +2521,50 @@ void PluginJsHandler::JS_SET_SCENEITEM_POS(const json11::Json &params, std::stri
 				pos.x = x;
 				pos.y = y;
 				obs_sceneitem_set_pos(scene_item, &pos);
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_SET_SCENEITEM_VISIBILITY(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
+
+	std::string scene_name = param2Value.string_value();
+	std::string source_name = param3Value.string_value();
+	const bool is_visible = param4Value.bool_value();
+
+	if (scene_name == source_name)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Scene and source inputs have same name"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	// This code is executed in the context of the QMainWindow's thread.
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, source_name, is_visible, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+			if (!scene)
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+			else if (!obs_source_is_scene(scene))
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+			else
+			{
+				obs_scene_t *scene_obj = obs_scene_from_source(scene);
+				obs_sceneitem_t *scene_item = obs_scene_find_source(scene_obj, source_name.c_str());
+
+				if (!scene_item)
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Failed find the source in that scene"}})).dump();
+					return;
+				}
+
+				obs_sceneitem_set_visible(scene_item, is_visible);
 			}
 		},
 		Qt::BlockingQueuedConnection);
