@@ -49,6 +49,7 @@ public:
 		JS_QUERY_ALL_SOURCES,
 		JS_QUERY_SCENES,
 		JS_SOURCE_GET_PROPERTIES,
+		JS_SOURCE_SET_PROPERTIES,
 		JS_SOURCE_GET_SETTINGS,
 		JS_SOURCE_SET_SETTINGS,
 		JS_GET_SCENE_COLLECTIONS,
@@ -91,6 +92,22 @@ public:
 		JS_QT_SET_JS_ON_CLICK_STREAM,
 		JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON,
 		JS_BROWSER_SET_HIDDEN_STATE,
+		JS_TABS_CREATE_WINDOW,
+		JS_TABS_DESTROY_WINDOW,
+		JS_TABS_RESIZE_WINDOW,
+		JS_TABS_LOAD_URL,
+		JS_TABS_EXECUTE_JS,
+		JS_TABS_HIDE_WINDOW,
+		JS_TABS_SHOW_WINDOW,
+		JS_TABS_IS_WINDOW_HIDDEN,
+		JS_TAB_SEND_STRING_TO_MAIN,
+		JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS,
+		JS_MAIN_SEND_STRING_TO_TAB,
+		JS_TABS_REGISTER_MSG_RECEIVER,
+		JS_TABS_GET_WINDOW_CEF_IDENTIFIER,
+		JS_TABS_QUERY_ALL,
+		JS_TABS_SET_ICON,
+		JS_TABS_SET_TITLE,
 	};
 
 public:
@@ -306,9 +323,12 @@ public:
 			//		Example arg1 = [ { "name": ".", "type": 0, "id": "." }, ... ]
 			{"obs_enum_scenes", JS_ENUM_SCENES},
 
-			// .(@function(arg1)
-			//	Not yet implemented
+			// .(@function(arg1), @sourceName)
 			{"obs_source_get_properties_json", JS_SOURCE_GET_PROPERTIES},
+
+			// .(@function(arg1), @sourceName)
+			//		Example arg1 = [ { "property_name": "a", "value": int, str, float, etc whatever - it needs to be the type OBS expects }, { ... } ]
+			{"obs_source_set_properties_json", JS_SOURCE_SET_PROPERTIES},
 
 			// .(@function(arg1), @sourceName)
 			//	Iterates the settings of a source and returns them as a json strong
@@ -488,41 +508,107 @@ public:
 
 		return names;
 	}
-
+	 
+	// Executing a function from a tab will result in 2 args for the callback @function(arg1, arg2) 
+	 
 	// Control over our the browser
 	static std::map<std::string, JSFuncs> &getBrowserFunctionNames()
 	{
 		// None of the api function belows are blocking, they return immediatelly, but can accept a function as arg1 thats invoked when work is complete, which should allow await/promise structure
 		static std::map<std::string, JSFuncs> names =
 		{
-			/**
-			* Browser Window
-			*/
-			
-			// .(@function(arg1), x, y)`
-			{"browser_resizeBrowser", JS_BROWSER_RESIZE_BROWSER},
+		    /**
+		    * Browser Window
+		    */
+    
+		    // .(@function(arg1), x, y)`
+		    {"browser_resizeBrowser", JS_BROWSER_RESIZE_BROWSER},
 
-			// .(@function(arg1))`
-			//	DEV NOTE: THIS FUNCTION CAN NEVER BE RENAMED !!
-			{"browser_bringToFront", JS_BROWSER_BRING_FRONT},
+		    // .(@function(arg1))`
+		    //  DEV NOTE: THIS FUNCTION CAN NEVER BE RENAMED !!
+		    {"browser_bringToFront", JS_BROWSER_BRING_FRONT},
 
-			// .(@function(arg1), x, y)`
-			{"browser_setWindowPosition", JS_BROWSER_SET_WINDOW_POSITION},
+		    // .(@function(arg1), x, y)`
+		    {"browser_setWindowPosition", JS_BROWSER_SET_WINDOW_POSITION},
 
-			// .(@function(arg1), bool)`
-			{"browser_setAllowHideBrowser", JS_BROWSER_SET_ALLOW_HIDE_BROWSER},
+		    // .(@function(arg1), bool)`
+		    {"browser_setAllowHideBrowser", JS_BROWSER_SET_ALLOW_HIDE_BROWSER},
 
-			// .(@function(arg1), bool)`
-			//	DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
-			{"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
+		    // .(@function(arg1), bool)`
+		    //  DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
+		    {"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
+
+		    //
+		    //
+		    
+		    // .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional))
+		    {"tabs_createWindow", JS_TABS_CREATE_WINDOW},
+
+		    // .(@function(arg1), uidINT)
+		    {"tabs_destroyWindow", JS_TABS_DESTROY_WINDOW},
+
+		    // .(@function(arg1), uidINT, x, y)
+		    {"tabs_resizeWindow", JS_TABS_RESIZE_WINDOW},
+
+		    // .(@function(arg1), uidINT, url)
+		    {"tabs_loadUrl", JS_TABS_LOAD_URL},
+
+		    // .(@function(arg1), uidINT, codeStr)
+		    {"tabs_executeJs", JS_TABS_EXECUTE_JS},
+
+		    // .(@function(arg1), uidINT)
+		    {"tabs_hideWindow", JS_TABS_HIDE_WINDOW},
+
+		    // .(@function(arg1), uidINT)
+		    {"tabs_showWindow", JS_TABS_SHOW_WINDOW},
+
+		    // .(@function(arg1))
+		    //		Example arg1 = { "result": boolean }
+		    {"tabs_getIsWindowHidden", JS_TABS_IS_WINDOW_HIDDEN},
+
+		    // .(@function(arg1), uid)
+		    //		Example arg1 = { "result": int32 }
+		    {"tabs_getWindowCefId", JS_TABS_GET_WINDOW_CEF_IDENTIFIER},
+
+		    // .(@function(arg1), str, uid)
+		    {"tabs_sendStringToTab", JS_MAIN_SEND_STRING_TO_TAB},
+
+		    // .(@function(arg1, arg2))
+		    {"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
+
+		    // .(@function(arg1))
+		    //		Example arg1 = [{ "uid": int32, "url": str }, ..]
+		    {"tabs_queryAll", JS_TABS_QUERY_ALL},
+
+		    // .(@function(arg1), uidINT, pathStr)
+		    //		pathStr can be a .png path
+		    {"tabs_setIcon", JS_TABS_SET_ICON},
+		    
+		    // .(@function(arg1), uidINT, titleStr)
+		    {"tabs_setTitle", JS_TABS_SET_TITLE},
 		};
 
 		return names;
 	}
 
-	static bool isValidFunctionName(const std::string &str)
+	static std::map<std::string, JSFuncs> &getBrowserTabsFunctionNames()
 	{
-		return isPluginFunctionName(str) || isBrowserFunctionName(str); 
+		// None of the api function belows are blocking, they return immediatelly, but can accept a function as arg1 thats invoked when work is complete, which should allow await/promise structure
+		static std::map<std::string, JSFuncs> names =
+		{
+			/**
+			* Browser Tabs
+			*/
+
+			// .(@function(arg1, arg2), str)
+			{"tab_sendStringToMain", JS_TAB_SEND_STRING_TO_MAIN},
+
+			// .(@function(arg1, arg2))
+			{"tab_registerMsgReceiver", JS_TABS_REGISTER_MSG_RECEIVER},
+			
+		};
+
+		return names;
 	}
 
 	static bool isPluginFunctionName(const std::string &str)
@@ -536,6 +622,12 @@ public:
 		auto ref = getBrowserFunctionNames();
 		return ref.find(str) != ref.end();
 	}
+	
+	static bool isBrowserTabFunctionName(const std::string &str)
+	{
+		auto ref = getBrowserTabsFunctionNames();
+		return ref.find(str) != ref.end();
+	}
 
 	static JSFuncs getFunctionId(const std::string &funcName)
 	{
@@ -546,6 +638,12 @@ public:
 			return itr->second;
 
 		ref = getBrowserFunctionNames();
+		itr = ref.find(funcName);
+
+		if (itr != ref.end())
+			return itr->second;
+
+		ref = getBrowserTabsFunctionNames();
 		itr = ref.find(funcName);
 
 		if (itr != ref.end())

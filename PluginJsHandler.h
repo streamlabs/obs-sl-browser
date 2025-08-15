@@ -69,6 +69,7 @@ private:
 	void JS_CREATE_SCENE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SCENE_ADD(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SOURCE_GET_PROPERTIES(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SOURCE_SET_PROPERTIES(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SOURCE_GET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SOURCE_SET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_INSTALL_FONT(const json11::Json &params, std::string &out_jsonReturn);
