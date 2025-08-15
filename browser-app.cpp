@@ -1,9 +1,9 @@
 #include "browser-app.hpp"
 #include "browser-version.h"
 #include "JavascriptApi.h"
+#include "URL.h"
 
 #include <json11/json11.hpp>
-
 #include <windows.h>
 
 using namespace json11;
@@ -52,28 +52,60 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 	command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:9123");
 }
 
-void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefRefPtr<CefV8Context> context)
+void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
-	CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
+	std::string url = frame->GetURL();
 
-	CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
-	globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
-	slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
+	// Remove trailing slash from url if it exists
+	if (!url.empty() && url.back() == '/')
+		url.pop_back();
 
-	for (auto &itr : JavascriptApi::getPluginFunctionNames())
-		slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+	m_isMainPluginWindow = browser->GetIdentifier() == 1;
 
-	for (auto &itr : JavascriptApi::getBrowserFunctionNames())
-		slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);	
+	m_functionNames.clear();
+
+	if (m_isMainPluginWindow)
+	{
+		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
+		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
+		globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
+		slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		for (auto &itr : JavascriptApi::getPluginFunctionNames())
+		{
+			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+			m_functionNames.insert(itr.first);
+		}
+
+		for (auto &itr : JavascriptApi::getBrowserFunctionNames())
+		{
+			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+			m_functionNames.insert(itr.first);
+		}
+	}
+	else
+	{
+		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
+		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
+		globalObj->SetValue("slabsTab", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
+		slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		for (auto &itr : JavascriptApi::getBrowserTabsFunctionNames())
+		{
+			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+			m_functionNames.insert(itr.first);
+		}
+	}
 }
 
 bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message)
 {
-	if (message->GetName() == "executeCallback")
+	if (message->GetName() == "executeCallback" || message->GetName() == "executeCallback_NoDelete") 
 	{
 		CefRefPtr<CefListValue> arguments = message->GetArgumentList();
 		int callbackID = arguments->GetInt(0);
 		CefString jsonString = arguments->GetString(1);
+		int uuid = arguments->GetInt(2);
 
 		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
 
@@ -83,13 +115,17 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 			CefV8ValueList args;
 			args.push_back(CefV8Value::CreateString(jsonString));
+
+			if (uuid != 0)
+				args.push_back(CefV8Value::CreateInt(uuid));
+
 			function->ExecuteFunctionWithContext(context, nullptr, args);
 
-			m_callbackMap.erase(callbackID);
+			if (message->GetName() != "executeCallback_NoDelete")
+				m_callbackMap.erase(callbackID);
 		}
 	}
-
-	if (message->GetName() == "executeJavascript")
+	else if (message->GetName() == "executeJavascript")
 	{
 		CefRefPtr<CefListValue> arguments = message->GetArgumentList();
 		browser->GetMainFrame()->ExecuteJavaScript(arguments->GetString(0), browser->GetMainFrame()->GetURL(), 0); 
@@ -100,7 +136,7 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const CefV8ValueList &arguments, CefRefPtr<CefV8Value> &, CefString &)
 {
-	if (JavascriptApi::isValidFunctionName(name.ToString()))
+	if (m_functionNames.find(name.ToString()) != m_functionNames.end())
 	{
 		int callBackId = 0;
 
@@ -110,6 +146,8 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 			callBackId = ++m_callbackIdCounter;
 			m_callbackMap[callBackId] = {arguments[0], CefV8Context::GetCurrentContext()};
 		}
+
+		CefRefPtr<CefBrowser> browser = CefV8Context::GetCurrentContext()->GetBrowser();
 
 		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create(name);
 		CefRefPtr<CefListValue> args = msg->GetArgumentList();
@@ -134,7 +172,6 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 				args->SetDouble(pos, arguments[l]->GetDoubleValue());
 		}
 
-		CefRefPtr<CefBrowser> browser = CefV8Context::GetCurrentContext()->GetBrowser();
 		SendBrowserProcessMessage(browser, PID_BROWSER, msg);
 	}
 	else
