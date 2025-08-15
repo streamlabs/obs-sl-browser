@@ -102,7 +102,8 @@ target_link_libraries(sl-browser PRIVATE
 
 target_link_options(sl-browser PRIVATE 
   "/IGNORE:4099" # Ignore PDB warnings
-  "/IGNORE:4098" 
+  "/IGNORE:4098"
+  "/IGNORE:4286" # LNK4286: symbol '__p___argc' defined in 'libucrt.lib
 )
 
 target_compile_options(sl-browser PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
