@@ -132,11 +132,16 @@ jobs:
         shell: powershell
         run: ./ci/make_installer.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
 
+      - name: List files after installer
+        run: |
+          Get-ChildItem -Force -Recurse
+
       - name: Upload unsigned installer
         uses: actions/upload-artifact@v4
         with:
           name: unsigned_installer
-          path: slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+          path: nsis/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+          if-no-files-found: error
 
   sign_installer:
     name: Sign Installer
@@ -157,7 +162,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: unsigned_installer
-          path: .
+          path: nsis
 
       - name: List files
         run: |
@@ -165,7 +170,7 @@ jobs:
 
       - name: Sign installer
         run: |
-          logisign client --client logitech-cpg-sign-client --app streamlabs --files slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+          logisign client --client logitech-cpg-sign-client --app streamlabs --files nsis/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
 
       - name: Make signed zip
         shell: powershell
@@ -179,7 +184,7 @@ jobs:
           aws-region: us-west-2
 
       - name: Upload zip to AWS Intermediary
-        run: aws s3 cp slplugin-${{env.SL_OBS_VERSION}}-${{ github.sha }}-signed.zip s3://${{env.RELEASE_BUCKET}} --acl public-read
+        run: aws s3 cp slplugin-${{env.SL_OBS_VERSION}}-${{ github villagersha }}-signed.zip s3://${{env.RELEASE_BUCKET}} --acl public-read
 
       - name: Upload installer to AWS Intermediary
-        run: aws s3 cp slplugin-${{env.SL_OBS_VERSION}}-${{ github.sha }}-signed.exe s3://${{env.RELEASE_BUCKET}} --acl public-read
+        run: aws s3 cp nsis/slplugin-${{env.SL_OBS_VERSION}}-${{ github.sha }}-signed.exe s3://${{env.RELEASE_BUCKET}} --acl public-read
