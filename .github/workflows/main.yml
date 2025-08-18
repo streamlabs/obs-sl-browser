@@ -135,17 +135,35 @@ jobs:
       - name: Debug file location
         run: |
           Write-Output "Current directory: $(Get-Location)"
-          Get-ChildItem -Path . -Recurse -Include slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe -ErrorAction SilentlyContinue
-          Get-ChildItem -Path nsis -Recurse -Include slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe -ErrorAction SilentlyContinue
-          Get-ChildItem -Path .. -Recurse -Include slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe -ErrorAction SilentlyContinue
+          $installerPath = "slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe"
+          Write-Output "Checking for installer at $installerPath"
+          if (Test-Path $installerPath) {
+            Write-Output "Installer found:"
+            Get-ChildItem -Path $installerPath | Select-Object FullName, Length, LastWriteTime, @{Name="Attributes";Expression={$_.Attributes}}
+          } else {
+            Write-Output "Installer not found in root"
+          }
+          Write-Output "Checking for installer in nsis/"
+          Get-ChildItem -Path nsis -Recurse -Include $installerPath -ErrorAction SilentlyContinue | Select-Object FullName, Length, LastWriteTime, @{Name="Attributes";Expression={$_.Attributes}}
+          Write-Output "Full workspace contents:"
+          Get-ChildItem -Path . -Recurse -Force
+
+      - name: Copy installer to temporary location
+        run: |
+          $installerPath = "slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe"
+          if (Test-Path $installerPath) {
+            New-Item -ItemType Directory -Path temp -Force
+            Copy-Item -Path $installerPath -Destination temp/$installerPath -Force
+            Write-Output "Copied installer to temp/$installerPath"
+          } else {
+            Write-Output "Installer not found at $installerPath"
+          }
 
       - name: Upload unsigned installer
         uses: actions/upload-artifact@v4
         with:
           name: unsigned_installer
-          path: |
-            slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
-            nsis/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+          path: temp/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
           if-no-files-found: error
 
   sign_installer:
