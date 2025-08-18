@@ -50,7 +50,7 @@ jobs:
           path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.zip
 
   sign_binaries:
-    name: Sign Binaries and Build Installer
+    name: Sign Binaries
     runs-on: signing
     environment: Release
     needs: [win64_build]
@@ -90,9 +90,78 @@ jobs:
         run: |
           Get-ChildItem -Path archive -Recurse -File | Where-Object { -not @(".exe", ".dll", ".png").Contains($_.Extension) } | Remove-Item -Force
 
+      - name: Create signed archive
+        shell: powershell
+        run: Compress-Archive -Path archive/* -DestinationPath slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed-files.zip -Force
+
+      - name: Upload signed files
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed_files
+          path: slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed-files.zip
+
+  build_installer:
+    name: Build Installer
+    runs-on: windows-latest
+    needs: [sign_binaries]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install NSIS
+        run: |
+          choco install nsis -y
+        env:
+          ChocolateyInstall: C:\ProgramData\chocolatey
+
+      - name: Download signed files
+        uses: actions/download-artifact@v4
+        with:
+          name: signed_files
+          path: .
+
+      - name: Extract signed files
+        shell: powershell
+        run: Expand-Archive -Path slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed-files.zip -DestinationPath archive
+
+      - name: List files
+        run: |
+          Get-ChildItem -Force -Recurse
+
       - name: Make installer
         shell: powershell
         run: ./ci/make_installer.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
+
+      - name: Upload unsigned installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned_installer
+          path: slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+
+  sign_installer:
+    name: Sign Installer
+    runs-on: signing
+    environment: Release
+    needs: [build_installer]
+    steps:
+      - name: Clean workspace
+        run: |
+          echo "Cleaning workspace..."
+          Remove-Item * -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item .* -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download unsigned installer
+        uses: actions/download-artifact@v4
+        with:
+          name: unsigned_installer
+          path: .
+
+      - name: List files
+        run: |
+          Get-ChildItem -Force -Recurse
 
       - name: Sign installer
         run: |
