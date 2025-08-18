@@ -129,16 +129,16 @@ if ($lastExitCode -ne 0) {
     throw "Symbol processing script exited with error code $lastExitCode"
 }
 
-# Define the output file name for the 7z archive
-Write-Output "-- 7z"
+# Define the output file name for the zip archive
+Write-Output "-- Zip"
 $pathToArchive = "${github_workspace}\..\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 Write-Output $pathToArchive
 
 # Check if the path exists
 if (Test-Path -Path $pathToArchive) {
-    # Create a 7z archive of the $revision folder
-    $archiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision.7z"
-    7z a $archiveFileName $pathToArchive
+    # Create a zip archive of the $revision folder
+    $archiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision.zip"
+    Compress-Archive -Path $pathToArchive\* -DestinationPath $archiveFileName -Force
 
     # Output the name of the archive file created
     Write-Output "Archive created: $archiveFileName"
@@ -147,8 +147,5 @@ if (Test-Path -Path $pathToArchive) {
     throw "Error: The path $pathToArchive does not exist."
 }
 
-# Output the name of the archive file created
-Write-Output "Archive created: $archiveFileName"
-
-# Move the 7z archive to the $github_workspace directory
+# Move the zip archive to the $github_workspace directory
 Move-Item -Path $archiveFileName -Destination "${github_workspace}\"

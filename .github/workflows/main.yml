@@ -47,8 +47,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unsigned_archive
-          path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
- 
+          path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.zip
+
   sign_binaries:
     name: Sign Binaries and Build Installer
     runs-on: signing
@@ -76,7 +76,7 @@ jobs:
 
       - name: Extract archive
         shell: powershell
-        run: Expand-Archive -Path slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z -DestinationPath archive
+        run: Expand-Archive -Path slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.zip -DestinationPath archive
 
       - name: List files
         run: |
