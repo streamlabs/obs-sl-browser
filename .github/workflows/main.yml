@@ -43,100 +43,92 @@ jobs:
           aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           aws-region: us-west-2
 
-      - name: Upload Artifact
+      - name: Stage archive folder for artifact
+        shell: pwsh
+        run: |
+          $src = "${{ github.workspace }}\..\${{ github.sha }}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+          if (!(Test-Path $src)) { throw "Archive source not found: $src" }
+          Copy-Item -Recurse -Force $src "$env:GITHUB_WORKSPACE\archive"
+
+      - name: Upload unsigned archive (folder)
         uses: actions/upload-artifact@v4
         with:
           name: unsigned_archive
-          path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
-
-  pre_sign_binaries:
-    name: Pre-Sign Binaries
+          path: ${{ github.workspace }}\archive\
+  sign_binaries:
+    name: Sign binaries (only)
     runs-on: signing
     needs: win64_build
     steps:
-      - name: List existing files
-        run: |
-          Get-ChildItem -Force
-
-      - name: Clean workspace
-        run: |
-          echo "Cleaning workspace..."
-          Remove-Item * -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item .* -Recurse -Force -ErrorAction SilentlyContinue
-
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download Archive
+      - name: Download unsigned archive
         uses: actions/download-artifact@v4
         with:
           name: unsigned_archive
+          path: archive
 
-      - name: List existing files again
+      - name: List before signing (debug)
+        shell: pwsh
+        run: Get-ChildItem -Recurse -File archive | Select-Object FullName
+
+      - name: Sign .exe/.dll with logisign
+        shell: pwsh
         run: |
-          Get-ChildItem -Force
+          $files = Get-ChildItem -Path archive -Recurse -File -Include *.exe,*.dll
+          if ($files.Count -eq 0) { throw "No signable files found in archive" }
+          $files | ForEach-Object {
+            logisign client --client logitech-cpg-sign-client --app streamlabs --files $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "logisign failed for $($_.FullName) with $LASTEXITCODE" }
+          }
 
-  sign_binaries:
-    name: Sign Binaries and Build Installer
-    runs-on: signing
-    environment: Release
-    needs: [win64_build]
+      - name: Upload signed archive (folder)
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed_archive
+          path: archive\
+
+  package_and_publish:
+    name: Package & Publish
+    runs-on: windows-latest
+    needs: sign_binaries
+    env:
+      SL_OBS_VERSION: ${{ env.SL_OBS_VERSION }}
     steps:
-      - name: List existing files
-        run: |
-          Get-ChildItem -Force
-
-      - name: Clean workspace
-        run: |
-          echo "Cleaning workspace..."
-          Remove-Item * -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item .* -Recurse -Force -ErrorAction SilentlyContinue
-
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download Archive
+      - name: Download signed archive
         uses: actions/download-artifact@v4
         with:
-          name: unsigned_archive
-          path: .
+          name: signed_archive
+          path: archive
 
-      - name: Extract archive
-        run: 7z x slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z -oarchive
-
-      - name: List files
+      - name: Install NSIS + AWS CLI (if missing)
+        shell: pwsh
         run: |
-          Get-ChildItem -Force -Recurse
+          choco install nsis -y
+          choco install awscli -y
 
-      - name: Sign binaries
-        run: |
-          Get-ChildItem -Path archive -Recurse -File | Where-Object { @(".exe", ".dll").Contains($_.Extension) } | ForEach-Object { logisign client --client logitech-cpg-sign-client --app streamlabs --files $_.FullName }
-
-      - name: Clean files
-        run: |
-          Get-ChildItem -Path archive -Recurse -File | Where-Object { -not @(".exe", ".dll", ".png").Contains($_.Extension) } | Remove-Item -Force
-
-      - name: Make installer
-        shell: powershell
+      - name: Build installer
+        shell: pwsh
         run: ./ci/make_installer.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
 
-      - name: Sign installer
-        run: |
-          logisign client --client logitech-cpg-sign-client --app streamlabs --files slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
-
-      - name: Make signed zip
-        shell: powershell
+      - name: Create signed .zip (no 7z needed)
+        shell: pwsh
         run: ./ci/make_signed_zip.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
-          aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
+          aws-access-key-id: ${{ secrets.AWS_RELEASE_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_RELEASE_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
 
-      - name: Upload zip to AWS Intermediary
-        run: aws s3 cp slplugin-${{env.SL_OBS_VERSION}}-${{ github.sha }}-signed.zip s3://${{env.RELEASE_BUCKET}} --acl public-read
-
-      - name: Upload installer to AWS Intermediary
-        run: aws s3 cp slplugin-${{env.SL_OBS_VERSION}}-${{ github.sha }}-signed.exe s3://${{env.RELEASE_BUCKET}} --acl public-read
+      - name: Upload to AWS Intermediary
+        shell: pwsh
+        run: |
+          aws s3 cp "slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.zip" s3://${{ env.RELEASE_BUCKET }} --acl public-read
+          aws s3 cp "slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe" s3://${{ env.RELEASE_BUCKET }} --acl public-read
+            

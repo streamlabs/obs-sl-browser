@@ -1,16 +1,16 @@
+# ci/make_signed_zip.ps1
 param(
-    [string]$Version,
-    [string]$Sha
+  [string]$Version,
+  [string]$Sha
 )
-
-cd archive
 
 $signedArchiveFileName = "slplugin-$Version-$Sha-signed.zip"
 
-7z a "../$signedArchiveFileName" ./*
-
-if ($LASTEXITCODE -ne 0) {
-    throw "7z failed with exit code $LASTEXITCODE"
+if (!(Test-Path "archive")) {
+  throw "Expected ./archive folder not found"
 }
 
-cd ..
+# Overwrite if exists
+if (Test-Path $signedArchiveFileName) { Remove-Item -Force $signedArchiveFileName }
+
+Compress-Archive -Path "archive\*" -DestinationPath $signedArchiveFileName -Force
