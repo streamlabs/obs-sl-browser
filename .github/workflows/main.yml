@@ -134,14 +134,18 @@ jobs:
 
       - name: Debug file location
         run: |
-          Get-ChildItem -Path . -Recurse -Include slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
-          Get-ChildItem -Path nsis -Recurse -Include slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+          Write-Output "Current directory: $(Get-Location)"
+          Get-ChildItem -Path . -Recurse -Include slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe -ErrorAction SilentlyContinue
+          Get-ChildItem -Path nsis -Recurse -Include slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe -ErrorAction SilentlyContinue
+          Get-ChildItem -Path .. -Recurse -Include slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe -ErrorAction SilentlyContinue
 
       - name: Upload unsigned installer
         uses: actions/upload-artifact@v4
         with:
           name: unsigned_installer
-          path: slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+          path: |
+            slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+            nsis/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
           if-no-files-found: error
 
   sign_installer:
