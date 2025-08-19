@@ -48,6 +48,7 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 		command_line->AppendSwitchWithValue("disable-features", "HardwareMediaKeyHandling");
 	}
 
+	command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost");
 	command_line->AppendSwitchWithValue("autoplay-policy", "no-user-gesture-required");
 }
 
