@@ -84,46 +84,6 @@ Rename-Item -Path ".\obs-studio" -NewName $revision
 cd $revision
 git submodule update --init --recursive
 
-# Apply patch to OBS Studio
-Write-Output "Applying patch to OBS Studio..."
-$obsPatchFile = [System.IO.Path]::GetFullPath("..\obs-sl-browser\ci\obs-build.patch")
-if (Test-Path -Path $obsPatchFile) {
-    try {
-        git apply --ignore-whitespace --verbose $obsPatchFile
-        Write-Output "OBS Studio patch applied successfully."
-    }
-    catch {
-        Write-Error "Failed to apply OBS Studio patch: $($_.Exception.Message)"
-        exit 1
-    }
-}
-else {
-    Write-Error "OBS Studio patch file not found at $obsPatchFile"
-    exit 1
-}
-
-# Apply patch to ftl-sdk submodule
-Write-Output "Applying patch to ftl-sdk submodule..."
-$ftlPatchFile = [System.IO.Path]::GetFullPath("..\obs-sl-browser\ci\ftl-build.patch")
-$ftlSubmodulePath = "plugins\obs-outputs\ftl-sdk"
-if (Test-Path -Path $ftlPatchFile) {
-    try {
-        Push-Location $ftlSubmodulePath
-        git apply --ignore-whitespace --verbose $ftlPatchFile
-        Write-Output "ftl-sdk patch applied successfully."
-        Pop-Location
-    }
-    catch {
-        Write-Error "Failed to apply ftl-sdk patch: $($_.Exception.Message)"
-        Pop-Location
-        exit 1
-    }
-}
-else {
-    Write-Error "ftl-sdk patch file not found at $ftlPatchFile"
-    exit 1
-}
-
 # Add to top of CMakeLists.txt in obs-studio\plugins
 $cmakeListsPath = ".\plugins\CMakeLists.txt"
 $addSubdirectoryLine = "add_subdirectory(obs-sl-browser)"
@@ -133,6 +93,33 @@ Set-Content -Path $cmakeListsPath -Value $cmakeListsContent
 
 # Move obs-sl-browser folder into obs-studio\plugins
 Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Recurse
+
+# Modify CMakePresets.json to disable CMAKE_COMPILE_WARNING_AS_ERROR
+Write-Output "Modifying CMakePresets.json to disable CMAKE_COMPILE_WARNING_AS_ERROR..."
+$presetsPath = ".\CMakePresets.json"
+if (Test-Path -Path $presetsPath) {
+    try {
+        $presets = Get-Content $presetsPath -Raw | ConvertFrom-Json
+        foreach ($preset in $presets.configurePresets) {
+            if ($preset.name -eq "windows-x64") {
+                if (-not $preset.cacheVariables) {
+                    $preset | Add-Member -MemberType NoteProperty -Name cacheVariables -Value @{}
+                }
+                $preset.cacheVariables | Add-Member -MemberType NoteProperty -Name CMAKE_COMPILE_WARNING_AS_ERROR -Value @{type="BOOL"; value=$false} -Force
+            }
+        }
+        $presets | ConvertTo-Json -Depth 100 | Set-Content $presetsPath
+        Write-Output "CMakePresets.json modified successfully."
+    }
+    catch {
+        Write-Error "Failed to modify CMakePresets.json: $($_.Exception.Message)"
+        exit 1
+    }
+}
+else {
+    Write-Error "CMakePresets.json not found at $presetsPath"
+    exit 1
+}
 
 # Build
 cmake --preset windows-x64
