@@ -31,45 +31,134 @@ jobs:
           cmake-version: '3.28.x'
 
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run build script
         run: powershell -File ./ci/pipeline.ps1 "${{ github.workspace }}" "${{ github.sha }}"
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
-          aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
-          aws-region: us-west-2
-
-      - name: Upload Zip
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: slplugin-archive
-          path: ${{ github.workspace }}/slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}.7z
+          name: unsigned_dir
+          path: ${{ github.workspace }}/unsigned_dir
 
   sign_binaries:
-    name: Sign Binaries and Build Installer
-    runs-on: windows-latest
+    name: Sign Binaries
+    runs-on: signing
     environment: Release
     needs: [win64]
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Download Archive
+      - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
-          name: slplugin-archive
+          name: unsigned_dir
+          path: archive
 
-      - name: Extract and Sign
-        env:
-          CODE_SIGNING_CERTIFICATE: ${{ secrets.CODE_SIGNING_CERTIFICATE }}
-          CODE_SIGNING_PASSWORD: ${{ secrets.CODE_SIGNING_PASSWORD }}
-        run: powershell -File ./ci/sign.ps1 "${{ github.workspace }}" "${{ github.sha }}"
+      - name: List files
+        run: |
+          Get-ChildItem -Force -Recurse
+
+      - name: Sign binaries
+        run: |
+          Get-ChildItem -Path archive -Recurse -File | Where-Object { @(".exe", ".dll") -contains $_.Extension } | ForEach-Object { logisign client --client logitech-cpg-sign-client --app streamlabs --files $_.FullName }
+
+      - name: Upload Signed Dir
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed_dir
+          path: archive
+
+  package:
+    name: Package Installer
+    runs-on: windows-latest
+    needs: [sign_binaries]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Download Signed Dir
+        uses: actions/download-artifact@v4
+        with:
+          name: signed_dir
+          path: archive
+
+      - name: Clean files
+        run: |
+          Get-ChildItem -Path archive -Recurse -File | Where-Object { -not @(".exe", ".dll", ".png") -contains $_.Extension } | Remove-Item -Force
+
+      - name: Upload Cleaned Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleaned_archive
+          path: archive
+
+      - name: Make installer
+        shell: powershell
+        run: ./ci/make_installer.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
+
+      - name: Upload Unsigned Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned_installer
+          path: slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+
+  sign_installer:
+    name: Sign Installer
+    runs-on: signing
+    environment: Release
+    needs: [package]
+    steps:
+      - name: Download Unsigned Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: unsigned_installer
+          path: .
+
+      - name: Sign installer
+        run: |
+          logisign client --client logitech-cpg-sign-client --app streamlabs --files slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+
+      - name: Upload Signed Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed_installer
+          path: slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+
+  finalize:
+    name: Finalize Zip and Upload
+    runs-on: windows-latest
+    needs: [sign_installer, package]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install 7zip
+        run: choco install 7zip -y
+
+      - name: Download Cleaned Archive
+        uses: actions/download-artifact@v4
+        with:
+          name: cleaned_archive
+          path: archive
+
+      - name: Download Signed Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: signed_installer
+          path: .
+
+      - name: Make signed zip
+        shell: powershell
+        run: ./ci/make_signed_zip.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
