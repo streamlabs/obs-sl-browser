@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+service grpc_plugin_obj {
+  rpc com_grpc_js_api (grpc_js_api_Request) returns (grpc_js_api_Reply) {}
+  rpc com_grpc_js_executeCallback (grpc_js_api_ExecuteCallback) returns (grpc_js_api_Reply) {}
+  rpc com_grpc_window_toggleVisibility (grpc_window_toggleVisibility) returns (grpc_empty_Reply) {}
+  rpc com_grpc_run_javascriptOnBrowser (grpc_run_javascriptOnBrowser) returns (grpc_empty_Reply) {}
+}
+
+service grpc_proxy_obj {
+  rpc com_grpc_js_api (grpc_js_api_Request) returns (grpc_js_api_Reply) {}
+  rpc com_grpc_js_executeCallback (grpc_js_api_ExecuteCallback) returns (grpc_js_api_Reply) {}
+  rpc com_grpc_window_toggleVisibility (grpc_window_toggleVisibility) returns (grpc_empty_Reply) {}
+  rpc com_grpc_run_javascriptOnBrowser (grpc_run_javascriptOnBrowser) returns (grpc_empty_Reply) {}
+}
+
+// Client->
+message grpc_js_api_Request {
+	string funcname = 1;
+	string params = 2;
+}
+
+// Client->
+message grpc_js_api_ExecuteCallback {
+	int32 funcid = 1;
+	string jsonstr = 2;
+}
+
+// Client->
+message grpc_window_toggleVisibility {
+	string empty = 1;
+}
+
+// Client->
+message grpc_run_javascriptOnBrowser {
+	string str = 1;
+}
+
+// Server->
+message grpc_js_api_Reply {
+	string empty = 1;
+}
+
+// Server->
+message grpc_empty_Reply {
+	string empty = 1;
+}
