@@ -10,18 +10,18 @@ Write-Output "Github revision is $revision"
 $slRevision = 0
 
 try {
-	# Download data for revisions
-	$urlJsonObsVersions = "https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
+    # Download data for revisions
+    $urlJsonObsVersions = "https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
 
-	$filepathJsonPublish = ".\meta_publish.json"
-	Invoke-WebRequest -Uri $urlJsonObsVersions -OutFile $filepathJsonPublish
-	$jsonContent = Get-Content -Path $filepathJsonPublish -Raw | ConvertFrom-Json
-	
-	$slRevision = $jsonContent.next_rev
-	Write-Output "Streamlabs revision is $slRevision"
+    $filepathJsonPublish = ".\meta_publish.json"
+    Invoke-WebRequest -Uri $urlJsonObsVersions -OutFile $filepathJsonPublish
+    $jsonContent = Get-Content -Path $filepathJsonPublish -Raw | ConvertFrom-Json
+    
+    $slRevision = $jsonContent.next_rev
+    Write-Output "Streamlabs revision is $slRevision"
 }
 catch {
-	throw "Error: An error occurred. Details: $($_.Exception.Message)"
+    throw "Error: An error occurred. Details: $($_.Exception.Message)"
 }
 
 # Save in the bucket which revision was used
@@ -37,7 +37,7 @@ Write-Output "New JSON file created at $revisionFilePath with content: $newJsonC
 aws s3 cp $revisionFilePath s3://slobs-cdn.streamlabs.com/obsplugin/meta_sha/ --acl public-read --metadata-directive REPLACE --cache-control "max-age=0, no-cache, no-store, must-revalidate"
 
 if ($LASTEXITCODE -ne 0) {
-	throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
+    throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
 }
 
 # Begin
@@ -169,26 +169,10 @@ if ($lastExitCode -ne 0) {
     throw "Symbol processing script exited with error code $lastExitCode"
 }
 
-# Define the output file name for the 7z archive
-Write-Output "-- 7z"
-$pathToArchive = "${github_workspace}\..\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
-Write-Output $pathToArchive
-
-# Check if the path exists
-if (Test-Path -Path $pathToArchive) {
-    # Create a 7z archive of the $revision folder
-    $archiveFileName = "slplugin-$env:SL_OBS_VERSION-$revision.7z"
-    7z a $archiveFileName $pathToArchive
-
-    # Output the name of the archive file created
-    Write-Output "Archive created: $archiveFileName"
-} else {
-    # Throw an error if the path does not exist
-    throw "Error: The path $pathToArchive does not exist."
+# Copy the built artifacts to the workspace for upload
+$artifactPath = Join-Path $github_workspace "unsigned_dir"
+if (Test-Path $artifactPath) {
+    Remove-Item $artifactPath -Recurse -Force
 }
-
-# Output the name of the archive file created
-Write-Output "Archive created: $archiveFileName"
-
-# Move the 7z archive to the $github_workspace directory
-Move-Item -Path $archiveFileName -Destination "${github_workspace}\"
+New-Item -ItemType Directory -Path $artifactPath
+Copy-Item -Path "$currentDirFullPath\$revision\build_x64\plugins\obs-sl-browser\RelWithDebInfo\*" -Destination $artifactPath -Recurse -Force
