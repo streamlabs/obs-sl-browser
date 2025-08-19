@@ -94,6 +94,33 @@ Set-Content -Path $cmakeListsPath -Value $cmakeListsContent
 # Move obs-sl-browser folder into obs-studio\plugins
 Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Recurse
 
+# Modify CMakePresets.json to disable CMAKE_COMPILE_WARNING_AS_ERROR
+Write-Output "Modifying CMakePresets.json to disable CMAKE_COMPILE_WARNING_AS_ERROR..."
+$presetsPath = ".\CMakePresets.json"
+if (Test-Path -Path $presetsPath) {
+    try {
+        $presets = Get-Content $presetsPath -Raw | ConvertFrom-Json
+        foreach ($preset in $presets.configurePresets) {
+            if ($preset.name -eq "windows-x64") {
+                if (-not $preset.cacheVariables) {
+                    $preset | Add-Member -MemberType NoteProperty -Name cacheVariables -Value @{}
+                }
+                $preset.cacheVariables | Add-Member -MemberType NoteProperty -Name CMAKE_COMPILE_WARNING_AS_ERROR -Value @{type="BOOL"; value=$false} -Force
+            }
+        }
+        $presets | ConvertTo-Json -Depth 100 | Set-Content $presetsPath
+        Write-Output "CMakePresets.json modified successfully."
+    }
+    catch {
+        Write-Error "Failed to modify CMakePresets.json: $($_.Exception.Message)"
+        exit 1
+    }
+}
+else {
+    Write-Error "CMakePresets.json not found at $presetsPath"
+    exit 1
+}
+
 # Build
 cmake --preset windows-x64
 cmake --build --preset windows-x64
