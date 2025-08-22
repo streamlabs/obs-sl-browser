@@ -3311,7 +3311,7 @@ void PluginJsHandler::JS_ADD_MULTISTREAM_DEST(const json11::Json& params, std::s
 				obs_data_set_string(settings, "key", key.c_str());
 
 			// Service
-			OBSServiceAutoRelease newService = obs_service_create(service.c_str(), nameOfOutput.c_str(), settings, nullptr);
+			auto newService = obs_service_create(service.c_str(), nameOfOutput.c_str(), settings, nullptr);
 
 			if (!newService)
 			{
@@ -3332,7 +3332,7 @@ void PluginJsHandler::JS_ADD_MULTISTREAM_DEST(const json11::Json& params, std::s
 			}
 
 			// Output
-			OBSOutputAutoRelease newOutput = obs_output_create(type, nameOfOutput.c_str(), nullptr, nullptr);
+			auto newOutput = obs_output_create(type, nameOfOutput.c_str(), nullptr, nullptr);
 
 			if (!newOutput)
 			{
