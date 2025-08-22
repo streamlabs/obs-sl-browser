@@ -91,6 +91,8 @@ public:
 		JS_QT_SET_JS_ON_CLICK_STREAM,
 		JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON,
 		JS_BROWSER_SET_HIDDEN_STATE,
+		JS_ADD_MULTISTREAM_DEST,
+		JS_REMOVE_MULTISTREAM_DEST,
 	};
 
 public:
@@ -445,6 +447,14 @@ public:
 			// .(@function(arg1), @sourceName_target, @sourceName_filter)
 			//	Removes a filter from a source.
 			{"obs_source_filter_remove", JS_SOURCE_FILTER_REMOVE},
+
+			// .(@function(arg1), @id_Name, @service, @protocol, @server, @bool_use_auth, @username, @password, @key)
+			//	Add a multi-stream target
+			//	id_Name would be something like '1_slabsDest' 
+			{"obs_add_multistream_dest", JS_ADD_MULTISTREAM_DEST},
+
+			// .(@function(arg1), @id_Name)
+			{"obs_remove_multistream_dest", JS_REMOVE_MULTISTREAM_DEST},
 
 			/***
 			* Web

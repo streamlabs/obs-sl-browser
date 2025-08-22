@@ -257,7 +257,9 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_QT_SET_JS_ON_CLICK_STREAM: JS_QT_SET_JS_ON_CLICK_STREAM(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON: JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SOURCE_FILTER_ADD: JS_SOURCE_FILTER_ADD(jsonParams, jsonReturnStr); break;
-		case JavascriptApi::JS_SOURCE_FILTER_REMOVE: JS_SOURCE_FILTER_REMOVE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SOURCE_FILTER_REMOVE: JS_SOURCE_FILTER_REMOVE(jsonParams, jsonReturnStr); break;			
+		case JavascriptApi::JS_ADD_MULTISTREAM_DEST: JS_ADD_MULTISTREAM_DEST(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_REMOVE_MULTISTREAM_DEST: JS_REMOVE_MULTISTREAM_DEST(jsonParams, jsonReturnStr); break;			
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -3247,6 +3249,174 @@ void PluginJsHandler::JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::
 			else
 			{
 				out_jsonReturn = Json(Json::object({{"error", "Failed to get canvas dimensions"}})).dump();
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_ADD_MULTISTREAM_DEST(const json11::Json& params, std::string& out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	const auto &param2Value = params["param2"];
+	const auto &param3Value = params["param3"];
+	const auto &param4Value = params["param4"];
+	const auto &param5Value = params["param5"];
+	const auto &param6Value = params["param6"];
+	const auto &param7Value = params["param7"];
+	const auto &param8Value = params["param8"];
+	const auto &param9Value = params["param9"];
+
+	std::string nameOfOutput = param2Value.string_value();
+
+	// "rtmp_custom" : "rtmp_common"
+	std::string service = param3Value.string_value();
+	std::string protocol = param4Value.string_value();
+	std::string server = param5Value.string_value();
+	bool use_auth = param6Value.bool_value();
+	std::string username = param7Value.string_value();
+	std::string password = param8Value.string_value();
+	std::string key = param9Value.string_value();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, &nameOfOutput, & service, &protocol, &server, use_auth, &username, &password, &key, &out_jsonReturn]() {
+
+			OBSOutputAutoRelease out = obs_get_output_by_name(nameOfOutput.c_str());
+			if (out != nullptr)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Output already exists: " + nameOfOutput}})).dump();
+				return;
+			}
+
+			OBSOutputAutoRelease main_output = obs_frontend_get_streaming_output();
+
+			if (!obs_output_active(main_output))
+			{
+				out_jsonReturn = Json(Json::object({{"error", "The main OBS stream is not running."}})).dump();
+				return;
+			}
+
+			OBSDataAutoRelease settings = obs_data_create();
+			obs_data_set_string(settings, "service", service.c_str());
+			obs_data_set_string(settings, "protocol", protocol.c_str());
+			obs_data_set_string(settings, "server", server.c_str());
+			obs_data_set_bool(settings, "use_auth", use_auth);
+			obs_data_set_string(settings, "username", username.c_str());
+			obs_data_set_string(settings, "password", password.c_str());
+
+			// Pick key vs bearer_token based on service
+			if (service == "whip_custom")
+				obs_data_set_string(settings, "bearer_token", key.c_str());
+			else
+				obs_data_set_string(settings, "key", key.c_str());
+
+			// Service
+			OBSServiceAutoRelease newService = obs_service_create(service.c_str(), nameOfOutput.c_str(), settings, nullptr);
+
+			if (!newService)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Failed to create service."}})).dump();
+				return;
+			}
+
+			const char *type = obs_service_get_preferred_output_type(newService);
+
+			if (type == nullptr)
+			{
+				if (server.find("ftl") == 0)
+					type = "ftl_output";
+				else if (server.find("rtmp") != 0)
+					type = "ffmpeg_mpegts_muxer";
+				else
+					type = "rtmp_output";
+			}
+
+			// Output
+			OBSOutputAutoRelease newOutput = obs_output_create(type, nameOfOutput.c_str(), nullptr, nullptr);
+
+			if (!newOutput)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Failed to create output."}})).dump();
+				return;
+			}
+
+			// Misc configs to replicate
+			if (config_t *config = obs_frontend_get_profile_config())
+			{
+				OBSDataAutoRelease output_settings = obs_data_create();
+				obs_data_set_string(output_settings, "bind_ip", config_get_string(config, "Output", "BindIP"));
+				obs_data_set_string(output_settings, "ip_family", config_get_string(config, "Output", "IPFamily"));
+				obs_output_update(newOutput, output_settings);
+
+				bool useDelay = config_get_bool(config, "Output", "DelayEnable");
+				auto delaySec = (uint32_t)config_get_int(config, "Output", "DelaySec");
+				bool preserveDelay = config_get_bool(config, "Output", "DelayPreserve");
+				obs_output_set_delay(newOutput, useDelay ? delaySec : 0, preserveDelay ? OBS_OUTPUT_DELAY_PRESERVE : 0);
+			}
+
+			// Video encoder
+			// Audio encoder
+			obs_encoder_t *venc = nullptr;
+			obs_encoder_t *aenc = nullptr;
+
+			// if (advanced settings ....  todo)
+
+			venc = obs_output_get_video_encoder(main_output);
+			aenc = obs_output_get_audio_encoder(main_output, 0);
+
+			if (!venc || !aenc)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "There was an obs error in trying to get the main output encoders."}})).dump();
+				return;
+			}
+			
+			obs_output_set_video_encoder(newOutput, venc);
+			obs_output_set_audio_encoder(newOutput, aenc, 0);
+			obs_output_set_service(newOutput, newService);
+
+			// Begin
+			if (!obs_output_start(newOutput))
+			{
+				auto errCStr = obs_output_get_last_error(newOutput);
+				std::string errStr = errCStr ? errCStr : "";
+				out_jsonReturn = Json(Json::object({{"error", "There was an obs error when trying to start the new output: " + errStr}})).dump();
+				return;
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_REMOVE_MULTISTREAM_DEST(const json11::Json& params, std::string& out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	const auto &param2Value = params["param2"];
+	std::string nameOfOutput = param2Value.string_value();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[&nameOfOutput, &out_jsonReturn]() {
+			if (nameOfOutput.empty())
+			{
+				out_jsonReturn = Json(Json::object({{"error", "No output name provided."}})).dump();
+				return;
+			}
+
+			OBSOutputAutoRelease out = obs_get_output_by_name(nameOfOutput.c_str());
+			if (!out)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Output not found: " + nameOfOutput}})).dump();
+				return;
+			}
+
+			if (obs_output_active(out))
+			{
+				obs_output_force_stop(out);
+			}
+			else
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Output already inactive."}})).dump();
 			}
 		},
 		Qt::BlockingQueuedConnection);

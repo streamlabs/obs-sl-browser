@@ -113,6 +113,8 @@ private:
 	void JS_GET_LOGS_REPORT_STRING(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SOURCE_FILTER_ADD(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_ADD_MULTISTREAM_DEST(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_REMOVE_MULTISTREAM_DEST(const json11::Json &params, std::string &out_jsonReturn);
 
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;
