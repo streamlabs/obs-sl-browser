@@ -3280,7 +3280,7 @@ void PluginJsHandler::JS_ADD_MULTISTREAM_DEST(const json11::Json& params, std::s
 
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[mainWindow, &nameOfOutput, & service, &protocol, &server, use_auth, &username, &password, &key, &out_jsonReturn]() {
+		[mainWindow, &nameOfOutput, &service, &protocol, &server, use_auth, &username, &password, &key, &out_jsonReturn]() {
 
 			OBSOutputAutoRelease out = obs_get_output_by_name(nameOfOutput.c_str());
 			if (out != nullptr)
@@ -3305,7 +3305,6 @@ void PluginJsHandler::JS_ADD_MULTISTREAM_DEST(const json11::Json& params, std::s
 			obs_data_set_string(settings, "username", username.c_str());
 			obs_data_set_string(settings, "password", password.c_str());
 
-			// Pick key vs bearer_token based on service
 			if (service == "whip_custom")
 				obs_data_set_string(settings, "bearer_token", key.c_str());
 			else
