@@ -4,6 +4,7 @@
 #include <thread>
 #include <vector>
 #include <obs.h>
+#include <set>
 
 #include <QStringList>
 
@@ -115,7 +116,8 @@ private:
 	void JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_ADD_MULTISTREAM_DEST(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_REMOVE_MULTISTREAM_DEST(const json11::Json &params, std::string &out_jsonReturn);
-
+	void JS_GET_MULTISTREAM_STATUS(const json11::Json &params, std::string &out_jsonReturn);
+	
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;
 
@@ -124,6 +126,7 @@ private:
 	std::vector<std::pair<std::string, std::string>> m_queudRequests;
 	std::thread m_workerThread;
 	std::thread m_freezeCheckThread;
+	std::set<std::string> m_outputs;
 
 	bool m_restartApp = false;
 

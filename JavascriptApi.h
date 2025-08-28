@@ -93,6 +93,7 @@ public:
 		JS_BROWSER_SET_HIDDEN_STATE,
 		JS_ADD_MULTISTREAM_DEST,
 		JS_REMOVE_MULTISTREAM_DEST,
+		JS_GET_MULTISTREAM_STATUS
 	};
 
 public:
@@ -455,6 +456,10 @@ public:
 
 			// .(@function(arg1), @id_Name)
 			{"obs_remove_multistream_dest", JS_REMOVE_MULTISTREAM_DEST},
+
+			// .(@function(arg1), @id_Name)
+			//	Returns json with two bools representing whether or not it exists and whether or not its active: 'exists', 'active'
+			{"obs_get_multistream_status", JS_GET_MULTISTREAM_STATUS},
 
 			/***
 			* Web

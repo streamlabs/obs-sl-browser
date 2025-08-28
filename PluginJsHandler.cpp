@@ -259,7 +259,8 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_SOURCE_FILTER_ADD: JS_SOURCE_FILTER_ADD(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SOURCE_FILTER_REMOVE: JS_SOURCE_FILTER_REMOVE(jsonParams, jsonReturnStr); break;			
 		case JavascriptApi::JS_ADD_MULTISTREAM_DEST: JS_ADD_MULTISTREAM_DEST(jsonParams, jsonReturnStr); break;
-		case JavascriptApi::JS_REMOVE_MULTISTREAM_DEST: JS_REMOVE_MULTISTREAM_DEST(jsonParams, jsonReturnStr); break;			
+		case JavascriptApi::JS_REMOVE_MULTISTREAM_DEST: JS_REMOVE_MULTISTREAM_DEST(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_MULTISTREAM_STATUS: JS_GET_MULTISTREAM_STATUS(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -3311,7 +3312,7 @@ void PluginJsHandler::JS_ADD_MULTISTREAM_DEST(const json11::Json& params, std::s
 				obs_data_set_string(settings, "key", key.c_str());
 
 			// Service
-			auto newService = obs_service_create(service.c_str(), nameOfOutput.c_str(), settings, nullptr);
+			obs_service_t* newService = obs_service_create(service.c_str(), nameOfOutput.c_str(), settings, nullptr);
 
 			if (!newService)
 			{
@@ -3336,6 +3337,7 @@ void PluginJsHandler::JS_ADD_MULTISTREAM_DEST(const json11::Json& params, std::s
 
 			if (!newOutput)
 			{
+				obs_service_release(newService);
 				out_jsonReturn = Json(Json::object({{"error", "Failed to create output."}})).dump();
 				return;
 			}
@@ -3366,6 +3368,7 @@ void PluginJsHandler::JS_ADD_MULTISTREAM_DEST(const json11::Json& params, std::s
 
 			if (!venc || !aenc)
 			{
+				obs_output_release(newOutput);
 				out_jsonReturn = Json(Json::object({{"error", "There was an obs error in trying to get the main output encoders."}})).dump();
 				return;
 			}
@@ -3377,11 +3380,15 @@ void PluginJsHandler::JS_ADD_MULTISTREAM_DEST(const json11::Json& params, std::s
 			// Begin
 			if (!obs_output_start(newOutput))
 			{
+				obs_output_release(newOutput);
 				auto errCStr = obs_output_get_last_error(newOutput);
 				std::string errStr = errCStr ? errCStr : "";
 				out_jsonReturn = Json(Json::object({{"error", "There was an obs error when trying to start the new output: " + errStr}})).dump();
 				return;
 			}
+
+			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+			PluginJsHandler::instance().m_outputs.insert(nameOfOutput);
 		},
 		Qt::BlockingQueuedConnection);
 }
@@ -3402,6 +3409,8 @@ void PluginJsHandler::JS_REMOVE_MULTISTREAM_DEST(const json11::Json& params, std
 				return;
 			}
 
+			PluginJsHandler::instance().m_outputs.erase(nameOfOutput);
+
 			OBSOutputAutoRelease out = obs_get_output_by_name(nameOfOutput.c_str());
 			if (!out)
 			{
@@ -3412,11 +3421,42 @@ void PluginJsHandler::JS_REMOVE_MULTISTREAM_DEST(const json11::Json& params, std
 			if (obs_output_active(out))
 			{
 				obs_output_force_stop(out);
+				out_jsonReturn = Json(Json::object({{"success", true}})).dump();
 			}
 			else
 			{
 				out_jsonReturn = Json(Json::object({{"error", "Output already inactive."}})).dump();
 			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_GET_MULTISTREAM_STATUS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	const auto &param2Value = params["param2"];
+	std::string nameOfOutput = param2Value.string_value();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[&nameOfOutput, &out_jsonReturn]() {
+			if (nameOfOutput.empty())
+			{
+				out_jsonReturn = Json(Json::object({{"error", "No output name provided."}})).dump();
+				return;
+			}
+
+			bool exists = false;
+			bool active = false;
+
+			if (OBSOutputAutoRelease out = obs_get_output_by_name(nameOfOutput.c_str()))
+			{
+				exists = true;
+				active = obs_output_active(out);
+			}
+
+			out_jsonReturn = Json(Json::object({{"exists", true}, {"active", true}})).dump();
 		},
 		Qt::BlockingQueuedConnection);
 }
@@ -3470,6 +3510,15 @@ void PluginJsHandler::onWmClose()
 	stop();
 	QtGuiModifications::instance().stop();
 	PluginJsHandler::instance().saveSlabsBrowserDocks();
+
+	for (auto &outputname : m_outputs)
+	{
+		if (OBSOutputAutoRelease out = obs_get_output_by_name(outputname.c_str()))
+		{
+			if (obs_output_active(out))
+				obs_output_force_stop(out);
+		}
+	}
 }
 
 void PluginJsHandler::saveSlabsBrowserDocks()
