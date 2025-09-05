@@ -7,6 +7,7 @@ find_package(Detours REQUIRED)
 find_package(Qt6 REQUIRED Widgets)
 
 include(FindGRPC.cmake)
+include(sl-bgblur-filter/ObsPlugin.cmake)
 
 ## -- Grpc between plugin and proxy
 
