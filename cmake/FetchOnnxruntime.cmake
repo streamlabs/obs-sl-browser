@@ -62,5 +62,4 @@ set_target_properties(Ort::DirectML PROPERTIES
 )
 target_link_libraries(Ort INTERFACE Ort::DirectML d3d12.lib dxgi.lib dxguid.lib dxcore.lib)
 
-# Now you can do in your main CMakeLists:
-#   target_link_libraries(MyApp PRIVATE Ort)
+#install(IMPORTED_RUNTIME_ARTIFACTS Ort::DirectML DESTINATION "obs-plugins/64bit")
