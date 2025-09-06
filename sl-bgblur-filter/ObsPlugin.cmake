@@ -20,6 +20,7 @@ target_link_options(sl-bgblur-filter PRIVATE
 target_sources(sl-bgblur-filter PRIVATE
 	"${_this_dir}/sl-bgblur-filter.cpp"
 	"${_this_dir}/BgBlur.cpp"
+	"${_this_dir}/BgBlurGraphics.cpp"
 	"${_this_dir}/FilterData.cpp"
 )
 
