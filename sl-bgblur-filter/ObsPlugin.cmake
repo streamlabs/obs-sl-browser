@@ -17,7 +17,14 @@ target_link_options(sl-bgblur-filter PRIVATE
   "/IGNORE:4099" # Ignore PDB warnings
 )
 
-target_sources(
-  sl-bgblur-filter
-  PRIVATE "${_this_dir}/sl-bgblur-filter.cpp"
+target_sources(sl-bgblur-filter PRIVATE
+	"${_this_dir}/sl-bgblur-filter.cpp"
+	"${_this_dir}/BgBlur.cpp"
+	"${_this_dir}/FilterData.cpp"
+)
+
+add_custom_command(TARGET sl-bgblur-filter POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Ort::DirectML>"
+        $<TARGET_FILE_DIR:sl-bgblur-filter>
 )

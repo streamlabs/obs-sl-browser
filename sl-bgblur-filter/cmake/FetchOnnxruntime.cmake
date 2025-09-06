@@ -61,5 +61,3 @@ set_target_properties(Ort::DirectML PROPERTIES
   IMPORTED_IMPLIB   ${onnxruntime_SOURCE_DIR}/bin/DirectML.lib
 )
 target_link_libraries(Ort INTERFACE Ort::DirectML d3d12.lib dxgi.lib dxguid.lib dxcore.lib)
-
-#install(IMPORTED_RUNTIME_ARTIFACTS Ort::DirectML DESTINATION "obs-plugins/64bit")
