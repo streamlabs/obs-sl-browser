@@ -205,6 +205,33 @@ void BgBlur::videoTick(void *data, float seconds)
 }
 
 /*static*/
+void BgBlur::defaults(obs_data_t *settings)
+{
+
+}
+
+/*static*/
+obs_properties_t *BgBlur::properties(void *data)
+{
+	UNUSED_PARAMETER(data);
+	obs_properties_t *props = obs_properties_create();
+	obs_properties_add_int_slider(props, "blur_background", obs_module_text("BlurBackgroundFactor0NoBlurUseColor"), 0, 20, 1);
+
+	// Model selection Props
+	obs_property_t *p_model_select = obs_properties_add_list(props, "model_select", "Background Removal Quality", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+	obs_property_list_add_string(p_model_select, "Fast (MediaPipe, CPU-friendly)", MODEL_MEDIAPIPE);
+	obs_property_list_add_string(p_model_select, "Very Fast / Low Quality (Selfie Segmentation)", MODEL_SELFIE);
+	obs_property_list_add_string(p_model_select, "Balanced (PPHumanSeg, CPU)", MODEL_PPHUMANSEG);
+	obs_property_list_add_string(p_model_select, "Best Quality (Robust Video Matting, GPU)", MODEL_RVM);
+	obs_property_list_add_string(p_model_select, "Sharp Cutout (RMBG, GPU recommended)", MODEL_RMBG);
+	obs_property_list_add_string(p_model_select, "Legacy / Slow (SINet, CPU)", MODEL_SINET);
+	obs_property_list_add_string(p_model_select, "Experimental Depth Blur (TCMonoDepth)", MODEL_DEPTH_TCMONODEPTH);
+
+	obs_properties_add_text(props, "info", "Hello World", OBS_TEXT_INFO);
+	return props;
+}
+
+/*static*/
 void BgBlur::updateSettings(void *data, obs_data_t *settings)
 {
 	FilterData *tf = (FilterData*)(data);

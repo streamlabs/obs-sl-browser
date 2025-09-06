@@ -36,6 +36,9 @@ private:
 	~BgBlur();
 
 private:
+
+
+private:
 	static int createOrtSession(FilterData *tf);
 	static bool runFilterModelInference(FilterData *tf, const cv::Mat &imageBGRA, cv::Mat &output);
 	static bool getRGBAFromStageSurface(FilterData *tf, uint32_t &width, uint32_t &height);
@@ -46,10 +49,6 @@ private:
 	#define MODEL_SELFIE "models/selfie_segmentation.onnx"
 	#define MODEL_RVM "models/rvm_mobilenetv3_fp32.onnx"
 	#define MODEL_PPHUMANSEG "models/pphumanseg_fp32.onnx"
-	#define MODEL_ENHANCE_TBEFN "models/tbefn_fp32.onnx"
-	#define MODEL_ENHANCE_URETINEX "models/uretinex_net_180x320.onnx"
-	#define MODEL_ENHANCE_SGLLIE "models/semantic_guided_llie_180x324.onnx"
-	#define MODEL_ENHANCE_ZERODCE "models/zero_dce_180x320.onnx"
 	#define MODEL_DEPTH_TCMONODEPTH "models/tcmonodepth_tcsmallnet_192x320.onnx"
 	#define MODEL_RMBG "models/bria_rmbg_1_4_qint8.onnx"
 	 
