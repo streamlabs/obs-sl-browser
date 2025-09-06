@@ -323,7 +323,7 @@ obs_properties_t *BgBlur::obs_properties(void *data)
 {
 	UNUSED_PARAMETER(data);
 	obs_properties_t *props = obs_properties_create();
-	obs_properties_add_int_slider(props, "blur_background", obs_module_text("BlurBackgroundFactor0NoBlurUseColor"), 0, 20, 1);
+	obs_properties_add_int_slider(props, "blur_background", "Blur Amount", 0, 20, 1);
 
 	// Model selection Props
 	obs_property_t *p_model_select = obs_properties_add_list(props, "model_select", "Background Removal Quality", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
@@ -413,15 +413,19 @@ void BgBlur::obs_update_settings(void *data, obs_data_t *settings)
 
 	obs_enter_graphics();
 
-	char *effect_path = obs_module_file(EFFECT_PATH);
-	gs_effect_destroy(filterD->effect);
-	filterD->effect = gs_effect_create_from_file(effect_path, NULL);
-	bfree(effect_path);
+	if (char *effect_path = obs_module_file(EFFECT_PATH))
+	{
+		gs_effect_destroy(filterD->effect);
+		filterD->effect = gs_effect_create_from_file(effect_path, NULL);
+		bfree(effect_path);
+	}
 
-	char *kawaseBlurEffectPath = obs_module_file(KAWASE_BLUR_EFFECT_PATH);
-	gs_effect_destroy(filterD->kawaseBlurEffect);
-	filterD->kawaseBlurEffect = gs_effect_create_from_file(kawaseBlurEffectPath, NULL);
-	bfree(kawaseBlurEffectPath);
+	if (char* kawaseBlurEffectPath = obs_module_file(KAWASE_BLUR_EFFECT_PATH))
+	{
+		gs_effect_destroy(filterD->kawaseBlurEffect);
+		filterD->kawaseBlurEffect = gs_effect_create_from_file(kawaseBlurEffectPath, NULL);
+		bfree(kawaseBlurEffectPath);
+	}
 
 	obs_leave_graphics();
 

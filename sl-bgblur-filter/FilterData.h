@@ -11,18 +11,18 @@ struct FilterData : public ORTModelData
 public:
 	// --- Inference / Model configuration ---
 	std::string useGPU;
-	uint32_t numThreads;
+	uint32_t numThreads = 0;
 	std::string modelSelection;
 	std::unique_ptr<Model> model;
 	std::wstring modelFilepath;
 	std::mutex modelMutex;
 
 	// --- OBS / Graphics handles ---
-	obs_source_t *source;
-	gs_texrender_t *texrender;
-	gs_stagesurf_t *stagesurface;
-	gs_effect_t *effect;
-	gs_effect_t *kawaseBlurEffect;
+	obs_source_t* source = nullptr;
+	gs_texrender_t* texrender = nullptr;
+	gs_stagesurf_t* stagesurface = nullptr;
+	gs_effect_t* effect = nullptr;
+	gs_effect_t* kawaseBlurEffect = nullptr;
 
 	// --- Frame data ---
 	cv::Mat inputBGRA;
@@ -35,7 +35,7 @@ public:
 	std::mutex outputLock;
 
 	// --- State flags ---
-	bool isDisabled;
+	bool isDisabled = false;
 
 	// --- Threshold / Masking controls ---
 	bool enableThreshold = true;
