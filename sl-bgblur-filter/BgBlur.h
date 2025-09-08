@@ -53,7 +53,7 @@ protected:
 	#define USEGPU_TENSORRT "tensorrt"
 	#define USEGPU_COREML "coreml"
 	 
-	#define EFFECT_PATH "effects/mask_alpha_filter.effect"
+	#define MASK_EFFECT_PATH "effects/mask_alpha_filter.effect"
 	#define KAWASE_BLUR_EFFECT_PATH "effects/kawase_blur.effect"
 	#define BLEND_EFFECT_PATH "effects/blend_images.effect"
 		

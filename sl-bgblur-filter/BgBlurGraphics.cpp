@@ -195,18 +195,15 @@ int BgBlurGraphics::createOrtSession(FilterData *tf)
 		sessionOptions.SetIntraOpNumThreads(tf->numThreads);
 	}
 
-	char *modelFilepath_rawPtr = obs_module_file(tf->modelSelection.c_str());
+	auto modelFilepath = (std::filesystem::path(obs_get_module_binary_path(obs_current_module())).parent_path() / tf->modelSelection);
 
-	if (modelFilepath_rawPtr == nullptr)
+	if (!std::filesystem::exists(modelFilepath))
 	{
-		blog(LOG_ERROR, "obs_module_file returned null for %s", tf->modelSelection.c_str());
+		blog(LOG_ERROR, "tf->modelSelection not found at %s", modelFilepath.string().c_str());
 		return OBS_BGREMOVAL_ORT_SESSION_ERROR_FILE_NOT_FOUND;
 	}
 
-	int outLength = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, modelFilepath_rawPtr, -1, nullptr, 0);
-	tf->modelFilepath = std::wstring(outLength, L'\0');
-	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, modelFilepath_rawPtr, -1, tf->modelFilepath.data(), outLength);
-	bfree(modelFilepath_rawPtr);
+	tf->modelFilepath = modelFilepath.wstring();
 
 	try
 	{

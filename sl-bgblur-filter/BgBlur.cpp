@@ -226,7 +226,7 @@ void BgBlur::obs_video_render(void *data, gs_effect_t *_effect)
 		return;
 	}
 
-	if (!filterD->effect)
+	if (!filterD->maskEffect)
 	{
 		// Effect failed to load, skip rendering
 		if (filterD->source)
@@ -265,8 +265,8 @@ void BgBlur::obs_video_render(void *data, gs_effect_t *_effect)
 		return;
 	}
 
-	gs_eparam_t* alphamask = gs_effect_get_param_by_name(filterD->effect, "alphamask");
-	gs_eparam_t* blurredBackground = gs_effect_get_param_by_name(filterD->effect, "blurredBackground");
+	gs_eparam_t* alphamask = gs_effect_get_param_by_name(filterD->maskEffect, "alphamask");
+	gs_eparam_t* blurredBackground = gs_effect_get_param_by_name(filterD->maskEffect, "blurredBackground");
 
 	gs_effect_set_texture(alphamask, alphaTexture);
 
@@ -290,7 +290,7 @@ void BgBlur::obs_video_render(void *data, gs_effect_t *_effect)
 		techName = "DrawWithoutBlur";
 	}
 
-	obs_source_process_filter_tech_end(filterD->source, filterD->effect, 0, 0, techName);
+	obs_source_process_filter_tech_end(filterD->source, filterD->maskEffect, 0, 0, techName);
 
 	gs_blend_state_pop();
 	gs_texture_destroy(alphaTexture);
@@ -413,19 +413,11 @@ void BgBlur::obs_update_settings(void *data, obs_data_t *settings)
 
 	obs_enter_graphics();
 
-	if (char *effect_path = obs_module_file(EFFECT_PATH))
-	{
-		gs_effect_destroy(filterD->effect);
-		filterD->effect = gs_effect_create_from_file(effect_path, NULL);
-		bfree(effect_path);
-	}
+	gs_effect_destroy(filterD->maskEffect);
+	filterD->maskEffect = gs_effect_create_from_file((std::filesystem::path(obs_get_module_binary_path(obs_current_module())).parent_path() / MASK_EFFECT_PATH).string().c_str(), NULL);
 
-	if (char* kawaseBlurEffectPath = obs_module_file(KAWASE_BLUR_EFFECT_PATH))
-	{
-		gs_effect_destroy(filterD->kawaseBlurEffect);
-		filterD->kawaseBlurEffect = gs_effect_create_from_file(kawaseBlurEffectPath, NULL);
-		bfree(kawaseBlurEffectPath);
-	}
+	gs_effect_destroy(filterD->kawaseBlurEffect);
+	filterD->kawaseBlurEffect = gs_effect_create_from_file((std::filesystem::path(obs_get_module_binary_path(obs_current_module())).parent_path() / KAWASE_BLUR_EFFECT_PATH).string().c_str(), NULL);
 
 	obs_leave_graphics();
 
@@ -455,7 +447,7 @@ void BgBlur::obs_destroy(void *data)
 		if (filterD->stagesurface)
 			gs_stagesurface_destroy(filterD->stagesurface);
 		
-		gs_effect_destroy(filterD->effect);
+		gs_effect_destroy(filterD->maskEffect);
 		gs_effect_destroy(filterD->kawaseBlurEffect);
 		obs_leave_graphics();
 

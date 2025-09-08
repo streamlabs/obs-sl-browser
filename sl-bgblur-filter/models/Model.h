@@ -90,40 +90,6 @@ public:
 
 	const char *name;
 
-#if _WIN32
-	const std::wstring
-#else
-	const std::string
-#endif
-	getModelFilepath(const std::string &modelSelection)
-	{
-		char *modelFilepath_rawPtr =
-			obs_module_file(modelSelection.c_str());
-
-		if (modelFilepath_rawPtr == nullptr) {
-			blog(LOG_ERROR,
-				"Unable to get model filename %s from plugin.",
-				modelSelection.c_str());
-#if _WIN32
-			return std::wstring();
-#else
-			return std::string();
-#endif
-		}
-
-		std::string modelFilepath_s(modelFilepath_rawPtr);
-		bfree(modelFilepath_rawPtr);
-
-#if _WIN32
-		std::wstring modelFilepath_ws(modelFilepath_s.size(), L' ');
-		std::copy(modelFilepath_s.begin(), modelFilepath_s.end(),
-			  modelFilepath_ws.begin());
-		return modelFilepath_ws;
-#else
-		return modelFilepath_s;
-#endif
-	}
-
 	virtual void populateInputOutputNames(
 		const std::unique_ptr<Ort::Session> &session,
 		std::vector<Ort::AllocatedStringPtr> &inputNames,
