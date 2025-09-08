@@ -336,7 +336,7 @@ obs_properties_t *BgBlur::obs_properties(void *data)
 	obs_property_list_add_string(p_use_gpu, "GPU - CUDA (NVIDIA only, fast)", USEGPU_CUDA);
 	obs_property_list_add_string(p_use_gpu, "GPU - TensorRT (NVIDIA, max speed, setup needed)", USEGPU_TENSORRT);
 
-	obs_properties_add_text(props, "info", "Hello World", OBS_TEXT_INFO);
+	//obs_properties_add_text(props, "info", "Hello World", OBS_TEXT_INFO);
 	return props;
 }
 
