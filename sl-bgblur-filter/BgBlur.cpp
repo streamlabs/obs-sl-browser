@@ -6,13 +6,7 @@
 #include <wchar.h>
 #include <windows.h>
 
-#include "models/ModelSINET.h"
-#include "models/ModelMediapipe.h"
-#include "models/ModelSelfie.h"
-#include "models/ModelRVM.h"
-#include "models/ModelPPHumanSeg.h"
-#include "models/ModelTCMonoDepth.h"
-#include "models/ModelRMBG.h"
+#include "Models.h"
 
 #include "FilterData.h"
 

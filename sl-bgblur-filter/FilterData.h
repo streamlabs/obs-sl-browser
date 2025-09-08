@@ -3,8 +3,7 @@
 #include <obs.h>
 #include <obs-module.h>
 
-#include "models/Model.h"
-#include "models/ORTModelData.h"
+#include "Models.h"
 
 struct FilterData : public ORTModelData
 {

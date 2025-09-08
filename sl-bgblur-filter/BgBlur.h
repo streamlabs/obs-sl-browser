@@ -55,7 +55,6 @@ protected:
 	 
 	#define MASK_EFFECT_PATH "effects/mask_alpha_filter.effect"
 	#define KAWASE_BLUR_EFFECT_PATH "effects/kawase_blur.effect"
-	#define BLEND_EFFECT_PATH "effects/blend_images.effect"
 		
 	#define OBS_BGREMOVAL_ORT_SESSION_ERROR_FILE_NOT_FOUND 1
 	#define OBS_BGREMOVAL_ORT_SESSION_ERROR_INVALID_MODEL 2
