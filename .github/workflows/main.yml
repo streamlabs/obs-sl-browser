@@ -73,7 +73,7 @@ jobs:
 
   package:
     name: Package Installer
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: [sign_binaries]
     steps:
       - name: Checkout repository
@@ -132,7 +132,7 @@ jobs:
 
   finalize:
     name: Finalize Zip and Upload
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: [sign_installer, package]
     steps:
       - name: Checkout repository
