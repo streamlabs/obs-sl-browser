@@ -97,9 +97,9 @@ void SlBrowser::run(int argc, char *argv[])
 }
 
 /*static*/
-const char *SlBrowser::getDefaultUrl()
+std::string SlBrowser::getDefaultUrl()
 {
-	static char buffer[MAX_PATH];
+	char buffer[MAX_PATH];
 	DWORD len = GetEnvironmentVariableA("SL_PLUGIN_DEFAULT_URL", buffer, MAX_PATH);
 
 	if (len > 0 && len < MAX_PATH)

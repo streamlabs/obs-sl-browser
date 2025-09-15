@@ -11,7 +11,7 @@ public:
 	void run(int argc, char *argv[]);
 
 	static void CreateCefBrowser(int arg);
-	static const char *getDefaultUrl();
+	static std::string getDefaultUrl();
 
 	bool getSavedHiddenState() const;
 	void saveHiddenState(const bool b) const;
