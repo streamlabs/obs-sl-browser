@@ -12,7 +12,7 @@ env:
 jobs:
   publish:
     name: 'Publish'
-    runs-on: windows-latest
+    runs-on: windows-2022
     environment: Release
     strategy:
       matrix:
