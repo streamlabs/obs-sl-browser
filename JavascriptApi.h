@@ -574,6 +574,7 @@ public:
 		    {"tabs_sendStringToTab", JS_MAIN_SEND_STRING_TO_TAB},
 
 		    // .(@function(arg1, arg2))
+		    //		function is remembered internally and when called back it will be given args 'string, uuid' (The message, and where the message came from)			
 		    {"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
 
 		    // .(@function(arg1))
@@ -600,10 +601,11 @@ public:
 			* Browser Tabs
 			*/
 
-			// .(@function(arg1, arg2), str)
+			// .(@function(arg1), str)
 			{"tab_sendStringToMain", JS_TAB_SEND_STRING_TO_MAIN},
 
 			// .(@function(arg1, arg2))
+			//	Same as tabs_registerMsgReceiver
 			{"tab_registerMsgReceiver", JS_TABS_REGISTER_MSG_RECEIVER},
 			
 		};
