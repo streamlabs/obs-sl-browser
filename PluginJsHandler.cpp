@@ -736,18 +736,15 @@ void PluginJsHandler::JS_DOCK_EXECUTEJAVASCRIPT(const Json &params, std::string 
 				if (dock->property("isSlabs").isValid())
 				{
 					QCefWidgetInternal *widget = (QCefWidgetInternal *)dock->widget();
-					widget->executeJavaScript(javascriptcode.c_str());
-
-					// This isn't reliable, js can change the url without this variable knowing about it zz
-					auto url = widget->url;
 
 					if (auto browser = widget->cefBrowser)
 					{
 						if (auto mainframe = browser->GetMainFrame())
-							url = mainframe->GetURL();
+						{
+							mainframe->ExecuteJavaScript(javascriptcode.c_str(), mainframe->GetURL().c_str(), 0);
+							out_jsonReturn = Json(Json::object{{"status", "Found dock and ran ExecuteJavaScript on " + mainframe->GetURL().ToString()}}).dump();
+						}
 					}
-
-					out_jsonReturn = Json(Json::object{{"status", "Found dock and ran ExecuteJavaScript on " + url}}).dump();
 				}
 			}
 		},
