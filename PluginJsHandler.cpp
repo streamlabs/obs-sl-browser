@@ -192,7 +192,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	}
 
 #ifndef GITHUB_REVISION
-	blog(LOGSEVERITY_INFO, "executeApiRequest (start) %s: %s\n", funcName.c_str(), params.c_str());
+	blog(LOG_INFO, "executeApiRequest (start) %s: %s\n", funcName.c_str(), params.c_str());
 #endif
 
 	std::string jsonReturnStr;
@@ -278,7 +278,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	}
 
 #ifndef GITHUB_REVISION
-	blog(LOGSEVERITY_INFO, "executeApiRequest (finish) %s: jsonReturnStr = %s\n", funcName.c_str(), jsonReturnStr.c_str());
+	blog(LOG_INFO, "executeApiRequest (finish) %s: jsonReturnStr = %s\n", funcName.c_str(), jsonReturnStr.c_str());
 #endif
 
 	// We're done, send callback
