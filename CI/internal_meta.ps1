@@ -8,7 +8,7 @@ if (-Not (Test-Path -Path $repoPath)) {
 }
 
 # URL to the JSON data for known OBS versions
-$urlJsonObsVersions = "https://slobs-cdn.streamlabs.com/obsplugin/obsversions_internal.json"
+$urlJsonObsVersions = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugin/obsversions_internal.json"
 
 # Fetch the JSON content
 $jsonContent = Invoke-RestMethod -Uri $urlJsonObsVersions
