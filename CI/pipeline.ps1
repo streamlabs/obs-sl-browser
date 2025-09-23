@@ -91,6 +91,19 @@ $cmakeListsContent = Get-Content -Path $cmakeListsPath
 $cmakeListsContent = $cmakeListsContent[0], $addSubdirectoryLine, $cmakeListsContent[1..($cmakeListsContent.Length - 1)]
 Set-Content -Path $cmakeListsPath -Value $cmakeListsContent
 
+# Verify these files all exist inside ..\obs-sl-browser otherwise throw
+$requiredFiles = @(
+    "..\obs-sl-browser\sl-browser.exe",
+    "..\obs-sl-browser\sl-browser-page.exe",
+    "..\obs-sl-browser\sl-browser-plugin.dll"
+)
+
+foreach ($file in $requiredFiles) {
+    if (-not (Test-Path $file)) {
+        throw "Error: An error occurred. Missing required file: $file"
+    }
+}
+
 # Move obs-sl-browser folder into obs-studio\plugins
 Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Recurse
 
