@@ -125,6 +125,21 @@ else {
 cmake --preset windows-x64
 cmake --build --preset windows-x64
 
+# Verify these files all exist inside ".\plugins\obs-sl-browser" otherwise throw
+$buildOutputDir = Join-Path $currentDirFullPath "$revision\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+
+$requiredFiles = @(
+    (Join-Path $buildOutputDir "sl-browser.exe"),
+    (Join-Path $buildOutputDir "sl-browser-page.exe"),
+    (Join-Path $buildOutputDir "sl-browser-plugin.dll")
+)
+
+foreach ($file in $requiredFiles) {
+    if (-not (Test-Path $file)) {
+        throw "Error: Missing required file: $file"
+    }
+}
+
 # Move back up
 cd ..\
 $currentDirFullPath = (Get-Location).Path
