@@ -192,7 +192,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	}
 
 #ifndef GITHUB_REVISION
-	blog(LOG_INFO, "executeApiRequest (start) %s: %s\n", funcName.c_str(), params.c_str());
+	blog(LOGSEVERITY_INFO, "executeApiRequest (start) %s: %s\n", funcName.c_str(), params.c_str());
 #endif
 
 	std::string jsonReturnStr;
@@ -278,7 +278,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	}
 
 #ifndef GITHUB_REVISION
-	blog(LOG_INFO, "executeApiRequest (finish) %s: %s\n", funcName.c_str(), params.c_str());
+	blog(LOGSEVERITY_INFO, "executeApiRequest (finish) %s: jsonReturnStr = %s\n", funcName.c_str(), jsonReturnStr.c_str());
 #endif
 
 	// We're done, send callback
@@ -736,15 +736,8 @@ void PluginJsHandler::JS_DOCK_EXECUTEJAVASCRIPT(const Json &params, std::string 
 				if (dock->property("isSlabs").isValid())
 				{
 					QCefWidgetInternal *widget = (QCefWidgetInternal *)dock->widget();
-
-					if (auto browser = widget->cefBrowser)
-					{
-						if (auto mainframe = browser->GetMainFrame())
-						{
-							mainframe->ExecuteJavaScript(javascriptcode.c_str(), mainframe->GetURL(), 0);
-							out_jsonReturn = Json(Json::object{{"status", "Found dock and ran ExecuteJavaScript on " + mainframe->GetURL().ToString()}}).dump();
-						}
-					}
+					widget->executeJavaScript(javascriptcode.c_str());
+					out_jsonReturn = Json(Json::object{{"status", "Found dock and ran ExecuteJavaScript on " + widget->url}}).dump();
 				}
 			}
 		},
@@ -807,7 +800,6 @@ void PluginJsHandler::JS_DOCK_NEW_BROWSER_DOCK(const json11::Json &params, std::
 				dock->setMinimumSize(80, 80);
 				dock->setWindowTitle(title.c_str());
 				dock->setAllowedAreas(Qt::AllDockWidgetAreas);
-				dock->setWidget(browser);
 				dock->installEventFilter(new SlDockEventFilter(dock));
 
 				//mainWindow->addDockWidget(Qt::LeftDockWidgetArea, dock);
@@ -3401,7 +3393,6 @@ void PluginJsHandler::loadSlabsBrowserDocks()
 			dock->setMinimumSize(80, 80);
 			dock->setWindowTitle(title.c_str());
 			dock->setAllowedAreas(Qt::AllDockWidgetAreas);
-			dock->setWidget(browser);
 			dock->installEventFilter(new SlDockEventFilter(dock));
 		}
 		
