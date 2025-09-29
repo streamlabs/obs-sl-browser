@@ -96,6 +96,18 @@ void SlBrowser::run(int argc, char *argv[])
 	int result = a.exec();
 }
 
+/*static*/
+std::string SlBrowser::getDefaultUrl()
+{
+	char buffer[MAX_PATH];
+	DWORD len = GetEnvironmentVariableA("SL_PLUGIN_DEFAULT_URL", buffer, MAX_PATH);
+
+	if (len > 0 && len < MAX_PATH)
+		return buffer; 
+
+	return "https://obs-plugin.streamlabs.com";
+}
+
 void SlBrowser::CreateCefBrowser(int arg)
 {
 	auto &app = SlBrowser::instance();

@@ -132,8 +132,7 @@ target_sources(
     PluginJsHandler.cpp
     QtGuiModifications.cpp
     WebServer.cpp
-    WebServer.cpp
-    SlBrowserDock.cpp
+    SlDockEventFilter.cpp
     deps/json11/json11.cpp
     deps/minizip/ioapi.c
     deps/minizip/iowin32.c

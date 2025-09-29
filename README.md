@@ -1,3 +1,7 @@
+## Dev Notes
+
+Defining SL_PLUGIN_DEFAULT_URL as an env variable will override the default URL loaded by the plugin's browser.
+
 ## Local Build Instructions
 
 1. Build OBS (clone recursive).
