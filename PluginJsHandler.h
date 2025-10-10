@@ -9,6 +9,8 @@
 
 #include <json11/json11.hpp>
 
+class QDockWidget;
+
 class PluginJsHandler
 {
 public:
@@ -117,6 +119,8 @@ private:
 
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;
+
+	static QDockWidget *findDock(const std::string &objectName);
 
 	std::mutex m_queueMtx;
 	std::atomic<bool> m_running = false;
