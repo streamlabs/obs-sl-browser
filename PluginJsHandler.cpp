@@ -317,132 +317,66 @@ void PluginJsHandler::JS_STOP_WEBSERVER(const json11::Json &params, std::string 
 
 void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::string &out_jsonReturn)
 {
-	auto getRegistryValue = [](const HKEY rootKey, const std::string &subKey, const std::string &valueName)
-	{
-		HKEY hKey;
-		char value[512];
-		DWORD valueLength = sizeof(value);
-
-		if (RegOpenKeyExA(rootKey, subKey.c_str(), 0, KEY_READ, &hKey) != ERROR_SUCCESS)
-			return std::string();
-
-		if (RegQueryValueExA(hKey, valueName.c_str(), nullptr, nullptr, (LPBYTE)value, &valueLength) != ERROR_SUCCESS)
-		{
-			RegCloseKey(hKey);
-			return std::string();
-		}
-
-		RegCloseKey(hKey);
-		return std::string(value);
-	};
-
-
-	auto getDefaultBrowserPath = [&]()
-	{
-		std::string browser = getRegistryValue(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice", "ProgId");
-
-		// Get the name of the default browser
-		if (browser.empty())
-			return std::string();
-
-		// Get the path of the browser executable
-		std::string browserPathKey = "SOFTWARE\\Classes\\" + browser + "\\shell\\open\\command";
-		return getRegistryValue(HKEY_LOCAL_MACHINE, browserPathKey, "");
-	};
-	
 	const auto &param2Value = params["param2"];
 	std::string url = param2Value.string_value();
-	std::string browserCommand = getDefaultBrowserPath();
 
-	if (browserCommand.empty())
+	// Check if URL has a protocol prefix
+	if (url.find("http://") != 0 && url.find("https://") != 0)
+		url = "https://" + url;
+
+	// Get process ID before launching
+	SHELLEXECUTEINFOA sei = {sizeof(sei)};
+	sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+	sei.lpVerb = "open";
+	sei.lpFile = url.c_str();
+	sei.nShow = SW_SHOWNORMAL;
+
+	if (ShellExecuteExA(&sei))
 	{
-		// Just use ShellExecuteExA if there was an issue getting path to their default browser
-		SHELLEXECUTEINFOA sei = {0};
-		sei.cbSize = sizeof(SHELLEXECUTEINFOA);
-		sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-		sei.lpVerb = "open";
-		sei.lpFile = url.c_str();
-		sei.nShow = SW_SHOWNORMAL;
-		ShellExecuteExA(&sei);
-		return;
+		if (sei.hProcess)
+		{
+			// Wait a bit for the browser window to appear
+			WaitForInputIdle(sei.hProcess, 2000);
+
+			// Get the process ID
+			DWORD processId = GetProcessId(sei.hProcess);
+			HWND foundHwnd = NULL;
+
+			// Lambda to find the browser window
+			auto enumFunc = [](HWND hwnd, LPARAM lParam) -> BOOL {
+				auto *data = reinterpret_cast<std::pair<DWORD, HWND *> *>(lParam);
+				DWORD processId = data->first;
+				HWND *outHwnd = data->second;
+
+				DWORD windowProcessId;
+				GetWindowThreadProcessId(hwnd, &windowProcessId);
+
+				// Check if this window belongs to the browser process and is visible
+				if (windowProcessId == processId && IsWindowVisible(hwnd))
+				{
+					// Check if it's a main window (has no owner)
+					if (GetWindow(hwnd, GW_OWNER) == NULL)
+					{
+						*outHwnd = hwnd;
+						return FALSE;
+					}
+				}
+
+				return TRUE;
+			};
+
+			std::pair<DWORD, HWND *> data = {processId, &foundHwnd};
+			EnumWindows(enumFunc, reinterpret_cast<LPARAM>(&data));
+
+			if (foundHwnd)
+			{
+				SetForegroundWindow(foundHwnd);
+				BringWindowToTop(foundHwnd);
+			}
+
+			CloseHandle(sei.hProcess);
+		}
 	}
-
-	size_t placeholderPos = browserCommand.find("%1");
-	if (placeholderPos != std::string::npos)
-		browserCommand.replace(placeholderPos, 2, url);
-	else
-		browserCommand = "\"" + browserCommand + "\" \"" + url + "\"";
-
-	WinExec(browserCommand.c_str(), SW_SHOWDEFAULT);
-
-	// Time for it to open
-	::Sleep(500);
-
-	/**
-	* Now look for the browser process and bring the top most Z to front (the page should be in that instance of it)
-	*/
-
-	auto extractPathAndName = [](const std::string &command)
-	{
-		size_t firstQuote = command.find('\"');
-		size_t secondQuote = command.find('\"', firstQuote + 1);
-		std::string path = command.substr(firstQuote + 1, secondQuote - firstQuote - 1);
-		size_t lastSlash = path.find_last_of("\\/");
-		std::string name = path.substr(lastSlash + 1);
-		return std::pair<std::string, std::string>{path, name};
-	};
-
-	auto lpcwstrToStr = [](LPCWSTR wideStr)
-	{
-		int len = WideCharToMultiByte(CP_UTF8, 0, wideStr, -1, nullptr, 0, nullptr, nullptr);
-		std::vector<char> vec(len);
-		WideCharToMultiByte(CP_UTF8, 0, wideStr, -1, &vec[0], len, nullptr, nullptr);
-		return std::string(vec.begin(), vec.end() - 1); // Exclude null terminator
-	};
-
-	// Lambda to get the full path of a process given its ID
-	auto getProcessPathById = [&](DWORD processId) -> std::string
-	{
-		std::string processPath;
-		HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
-		if (hProcess != NULL)
-		{
-			WCHAR pathBuffer[MAX_PATH];
-			if (GetModuleFileNameEx(hProcess, NULL, pathBuffer, MAX_PATH))
-				processPath = lpcwstrToStr(pathBuffer);
-
-			CloseHandle(hProcess);
-		}
-
-		return processPath;
-	};
-
-	std::string browserPath = extractPathAndName(browserCommand).first;
-
-	// Bring topmost browser to top
-	auto enumWindowsCallback = [&](HWND hwnd, LPARAM lParam) -> BOOL
-	{
-		DWORD processId;
-		GetWindowThreadProcessId(hwnd, &processId);
-		std::string currentProcessPath = getProcessPathById(processId);
-
-		if (currentProcessPath == browserPath && IsWindowVisible(hwnd) && !IsIconic(hwnd))
-		{
-			// Bring top, return false to stop
-			WindowsFunctions::ForceForegroundWindow(hwnd);
-			return FALSE;
-		}
-
-		return TRUE; 
-	};
-
-	// Search
-	EnumWindows(
-		[](HWND hwnd, LPARAM lParam) -> BOOL {
-			auto &callback = *reinterpret_cast<decltype(enumWindowsCallback) *>(lParam);
-			return callback(hwnd, lParam);
-		},
-		reinterpret_cast<LPARAM>(&enumWindowsCallback));
 }
 
 void PluginJsHandler::JS_GET_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn)
