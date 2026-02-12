@@ -90,6 +90,7 @@ public:
 		JS_SAVE_SL_BROWSER_DOCKS,
 		JS_QT_SET_JS_ON_CLICK_STREAM,
 		JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON,
+		JS_QT_GET_COOKIE_VALUE,
 		JS_BROWSER_SET_HIDDEN_STATE,
 	};
 
@@ -193,7 +194,13 @@ public:
 			//
 			//	NOTE: the "Start Stream" button in OBS sometimes throws a popup, and this function wont call back that popup is done
 			{"qt_click_stream_button", JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON},
-			
+
+			// .(@function(arg1), @str_qtClassName, @str_cookieName)
+			//	Returns the value of a cookie stored in a QCefWidgetInternal object, found by className
+			//		Example arg1 = { "value": "." }
+			{"qt_getCookieValue", JS_QT_GET_COOKIE_VALUE},
+
+
 			/***
 			* Windows
 			*/
