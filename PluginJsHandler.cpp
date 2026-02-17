@@ -191,7 +191,6 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		return;
 	}
 
-
 #ifndef GITHUB_REVISION
 	blog(LOG_INFO, "executeApiRequest (start) %s: %s\n", funcName.c_str(), params.c_str());
 #endif
@@ -275,7 +274,6 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON: JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SOURCE_FILTER_ADD: JS_SOURCE_FILTER_ADD(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SOURCE_FILTER_REMOVE: JS_SOURCE_FILTER_REMOVE(jsonParams, jsonReturnStr); break;
-		case JavascriptApi::JS_QT_GET_COOKIE_VALUE: JS_QT_GET_COOKIE_VALUE(jsonParams, jsonReturnStr); break;			
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -286,118 +284,6 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	// We're done, send callback
 	if (param1Value.int_value() > 0)
 		GrpcPlugin::instance().getClient()->send_executeCallback(param1Value.int_value(), jsonReturnStr);
-}
-
-void PluginJsHandler::JS_QT_GET_COOKIE_VALUE(const json11::Json &params, std::string &out_jsonReturn)
-{
-	const auto &param2Value = params["param2"];
-	const auto &param3Value = params["param3"];
-
-	std::string class_name = param2Value.string_value();
-	std::string cookie_name = param3Value.string_value();
-
-	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-
-	CefRefPtr<CefCookieManager> mgr;
-
-	QMetaObject::invokeMethod(
-		mainWindow,
-		[mainWindow, &mgr, &class_name, cookie_name]() {
-			for (auto *w : mainWindow->findChildren<QWidget *>())
-			{
-				if (std::string(w->metaObject()->className()) != class_name)
-					continue;
-
-				QCefWidgetInternal *cefWidget = nullptr;
-
-				for (auto *child : w->findChildren<QWidget *>())
-				{
-					if (std::string(child->metaObject()->className()) == "QCefWidgetInternal")
-					{
-						cefWidget = (QCefWidgetInternal *)child;
-						break;
-					}
-				}
-				if (!cefWidget || !cefWidget->cefBrowser)
-					continue;
-
-				auto host = cefWidget->cefBrowser->GetHost();
-				if (!host)
-					continue;
-
-				auto ctx = host->GetRequestContext();
-
-				if (!ctx)
-					continue;
-
-				mgr = ctx->GetCookieManager(nullptr);
-
-				if (mgr)
-					break;
-			}
-		},
-		Qt::BlockingQueuedConnection);
-
-	if (!mgr)
-	{
-		out_jsonReturn = Json(Json::object({{"error", "QCefWidgetInternal object not found with that class name"}})).dump();
-		return;
-	}
-	
-	class CookieVisitor : public CefCookieVisitor
-	{
-	public:
-		std::string target;
-		std::string value;
-		bool found = false;
-
-		std::mutex mtx;
-		std::condition_variable cv;
-		bool done = false;
-
-		CookieVisitor(const char *name) : target(name) {}
-
-		bool Visit(const CefCookie &cookie, int count, int total, bool &deleteCookie) override
-		{
-			if (CefString(&cookie.name).ToString() == target)
-			{
-				value = CefString(&cookie.value).ToString();
-				found = true;
-			}
-
-			if (found || count >= total - 1)
-			{
-				std::lock_guard<std::mutex> lk(mtx);
-				done = true;
-				cv.notify_all();
-				return false;
-			}
-			return true;
-		}
-
-		bool Wait(int timeout_ms = 5000)
-		{
-			std::unique_lock<std::mutex> lk(mtx);
-			return cv.wait_for(lk, std::chrono::milliseconds(timeout_ms), [this] { return done; });
-		}
-
-		IMPLEMENT_REFCOUNTING(CookieVisitor);
-	};
-
-	CefRefPtr<CookieVisitor> visitor = new CookieVisitor(cookie_name.c_str());
-
-	if (!mgr->VisitAllCookies(visitor))
-	{
-		out_jsonReturn = Json(Json::object({{"error", "Unknown CEF error prevented VisitAllCookies"}})).dump();
-		return;
-	}
-
-	visitor->Wait(5000);
-
-	if (visitor->found)
-		out_jsonReturn = Json(Json::object({{"value", visitor->value}})).dump();
-	else
-		out_jsonReturn = Json(Json::object({{"error", "Cookie with that name not found in that QCefWidgetInternal"}})).dump();
 }
 
 void PluginJsHandler::JS_START_WEBSERVER(const json11::Json &params, std::string &out_jsonReturn)
