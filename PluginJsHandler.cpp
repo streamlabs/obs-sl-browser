@@ -324,59 +324,21 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 	if (url.find("http://") != 0 && url.find("https://") != 0)
 		url = "https://" + url;
 
-	// Get process ID before launching
-	SHELLEXECUTEINFOA sei = {sizeof(sei)};
-	sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-	sei.lpVerb = "open";
-	sei.lpFile = url.c_str();
-	sei.nShow = SW_SHOWNORMAL;
+	auto utf8_to_wstring = [](const std::string &str) {
+		std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
+		return myconv.from_bytes(str);
+	};
 
-	if (ShellExecuteExA(&sei))
-	{
-		if (sei.hProcess)
-		{
-			// Wait a bit for the browser window to appear
-			WaitForInputIdle(sei.hProcess, 2000);
+	SHELLEXECUTEINFO info = {};
+	info.cbSize = sizeof(SHELLEXECUTEINFO);
+	info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+	info.lpVerb = L"open";
+	info.lpFile = utf8_to_wstring(url).c_str();
+	info.lpDirectory = nullptr;
+	info.nShow = SW_SHOWNORMAL;
 
-			// Get the process ID
-			DWORD processId = GetProcessId(sei.hProcess);
-			HWND foundHwnd = NULL;
-
-			// Lambda to find the browser window
-			auto enumFunc = [](HWND hwnd, LPARAM lParam) -> BOOL {
-				auto *data = reinterpret_cast<std::pair<DWORD, HWND *> *>(lParam);
-				DWORD processId = data->first;
-				HWND *outHwnd = data->second;
-
-				DWORD windowProcessId;
-				GetWindowThreadProcessId(hwnd, &windowProcessId);
-
-				// Check if this window belongs to the browser process and is visible
-				if (windowProcessId == processId && IsWindowVisible(hwnd))
-				{
-					// Check if it's a main window (has no owner)
-					if (GetWindow(hwnd, GW_OWNER) == NULL)
-					{
-						*outHwnd = hwnd;
-						return FALSE;
-					}
-				}
-
-				return TRUE;
-			};
-
-			std::pair<DWORD, HWND *> data = {processId, &foundHwnd};
-			EnumWindows(enumFunc, reinterpret_cast<LPARAM>(&data));
-
-			if (foundHwnd)
-			{
-				SetForegroundWindow(foundHwnd);
-				BringWindowToTop(foundHwnd);
-			}
-
-			CloseHandle(sei.hProcess);
-		}
-	}
+	if (!ShellExecuteEx(&info))
+		out_jsonReturn = Json(Json::object{{"token", "Failed to open."}}).dump();
 }
 
 void PluginJsHandler::JS_GET_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn)
