@@ -33,7 +33,7 @@ try {
 		throw "On trying to upload meta_publish.json, AWS CLI returned a non-zero exit code: $LASTEXITCODE"
 	}
 	
-	cfcli -d streamlabs.com purge --url "https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
+	cfcli --token $Env:CF_API_TOKEN -d streamlabs.com purge --url "https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
 
 	if ($LASTEXITCODE -ne 0)  {
 		throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
@@ -41,4 +41,4 @@ try {
 }
 catch {
 	throw "Error: An error occurred. Details: $($_.Exception.Message)"
-}	
+}
