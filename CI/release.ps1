@@ -68,7 +68,7 @@ foreach ($branchName in $branchNames) {
 				throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
 			}
 			
-			cfcli -d streamlabs.com purge --url $destinationUrl
+			cfcli --token $Env:CF_API_TOKEN -d streamlabs.com purge --url $destinationUrl
 			
 			if ($LASTEXITCODE -ne 0)  {
 				throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
@@ -138,13 +138,13 @@ function CreateJsonFile($folder, $branchName) {
 			throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
 		}
 		
-		cfcli -d streamlabs.com purge --url $("https://slobs-cdn.streamlabs.com/obsplugin/package/" + [System.IO.Path]::GetFileName($jsonFilePath))
+		cfcli --token $Env:CF_API_TOKEN -d streamlabs.com purge --url $("https://slobs-cdn.streamlabs.com/obsplugin/package/" + [System.IO.Path]::GetFileName($jsonFilePath))
 		
 		if ($LASTEXITCODE -ne 0) {
 			throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
 		}
 		
-		cfcli -d streamlabs.com purge --url $("https://slobs-cdn.streamlabs.com/obsplugin/package/" + [System.IO.Path]::GetFileName($zipFilePath))
+		cfcli --token $Env:CF_API_TOKEN -d streamlabs.com purge --url $("https://slobs-cdn.streamlabs.com/obsplugin/package/" + [System.IO.Path]::GetFileName($zipFilePath))
 		
 		if ($LASTEXITCODE -ne 0)  {
 			throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
@@ -207,7 +207,7 @@ if ($allBranchesReady) {
 		throw "On trying to upload meta_publish.json, AWS CLI returned a non-zero exit code: $LASTEXITCODE"
 	}
 		
-	cfcli -d streamlabs.com purge --url "https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
+	cfcli --token $Env:CF_API_TOKEN -d streamlabs.com purge --url "https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json"
 	
 	if ($LASTEXITCODE -ne 0)  {
 		throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
