@@ -31,6 +31,5 @@ jobs:
                  
       - name: Run script
         env:
-          CF_API_EMAIL: ${{ secrets.CLOUDFLARE_AUTH_EMAIL }}
-          CF_API_KEY: ${{ secrets.CLOUDFLARE_AUTH_KEY }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_PURGE_APIKEY }}
         run: powershell -File ./ci/internal_meta.ps1
