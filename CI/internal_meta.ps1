@@ -96,7 +96,7 @@ if ($LASTEXITCODE -ne 0) {
 	throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
 }
 
-cfcli -d streamlabs.com purge --url "https://slobs-cdn.streamlabs.com/obsplugin/meta/internal_meta.json"
+cfcli --token $Env:CF_API_TOKEN -d streamlabs.com purge --url "https://slobs-cdn.streamlabs.com/obsplugin/meta/internal_meta.json"
 
 if ($LASTEXITCODE -ne 0)  {
 	throw "cfcli returned a non-zero exit code: $LASTEXITCODE"
