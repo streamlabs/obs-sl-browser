@@ -325,10 +325,10 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 		url = "https://" + url;
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-	
+
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[mainWindow, url, &out_jsonReturn]() {			
+		[mainWindow, url, &out_jsonReturn]() {
 			mainWindow->setWindowState(mainWindow->windowState() & ~Qt::WindowMinimized);
 			mainWindow->show();
 			mainWindow->raise();
@@ -367,7 +367,6 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 
 			if (!ShellExecuteEx(&info))
 				out_jsonReturn = Json(Json::object{{"error", "Failed to open."}}).dump();
-
 		},
 		Qt::BlockingQueuedConnection);
 
