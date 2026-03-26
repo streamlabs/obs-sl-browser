@@ -324,23 +324,53 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 	if (url.find("http://") != 0 && url.find("https://") != 0)
 		url = "https://" + url;
 
-	auto utf8_to_wstring = [](const std::string &str) {
-		std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
-		return myconv.from_bytes(str);
-	};
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+	
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, url, &out_jsonReturn]() {			
+			mainWindow->setWindowState(mainWindow->windowState() & ~Qt::WindowMinimized);
+			mainWindow->show();
+			mainWindow->raise();
+			mainWindow->activateWindow();
 
-	std::wstring wurl = utf8_to_wstring(url);
+			// Win32 workaround
+			HWND hWnd = reinterpret_cast<HWND>(mainWindow->winId());
+			DWORD foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
+			DWORD currentThread = GetCurrentThreadId();
 
-	SHELLEXECUTEINFO info = {};
-	info.cbSize = sizeof(SHELLEXECUTEINFO);
-	info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
-	info.lpVerb = L"open";
-	info.lpFile = wurl.c_str();
-	info.lpDirectory = nullptr;
-	info.nShow = SW_SHOWNORMAL;
+			if (foregroundThread != currentThread)
+			{
+				AttachThreadInput(currentThread, foregroundThread, TRUE);
+				SetForegroundWindow(hWnd);
+				AttachThreadInput(currentThread, foregroundThread, FALSE);
+			}
+			else
+			{
+				SetForegroundWindow(hWnd);
+			}
 
-	if (!ShellExecuteEx(&info))
-		out_jsonReturn = Json(Json::object{{"error", "Failed to open."}}).dump();
+			auto utf8_to_wstring = [](const std::string &str) {
+				std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
+				return myconv.from_bytes(str);
+			};
+
+			std::wstring wurl = utf8_to_wstring(url);
+
+			SHELLEXECUTEINFO info = {};
+			info.cbSize = sizeof(SHELLEXECUTEINFO);
+			info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+			info.lpVerb = L"open";
+			info.lpFile = wurl.c_str();
+			info.lpDirectory = nullptr;
+			info.nShow = SW_SHOWNORMAL;
+
+			if (!ShellExecuteEx(&info))
+				out_jsonReturn = Json(Json::object{{"error", "Failed to open."}}).dump();
+
+		},
+		Qt::BlockingQueuedConnection);
+
 }
 
 void PluginJsHandler::JS_GET_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn)
