@@ -329,11 +329,13 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 		return myconv.from_bytes(str);
 	};
 
+	std::wstring wurl = utf8_to_wstring(url);
+
 	SHELLEXECUTEINFO info = {};
 	info.cbSize = sizeof(SHELLEXECUTEINFO);
 	info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
 	info.lpVerb = L"open";
-	info.lpFile = utf8_to_wstring(url).c_str();
+	info.lpFile = wurl.c_str();
 	info.lpDirectory = nullptr;
 	info.nShow = SW_SHOWNORMAL;
 
