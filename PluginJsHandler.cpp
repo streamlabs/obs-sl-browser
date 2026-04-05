@@ -3233,6 +3233,18 @@ void PluginJsHandler::onWmClose()
 	stop();
 	QtGuiModifications::instance().stop();
 	PluginJsHandler::instance().saveSlabsBrowserDocks();
+
+	// Destroy CEF widgets before OBS gets to CefShutdown()
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+	QList<QDockWidget *> docks = mainWindow->findChildren<QDockWidget *>();
+	for (auto *dock : docks)
+	{
+		if (dock->property("isSlabs").isValid())
+		{
+			delete dock->widget();
+			dock->setWidget(nullptr);
+		}
+	}
 }
 
 void PluginJsHandler::saveSlabsBrowserDocks()
