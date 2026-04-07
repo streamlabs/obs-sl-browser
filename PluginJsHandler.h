@@ -43,6 +43,7 @@ private:
 	void JS_DOCK_EXECUTEJAVASCRIPT(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DOCK_SETURL(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DOWNLOAD_ZIP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DOWNLOAD_FILE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_READ_FILE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_DELETE_FILES(const json11::Json &params, std::string &out_jsonReturn);

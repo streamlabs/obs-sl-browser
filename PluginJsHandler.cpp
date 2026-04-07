@@ -202,6 +202,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_DOCK_EXECUTEJAVASCRIPT: JS_DOCK_EXECUTEJAVASCRIPT(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_DOCK_SETURL: JS_DOCK_SETURL(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_DOWNLOAD_ZIP: JS_DOWNLOAD_ZIP(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_RUN_STREAMLABS_EXE: JS_RUN_STREAMLABS_EXE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_DOWNLOAD_FILE: JS_DOWNLOAD_FILE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_READ_FILE: JS_READ_FILE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_DELETE_FILES: JS_DELETE_FILES(jsonParams, jsonReturnStr); break;
@@ -1704,6 +1705,66 @@ void PluginJsHandler::JS_CREATE_SCENE(const json11::Json &params, std::string &o
 						
 		},
 		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	static std::unordered_map<std::string, HANDLE> s_processes;
+
+	const auto &param2Value = params["param2"];
+	std::string fileName = param2Value.string_value();
+
+	// Check if this specific exe is already running
+	auto it = s_processes.find(fileName);
+
+	if (it != s_processes.end())
+	{
+		DWORD exitCode = 0;
+
+		if (GetExitCodeProcess(it->second, &exitCode) && exitCode == STILL_ACTIVE)
+		{
+			out_jsonReturn = Json(Json::object({{"success", false}, {"error", fileName + " is already running"}})).dump();
+			return;
+		}
+
+		CloseHandle(it->second);
+		s_processes.erase(it);
+	}
+
+	std::wstring folderPath = getDownloadsDir();
+	std::wstring wFileName(fileName.begin(), fileName.end());
+	std::wstring fullPath = folderPath + L"\\" + wFileName;
+
+	HANDLE hJob = CreateJobObjectW(nullptr, nullptr);
+
+	if (hJob)
+	{
+		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobInfo = {};
+		jobInfo.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+		SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jobInfo, sizeof(jobInfo));
+	}
+
+	STARTUPINFOW si = {sizeof(si)};
+	PROCESS_INFORMATION pi = {};
+
+	BOOL success = CreateProcessW(fullPath.c_str(), nullptr, nullptr, nullptr, FALSE, CREATE_SUSPENDED, nullptr, folderPath.c_str(), &si, &pi);
+
+	if (success)
+	{
+		if (hJob)
+			AssignProcessToJobObject(hJob, pi.hProcess);
+
+		ResumeThread(pi.hThread);
+		CloseHandle(pi.hThread);
+		s_processes[fileName] = pi.hProcess;
+		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+	}
+	else
+	{
+		if (hJob)
+			CloseHandle(hJob);
+		out_jsonReturn = Json(Json::object({{"success", false}, {"error", "CreateProcess failed with error " + std::to_string(GetLastError())}})).dump();
+	}
 }
 
 void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonReturn)
