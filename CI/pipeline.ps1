@@ -1,10 +1,13 @@
 param(
     [string]$github_workspace,
-    [string]$revision
+    [string]$revision,
+    [ValidateSet('x64', 'arm64')]
+    [string]$architecture = 'x64'
 )
 
 Write-Output "Workspace is $github_workspace"
 Write-Output "Github revision is $revision"
+Write-Output "Architecture is $architecture"
 
 # Get the revision we're using
 $slRevision = 0
@@ -101,7 +104,7 @@ if (Test-Path -Path $presetsPath) {
     try {
         $presets = Get-Content $presetsPath -Raw | ConvertFrom-Json
         foreach ($preset in $presets.configurePresets) {
-            if ($preset.name -eq "windows-x64") {
+            if ($preset.name -eq "windows-$architecture") {
                 if (-not $preset.cacheVariables) {
                     $preset | Add-Member -MemberType NoteProperty -Name cacheVariables -Value @{}
                 }
@@ -122,11 +125,11 @@ else {
 }
 
 # Build
-cmake --preset windows-x64
-cmake --build --preset windows-x64
+cmake --preset "windows-$architecture"
+cmake --build --preset "windows-$architecture"
 
 # Verify these files all exist inside ".\plugins\obs-sl-browser" otherwise throw
-$buildOutputDir = Join-Path $currentDirFullPath "$revision\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+$buildOutputDir = Join-Path $currentDirFullPath "$revision\build_$architecture\plugins\obs-sl-browser\RelWithDebInfo"
 
 $requiredFiles = @(
     (Join-Path $buildOutputDir "sl-browser.exe"),
@@ -157,7 +160,7 @@ $maxDuration = New-TimeSpan -Minutes 5
 $lastExitCode = 1
 
 while ((Get-Date) - $startTime -lt $maxDuration -and $lastExitCode -ne 0) {
-    .\main.ps1 -localSourceDir "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
+    .\main.ps1 -localSourceDir "${currentDirFullPath}\${revision}\build_$architecture\plugins\obs-sl-browser\RelWithDebInfo"
 
     # Update the last exit code
     $lastExitCode = $LastExitCode
@@ -177,4 +180,4 @@ if (Test-Path $artifactPath) {
     Remove-Item $artifactPath -Recurse -Force
 }
 New-Item -ItemType Directory -Path $artifactPath
-Copy-Item -Path "$currentDirFullPath\$revision\build_x64\plugins\obs-sl-browser\RelWithDebInfo\*" -Destination $artifactPath -Recurse -Force
+Copy-Item -Path "$currentDirFullPath\$revision\build_$architecture\plugins\obs-sl-browser\RelWithDebInfo\*" -Destination $artifactPath -Recurse -Force
