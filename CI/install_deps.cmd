@@ -1,7 +1,7 @@
 set GRPC_DIST=grpc_dist
 
 if "%~1"=="arm64" (
-    set GRPC_FILE=grpc-release-static-%GRPC_VERSION%-arm64.7z
+    set GRPC_FILE=grpc-release-static-v1.71.0-arm64.7z
 ) else (
     set GRPC_FILE=grpc-release-static-%GRPC_VERSION%.7z
 )
