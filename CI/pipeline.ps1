@@ -43,16 +43,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
 }
 
-# Begin
-if ($architecture -eq 'arm64') 
-{
+# Begin - set gRPC paths (arm64 v1.71 has protobuf in a different location than x64 v1.58)
+if ($architecture -eq 'arm64') {
     $env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\protobuf"
-} 
-else 
-{
+} else {
     $env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\cmake"
 }
-
 $env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
 $env:gRPC_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\grpc"
 $env:utf8_range_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\utf8_range"

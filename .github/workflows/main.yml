@@ -15,12 +15,16 @@ env:
 jobs:
   win64:
     name: 'Windows ${{ matrix.architecture }}'
-    runs-on: windows-2022
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         architecture: [x64, arm64]
         ReleaseName: [release]
         include:
+          - architecture: x64
+            runner: windows-2022
+          - architecture: arm64
+            runner: windows-11-arm
           - ReleaseName: release
             ReleaseConfig: RelWithDebInfo
     env:
