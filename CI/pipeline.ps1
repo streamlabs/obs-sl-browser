@@ -147,7 +147,8 @@ $requiredFiles = @(
 
 foreach ($file in $requiredFiles) {
     if (-not (Test-Path $file)) {
-        throw "Error: Missing required file: $file"
+        Write-Error "Error: Missing required file: $file"
+        exit 1
     }
 }
 
