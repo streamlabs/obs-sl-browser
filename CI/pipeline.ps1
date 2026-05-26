@@ -132,6 +132,10 @@ else {
 cmake --preset "windows-$architecture"
 cmake --build --preset "windows-$architecture"
 
+# Move back up
+cd ..\
+$currentDirFullPath = (Get-Location).Path
+
 # Verify these files all exist inside ".\plugins\obs-sl-browser" otherwise throw
 $buildOutputDir = Join-Path $currentDirFullPath "$revision\build_$architecture\plugins\obs-sl-browser\RelWithDebInfo"
 
@@ -146,10 +150,6 @@ foreach ($file in $requiredFiles) {
         throw "Error: Missing required file: $file"
     }
 }
-
-# Move back up
-cd ..\
-$currentDirFullPath = (Get-Location).Path
 
 # Clone symbols store scripts
 Write-Output "-- Symbols"
