@@ -54,6 +54,7 @@ add_executable(OBS::sl-browser ALIAS sl-browser)
 #target_compile_definitions(sl-browser PRIVATE SL_OBS_VERSION="")
 #target_compile_definitions(sl-browser PRIVATE GITHUB_REVISION="")
 #target_compile_definitions(sl-browser PRIVATE SL_REVISION="")
+target_compile_definitions(sl-browser PRIVATE WIN32_LEAN_AND_MEAN)
 target_compile_options(sl-browser PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
 target_link_options(sl-browser PRIVATE /NODEFAULTLIB:msvcrt)
 
