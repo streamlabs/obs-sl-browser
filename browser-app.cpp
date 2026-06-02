@@ -1,3 +1,4 @@
+#include <winsock2.h>
 #include "browser-app.hpp"
 #include "browser-version.h"
 #include "JavascriptApi.h"
