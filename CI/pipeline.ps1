@@ -185,4 +185,4 @@ if (Test-Path $artifactPath) {
     Remove-Item $artifactPath -Recurse -Force
 }
 New-Item -ItemType Directory -Path $artifactPath
-Copy-Item -Path "$currentDirFullPath\$revision\build_$architecture\plugins\obs-sl-browser\RelWithDebInfo\*" -Destination $artifactPath -Recurse -Forcece
+Copy-Item -Path "$currentDirFullPath\$revision\build_$architecture\plugins\obs-sl-browser\RelWithDebInfo\*" -Destination $artifactPath -Recurse -Force
