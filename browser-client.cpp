@@ -222,7 +222,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 
         std::vector<CefRefPtr<CefValue>> argsWithoutFunc;
 
-        for (u_long l = 1; l < input_args->GetSize(); l++)
+        for (size_t l = 1; l < input_args->GetSize(); l++)
             argsWithoutFunc.push_back(input_args->GetValue(l));
 
 	bool retVal = true;
