@@ -154,8 +154,7 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 	window_info.SetAsChild((HWND)browserElements->widget->winId(), CefRect(0, 0, realWidth, realHeight));
 
 	// Create a unique request context for the new browser
-	CefRequestContextSettings request_context_settings;
-	CefRefPtr<CefRequestContext> request_context = CefRequestContext::CreateContext(request_context_settings, nullptr);
+	CefRefPtr<CefRequestContext> request_context = CefRequestContext::GetGlobalContext();
 
 	static int32_t counter = 0;
 	++counter;
