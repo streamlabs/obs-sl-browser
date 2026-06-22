@@ -92,6 +92,7 @@ public:
 		JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON,
 		JS_QT_GET_COOKIE_VALUE,
 		JS_BROWSER_SET_HIDDEN_STATE,
+		JS_RUN_STREAMLABS_EXE,
 	};
 
 public:
@@ -218,10 +219,15 @@ public:
 			*/
 
 			// .(@function(arg1), @url)
-			//	Downloads and unpacks the zip, returning a list of full file paths to the files that were in it
+			//	Downloads and unpacks the zip, returning a list of full file paths to the files that were in it.
 			//		Example arg1 = [{ "path": "..." },]
 			{"fs_downloadZip", JS_DOWNLOAD_ZIP},
 
+			// .(@function(arg1), @url)
+			//	Runs an exe that exists in the streamlabs downloads folder.
+			//		Example arg1 = [{ "path": "..." },]
+			{"fs_runSlExe", JS_RUN_STREAMLABS_EXE},
+			
 			// .(@function(arg1), @url, @filename)
 			//	Downloads file, returning a filepath to it
 			//		Example arg1 = { "path": "..." }
