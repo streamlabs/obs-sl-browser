@@ -3,6 +3,8 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <string>
+#include <filesystem>
 #include <obs.h>
 
 #include <QStringList>
@@ -117,6 +119,20 @@ private:
 	void JS_SOURCE_FILTER_ADD(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_QT_GET_COOKIE_VALUE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_PATH_JOIN(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_GET_ENV_VAR(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_MKDIR(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_PATH_EXISTS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_REMOVE_PATH(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_MOVE_PATH(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_SHA256_FILE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_WRITE_FILE(const json11::Json &params, std::string &out_jsonReturn);
+
+	// Internal helpers
+	std::string ws_to_utf8(const std::wstring &str);
+	std::wstring utf8_to_ws(const std::string &str);
+	bool resolveWithinDownloads(const std::wstring &downloadsDir, const std::string &inputPath, std::filesystem::path &out_resolved, std::string &out_error);
+	bool sha256File(const std::filesystem::path &filePath, std::string &out_hexDigest, std::string &out_error);
 
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;
