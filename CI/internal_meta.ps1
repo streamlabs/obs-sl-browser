@@ -34,45 +34,49 @@ foreach ($branch in $branchNames) {
     }
 
     Write-Output "Scanning..."
-	
-    foreach ($arch in @("x64", "arm64")) {
-        try {
-            if ($arch -eq "arm64") {
-                $url = "https://slobs-cdn.streamlabs.com/obsplugin/meta_sha/$commitSha-arm64.json"
-            } else {
-                $url = "https://slobs-cdn.streamlabs.com/obsplugin/meta_sha/$commitSha.json"
-            }
-            $outputFile = ".\temp.json"
 
-            Invoke-WebRequest -Uri $url -OutFile $outputFile
-            
-            Get-Content "$PWD\temp.json" -Encoding Unicode | Set-Content -Encoding UTF8 "$PWD\temp2.json"
+    foreach ($commit in $commits) {
+        $commitSha = $commit.sha
 
-            $MyRawString = Get-Content -Raw "$PWD\temp2.json"
-            $Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False
-            [System.IO.File]::WriteAllLines("$PWD\temp3.json", $MyRawString, $Utf8NoBomEncoding)
-
-			# Read temp3.json into a JSON object
-            $temp3Json = Get-Content "$PWD\temp3.json" | ConvertFrom-Json
-            
-            Remove-Item "$PWD\temp.json"
-            Remove-Item "$PWD\temp2.json"
-            Remove-Item "$PWD\temp3.json"
-        
-            if ($temp3Json.rev) {
-                $data = @{
-                    branchName = $branch
-                    commitSha = $commitSha
-                    unixTimeStamp = $commit.unixTimeStamp
-                    revision = $temp3Json.rev
-                    arch = $arch
+        foreach ($arch in @("x64", "arm64")) {
+            try {
+                if ($arch -eq "arm64") {
+                    $url = "https://slobs-cdn.streamlabs.com/obsplugin/meta_sha/$commitSha-arm64.json"
+                } else {
+                    $url = "https://slobs-cdn.streamlabs.com/obsplugin/meta_sha/$commitSha.json"
                 }
-                Write-Output "ADDING: $commitSha ($arch)"
-                $results += $data
+                $outputFile = ".\temp.json"
+
+                Invoke-WebRequest -Uri $url -OutFile $outputFile
+                
+                Get-Content "$PWD\temp.json" -Encoding Unicode | Set-Content -Encoding UTF8 "$PWD\temp2.json"
+
+                $MyRawString = Get-Content -Raw "$PWD\temp2.json"
+                $Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False
+                [System.IO.File]::WriteAllLines("$PWD\temp3.json", $MyRawString, $Utf8NoBomEncoding)
+
+                # Read temp3.json into a JSON object
+                $temp3Json = Get-Content "$PWD\temp3.json" | ConvertFrom-Json
+                
+                Remove-Item "$PWD\temp.json"
+                Remove-Item "$PWD\temp2.json"
+                Remove-Item "$PWD\temp3.json"
+            
+                if ($temp3Json.rev) {
+                    $data = @{
+                        branchName = $branch
+                        commitSha = $commitSha
+                        unixTimeStamp = $commit.unixTimeStamp
+                        revision = $temp3Json.rev
+                        arch = $arch
+                    }
+                    Write-Output "ADDING: $commitSha ($arch)"
+                    $results += $data
+                }
             }
-        }
-        catch { 
-        
+            catch { 
+            
+            }
         }
     }
 }
