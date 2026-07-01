@@ -1,13 +1,10 @@
 param(
     [string]$github_workspace,
-    [string]$revision,
-    [ValidateSet('x64', 'arm64')]
-    [string]$architecture = 'x64'
+    [string]$revision
 )
 
 Write-Output "Workspace is $github_workspace"
 Write-Output "Github revision is $revision"
-Write-Output "Architecture is $architecture"
 
 # Get the revision we're using
 $slRevision = 0
@@ -32,15 +29,7 @@ $Env:AWS_ACCESS_KEY_ID = $Env:AWS_RELEASE_ACCESS_KEY_ID
 $Env:AWS_SECRET_ACCESS_KEY = $Env:AWS_RELEASE_SECRET_ACCESS_KEY
 $Env:AWS_DEFAULT_REGION = "us-west-2"
 
-if ($architecture -eq 'arm64') 
-{
-    $revisionFilePath = Join-Path -Path $github_workspace -ChildPath "${revision}-arm64.json"
-} 
-else 
-{
-    $revisionFilePath = Join-Path -Path $github_workspace -ChildPath "${revision}.json"
-}
-
+$revisionFilePath = Join-Path -Path $github_workspace -ChildPath "${revision}.json"
 $newJsonContent = @{ rev = $slRevision } | ConvertTo-Json
 $newJsonContent | Out-File -FilePath $revisionFilePath
 Write-Output "New JSON file created at $revisionFilePath with content: $newJsonContent"
@@ -51,12 +40,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "AWS CLI returned a non-zero exit code: $LASTEXITCODE"
 }
 
-# Begin - set gRPC paths (arm64 v1.71 has protobuf in a different location than x64 v1.58)
-if ($architecture -eq 'arm64') {
-    $env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\protobuf"
-} else {
-    $env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\cmake"
-}
+# Begin
+$env:Protobuf_DIR = "${github_workspace}\..\grpc_dist\cmake"
 $env:absl_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\absl"
 $env:gRPC_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\grpc"
 $env:utf8_range_DIR = "${github_workspace}\..\grpc_dist\lib\cmake\utf8_range"
@@ -84,7 +69,7 @@ Write-Output $cmakeContent
 cd ..\
 
 # Deps
-.\obs-sl-browser\ci\install_deps.cmd $architecture
+.\obs-sl-browser\ci\install_deps.cmd
 
 # Read the obs.ver file to get the branch name
 $branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
@@ -116,7 +101,7 @@ if (Test-Path -Path $presetsPath) {
     try {
         $presets = Get-Content $presetsPath -Raw | ConvertFrom-Json
         foreach ($preset in $presets.configurePresets) {
-            if ($preset.name -eq "windows-$architecture") {
+            if ($preset.name -eq "windows-x64") {
                 if (-not $preset.cacheVariables) {
                     $preset | Add-Member -MemberType NoteProperty -Name cacheVariables -Value @{}
                 }
@@ -137,11 +122,11 @@ else {
 }
 
 # Build
-cmake --preset "windows-$architecture"
-cmake --build --preset "windows-$architecture"
+cmake --preset windows-x64
+cmake --build --preset windows-x64
 
 # Verify these files all exist inside ".\plugins\obs-sl-browser" otherwise throw
-$buildOutputDir = Join-Path $currentDirFullPath "$revision\build_$architecture\plugins\obs-sl-browser\RelWithDebInfo"
+$buildOutputDir = Join-Path $currentDirFullPath "$revision\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 
 $requiredFiles = @(
     (Join-Path $buildOutputDir "sl-browser.exe"),
@@ -151,8 +136,7 @@ $requiredFiles = @(
 
 foreach ($file in $requiredFiles) {
     if (-not (Test-Path $file)) {
-        Write-Error "Missing $file"
-        exit 1
+        throw "Error: Missing required file: $file"
     }
 }
 
@@ -173,7 +157,7 @@ $maxDuration = New-TimeSpan -Minutes 5
 $lastExitCode = 1
 
 while ((Get-Date) - $startTime -lt $maxDuration -and $lastExitCode -ne 0) {
-    .\main.ps1 -localSourceDir "${currentDirFullPath}\${revision}\build_$architecture\plugins\obs-sl-browser\RelWithDebInfo"
+    .\main.ps1 -localSourceDir "${currentDirFullPath}\${revision}\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 
     # Update the last exit code
     $lastExitCode = $LastExitCode
@@ -193,4 +177,4 @@ if (Test-Path $artifactPath) {
     Remove-Item $artifactPath -Recurse -Force
 }
 New-Item -ItemType Directory -Path $artifactPath
-Copy-Item -Path "$currentDirFullPath\$revision\build_$architecture\plugins\obs-sl-browser\RelWithDebInfo\*" -Destination $artifactPath -Recurse -Force
+Copy-Item -Path "$currentDirFullPath\$revision\build_x64\plugins\obs-sl-browser\RelWithDebInfo\*" -Destination $artifactPath -Recurse -Force
