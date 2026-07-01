@@ -17,6 +17,7 @@ jobs:
     name: 'Windows ${{ matrix.architecture }}'
     runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
         architecture: [x64, arm64]
         ReleaseName: [release]
@@ -52,7 +53,9 @@ jobs:
     runs-on: signing
     environment: Release
     needs: [win64]
+    if: ${{ !cancelled() }}
     strategy:
+      fail-fast: false
       matrix:
         architecture: [x64, arm64]
     steps:
@@ -83,7 +86,9 @@ jobs:
     name: 'Package Installer (${{ matrix.architecture }})'
     runs-on: windows-2022
     needs: [sign_binaries]
+    if: ${{ !cancelled() }}
     strategy:
+      fail-fast: false
       matrix:
         architecture: [x64, arm64]
     steps:
@@ -130,7 +135,9 @@ jobs:
     runs-on: signing
     environment: Release
     needs: [package]
+    if: ${{ !cancelled() }}
     strategy:
+      fail-fast: false
       matrix:
         architecture: [x64, arm64]
     steps:
@@ -154,7 +161,9 @@ jobs:
     name: 'Finalize Zip and Upload (${{ matrix.architecture }})'
     runs-on: windows-2022
     needs: [sign_installer, package]
+    if: ${{ !cancelled() }}
     strategy:
+      fail-fast: false
       matrix:
         architecture: [x64, arm64]
     steps:
