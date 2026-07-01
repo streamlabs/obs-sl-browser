@@ -16,6 +16,7 @@ jobs:
   win64:
     name: 'Windows ${{ matrix.architecture }}'
     runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.architecture == 'arm64' }}
     strategy:
       fail-fast: false
       matrix:
@@ -53,7 +54,7 @@ jobs:
     runs-on: signing
     environment: Release
     needs: [win64]
-    if: ${{ !cancelled() }}
+    continue-on-error: ${{ matrix.architecture == 'arm64' }}
     strategy:
       fail-fast: false
       matrix:
@@ -86,7 +87,7 @@ jobs:
     name: 'Package Installer (${{ matrix.architecture }})'
     runs-on: windows-2022
     needs: [sign_binaries]
-    if: ${{ !cancelled() }}
+    continue-on-error: ${{ matrix.architecture == 'arm64' }}
     strategy:
       fail-fast: false
       matrix:
@@ -135,7 +136,7 @@ jobs:
     runs-on: signing
     environment: Release
     needs: [package]
-    if: ${{ !cancelled() }}
+    continue-on-error: ${{ matrix.architecture == 'arm64' }}
     strategy:
       fail-fast: false
       matrix:
@@ -161,7 +162,7 @@ jobs:
     name: 'Finalize Zip and Upload (${{ matrix.architecture }})'
     runs-on: windows-2022
     needs: [sign_installer, package]
-    if: ${{ !cancelled() }}
+    continue-on-error: ${{ matrix.architecture == 'arm64' }}
     strategy:
       fail-fast: false
       matrix:
