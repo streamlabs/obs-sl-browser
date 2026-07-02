@@ -7,6 +7,7 @@
 #include <string>
 #include <filesystem>
 #include <obs.h>
+#include <Windows.h>
 
 #include <QStringList>
 
