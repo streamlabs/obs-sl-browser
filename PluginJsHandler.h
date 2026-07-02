@@ -3,6 +3,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <map>
 #include <string>
 #include <filesystem>
 #include <obs.h>
@@ -127,6 +128,8 @@ private:
 	void JS_MOVE_PATH(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SHA256_FILE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_WRITE_FILE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_IS_PROCESS_RUNNING(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_STOP_PROCESS(const json11::Json &params, std::string &out_jsonReturn);
 
 	// Internal helpers
 	std::string ws_to_utf8(const std::wstring &str);
@@ -144,6 +147,8 @@ private:
 	std::vector<std::pair<std::string, std::string>> m_queudRequests;
 	std::thread m_workerThread;
 	std::thread m_freezeCheckThread;
+
+	std::map<uint32_t, HANDLE> m_childProcesses;
 
 	bool m_restartApp = false;
 

@@ -293,6 +293,8 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_MOVE_PATH: JS_MOVE_PATH(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SHA256_FILE: JS_SHA256_FILE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_WRITE_FILE: JS_WRITE_FILE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_IS_PROCESS_RUNNING: JS_IS_PROCESS_RUNNING(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_STOP_PROCESS: JS_STOP_PROCESS(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -1839,32 +1841,15 @@ void PluginJsHandler::JS_CREATE_SCENE(const json11::Json &params, std::string &o
 
 void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::string &out_jsonReturn)
 {
-	static std::unordered_map<std::string, HANDLE> s_processes;
-
 	const auto &param2Value = params["param2"];
 	std::string fileName = param2Value.string_value();
-
-	// Check if this specific exe is already running
-	auto it = s_processes.find(fileName);
-
-	if (it != s_processes.end())
-	{
-		DWORD exitCode = 0;
-
-		if (GetExitCodeProcess(it->second, &exitCode) && exitCode == STILL_ACTIVE)
-		{
-			out_jsonReturn = Json(Json::object({{"success", false}, {"error", fileName + " is already running"}})).dump();
-			return;
-		}
-
-		CloseHandle(it->second);
-		s_processes.erase(it);
-	}
 
 	std::wstring folderPath = getDownloadsDir();
 	std::wstring wFileName(fileName.begin(), fileName.end());
 	std::wstring fullPath = folderPath + L"\\" + wFileName;
 
+	// Tie the child's lifetime to ours: a job object with KILL_ON_JOB_CLOSE means the launched exe
+	// is terminated if this (parent) process goes away.
 	HANDLE hJob = CreateJobObjectW(nullptr, nullptr);
 
 	if (hJob)
@@ -1886,13 +1871,15 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 
 		ResumeThread(pi.hThread);
 		CloseHandle(pi.hThread);
-		s_processes[fileName] = pi.hProcess;
-		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+
+		m_childProcesses[pi.dwProcessId] = pi.hProcess;
+		out_jsonReturn = Json(Json::object({{"success", true}, {"pid", (int)pi.dwProcessId}})).dump();
 	}
 	else
 	{
 		if (hJob)
 			CloseHandle(hJob);
+
 		out_jsonReturn = Json(Json::object({{"success", false}, {"error", "CreateProcess failed with error " + std::to_string(GetLastError())}})).dump();
 	}
 }
@@ -2652,6 +2639,58 @@ void PluginJsHandler::JS_WRITE_FILE(const Json &params, std::string &out_jsonRet
 	}
 
 	out_jsonReturn = Json(Json::object({{"success", true}, {"bytesWritten", (int)contents.size()}})).dump();
+}
+
+void PluginJsHandler::JS_IS_PROCESS_RUNNING(const Json &params, std::string &out_jsonReturn)
+{
+	DWORD pid = (DWORD)params["param2"].int_value();
+
+	bool running = false;
+
+	auto it = m_childProcesses.find(pid);
+
+	if (it != m_childProcesses.end())
+	{
+		DWORD exitCode = 0;
+
+		if (GetExitCodeProcess(it->second, &exitCode) && exitCode == STILL_ACTIVE)
+		{
+			running = true;
+		}
+		else
+		{
+			// Process has exited (or the handle is no longer queryable) - release it.
+			CloseHandle(it->second);
+			m_childProcesses.erase(it);
+		}
+	}
+
+	out_jsonReturn = Json(Json::object({{"running", running}})).dump();
+}
+
+void PluginJsHandler::JS_STOP_PROCESS(const Json &params, std::string &out_jsonReturn)
+{
+	DWORD pid = (DWORD)params["param2"].int_value();
+
+	auto it = m_childProcesses.find(pid);
+
+	if (it == m_childProcesses.end())
+	{
+		out_jsonReturn = Json(Json::object({{"success", false}, {"error", "Unknown pid (not a process we started)"}})).dump();
+		return;
+	}
+
+	BOOL terminated = TerminateProcess(it->second, 0);
+	DWORD err = terminated ? 0 : GetLastError();
+
+	// Either way we're done tracking this pid: release the handle and drop it from the cache.
+	CloseHandle(it->second);
+	m_childProcesses.erase(it);
+
+	if (terminated)
+		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+	else
+		out_jsonReturn = Json(Json::object({{"success", false}, {"error", "TerminateProcess failed with error " + std::to_string(err)}})).dump();
 }
 
 void PluginJsHandler::JS_OBS_SOURCE_CREATE(const Json &params, std::string &out_jsonReturn)

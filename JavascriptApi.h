@@ -101,6 +101,8 @@ public:
 		JS_MOVE_PATH,
 		JS_SHA256_FILE,
 		JS_WRITE_FILE,
+		JS_IS_PROCESS_RUNNING,
+		JS_STOP_PROCESS,
 	};
 
 public:
@@ -234,6 +236,7 @@ public:
 			// .(@function(arg1), @url)
 			//	Runs an exe that exists in the streamlabs downloads folder.
 			//		Example arg1 = [{ "path": "..." },]
+			//	The returned output includes the PID that can be used to stop the process 
 			{"fs_runSlExe", JS_RUN_STREAMLABS_EXE},
 			
 			// .(@function(arg1), @url, @filename)
@@ -320,6 +323,14 @@ public:
 			//	Returns the value of a single environment variable, or an error if it is not set.
 			//		Example arg1 = { "value": "C:\\Users\\me\\AppData\\Roaming" }
 			{"sys_getEnvVar", JS_GET_ENV_VAR},
+
+			// .(@function(arg1), @pid)
+			//	Whether a process WE started (via fs_runSlExe) is still running, looked up by the pid it returned.
+			{"sys_isProcessRunning", JS_IS_PROCESS_RUNNING},
+
+			// .(@function(arg1), @pid)
+			//	Stops (terminates) a process WE started via fs_runSlExe, identified by the pid it returned.
+			{"sys_stopProcess", JS_STOP_PROCESS},
 
 
 			/***
