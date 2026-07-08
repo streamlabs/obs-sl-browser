@@ -14,13 +14,17 @@ struct SlDualConfig {
 	uint32_t canvasHeight = 1920;
 
 	std::string activeScene; // active canvas scene
+	bool seeded = false;     // first scene was seeded once; never seed again
 
-	// Legacy (pre-editor) fields, kept to seed the first canvas scene.
+	// Legacy (pre-editor) fields, used only for the one-time seed.
 	bool followProgram = true;
 	std::string fixedScene;
 
 	std::string server;
 	std::string key;
+	bool useAuth = false; // RTMP username/password (SE parity)
+	std::string authUsername;
+	std::string authPassword;
 	std::string encoderId = "obs_x264";
 	int videoBitrateKbps = 6000;
 	int audioBitrateKbps = 160;

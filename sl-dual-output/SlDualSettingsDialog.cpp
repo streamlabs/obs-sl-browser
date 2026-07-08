@@ -90,6 +90,25 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig &current, bool str
 	keyRow->addWidget(m_showKey);
 	form->addRow("Stream key:", keyRow);
 
+	// RTMP authentication (as in OBS's Custom service / SE outputs)
+	m_useAuth = new QCheckBox("Use authentication", this);
+	m_useAuth->setChecked(current.useAuth);
+	form->addRow(QString(), m_useAuth);
+
+	m_authUsername = new QLineEdit(QString::fromUtf8(current.authUsername.c_str()), this);
+	form->addRow("Username:", m_authUsername);
+
+	m_authPassword = new QLineEdit(QString::fromUtf8(current.authPassword.c_str()), this);
+	m_authPassword->setEchoMode(QLineEdit::Password);
+	form->addRow("Password:", m_authPassword);
+
+	auto syncAuth = [this](bool on) {
+		m_authUsername->setEnabled(on);
+		m_authPassword->setEnabled(on);
+	};
+	syncAuth(current.useAuth);
+	QObject::connect(m_useAuth, &QCheckBox::toggled, this, syncAuth);
+
 	// Encoding
 	m_encoder = new QComboBox(this);
 	populateEncoders(current.encoderId);
@@ -193,6 +212,9 @@ SlDualConfig SlDualSettingsDialog::resultConfig() const
 	config.canvasHeight = (uint32_t)m_height->value();
 	config.server = m_server->text().trimmed().toUtf8().constData();
 	config.key = m_key->text().trimmed().toUtf8().constData();
+	config.useAuth = m_useAuth->isChecked();
+	config.authUsername = m_authUsername->text().trimmed().toUtf8().constData();
+	config.authPassword = m_authPassword->text().toUtf8().constData();
 	config.encoderId = m_encoder->currentData().toString().toUtf8().constData();
 	config.videoBitrateKbps = m_videoBitrate->value();
 	config.audioBitrateKbps = m_audioBitrate->value();

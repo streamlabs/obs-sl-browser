@@ -136,21 +136,35 @@ void SlDualCanvas::ensureScenes(const SlDualConfig &config)
 		if (!createScene(kDefaultSceneName))
 			return;
 
-		// Seed content from the legacy (pre-editor) config.
-		if (config.followProgram) {
-			addProgramMirrorItem();
-		} else if (!config.fixedScene.empty()) {
-			obs_source_t *src = obs_get_source_by_name(config.fixedScene.c_str());
-			if (src && obs_source_is_scene(src)) {
-				obs_sceneitem_t *item = obs_scene_add(m_activeScene, src);
-				if (item)
-					applyFillTransform(item);
+		// Content seed happens exactly once, ever. If a later load
+		// finds no scenes (e.g. a save was lost), the user gets an
+		// empty scene, never surprise content over their work.
+		if (!config.seeded) {
+			if (config.followProgram) {
+				addProgramMirrorItem();
+			} else if (!config.fixedScene.empty()) {
+				obs_source_t *src = obs_get_source_by_name(config.fixedScene.c_str());
+				if (src && obs_source_is_scene(src)) {
+					obs_sceneitem_t *item = obs_scene_add(m_activeScene, src);
+					if (item)
+						applyFillTransform(item);
+				}
+				if (src)
+					obs_source_release(src);
 			}
-			if (src)
-				obs_source_release(src);
+			blog(LOG_INFO, SL_DUAL_LOG_PREFIX "seeded scene '%s'", kDefaultSceneName);
+		} else {
+			blog(LOG_WARNING, SL_DUAL_LOG_PREFIX
+			     "no canvas scenes restored from the collection; created empty scene '%s'",
+			     kDefaultSceneName);
 		}
 		return;
 	}
+
+	std::string joined;
+	for (const std::string &n : names)
+		joined += (joined.empty() ? "" : ", ") + n;
+	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "adopted %zu canvas scene(s): %s", names.size(), joined.c_str());
 
 	const std::string &want = config.activeScene.empty() ? names.front() : config.activeScene;
 	if (!setActiveScene(want))

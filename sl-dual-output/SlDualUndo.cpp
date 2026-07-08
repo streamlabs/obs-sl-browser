@@ -1,7 +1,18 @@
 #include "SlDualUndo.hpp"
 
+#include <obs-frontend-api.h>
+
+// Every undoable edit funnels through here. OBS only persists the scene
+// collection when *it* knows something changed, so each mutation schedules
+// the frontend's deferred save - same as OBS's own editing UI.
+static void scheduleCollectionSave()
+{
+	obs_frontend_save();
+}
+
 void SlDualUndo::add(std::string name, Action undo, Action redo, std::string undoData, std::string redoData)
 {
+	scheduleCollectionSave();
 	m_stack.resize(m_pos); // drop any redoable tail
 
 	Entry entry;
@@ -26,6 +37,7 @@ bool SlDualUndo::undo()
 	Entry &entry = m_stack[--m_pos];
 	if (entry.undo)
 		entry.undo(entry.undoData);
+	scheduleCollectionSave();
 	return true;
 }
 
@@ -37,6 +49,7 @@ bool SlDualUndo::redo()
 	Entry &entry = m_stack[m_pos++];
 	if (entry.redo)
 		entry.redo(entry.redoData);
+	scheduleCollectionSave();
 	return true;
 }
 

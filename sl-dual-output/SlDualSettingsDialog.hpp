@@ -30,6 +30,9 @@ private:
 	QLineEdit *m_server = nullptr;
 	QLineEdit *m_key = nullptr;
 	QCheckBox *m_showKey = nullptr;
+	QCheckBox *m_useAuth = nullptr;
+	QLineEdit *m_authUsername = nullptr;
+	QLineEdit *m_authPassword = nullptr;
 	QComboBox *m_encoder = nullptr;
 	QSpinBox *m_videoBitrate = nullptr;
 	QSpinBox *m_audioBitrate = nullptr;

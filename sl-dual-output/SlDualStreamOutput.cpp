@@ -71,6 +71,11 @@ bool SlDualStreamOutput::start(const SlDualConfig &config, video_t *canvasVideo)
 	obs_data_t *serviceSettings = obs_data_create();
 	obs_data_set_string(serviceSettings, "server", config.server.c_str());
 	obs_data_set_string(serviceSettings, "key", config.key.c_str());
+	obs_data_set_bool(serviceSettings, "use_auth", config.useAuth);
+	if (config.useAuth) {
+		obs_data_set_string(serviceSettings, "username", config.authUsername.c_str());
+		obs_data_set_string(serviceSettings, "password", config.authPassword.c_str());
+	}
 	m_service = obs_service_create("rtmp_custom", "sl-dual-service", serviceSettings, nullptr);
 	obs_data_release(serviceSettings);
 
@@ -103,7 +108,11 @@ bool SlDualStreamOutput::start(const SlDualConfig &config, video_t *canvasVideo)
 	obs_encoder_set_video(m_videoEncoder, canvasVideo);
 	obs_encoder_set_audio(m_audioEncoder, obs_get_audio());
 
-	m_output = obs_output_create("rtmp_output", "sl-dual-stream", nullptr, nullptr);
+	const char *outputType = obs_service_get_preferred_output_type(m_service);
+	if (!outputType)
+		outputType = "rtmp_output";
+
+	m_output = obs_output_create(outputType, "sl-dual-stream", nullptr, nullptr);
 	if (!m_output) {
 		releaseAll();
 		setState(SlDualStreamState::Idle, "Failed to create RTMP output");

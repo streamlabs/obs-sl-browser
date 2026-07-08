@@ -134,9 +134,14 @@ void SlDualOutput::Impl::ensureCanvas()
 	if (canvas->create(config.canvasWidth, config.canvasHeight)) {
 		config.canvasWidth = canvas->width();
 		config.canvasHeight = canvas->height();
-		canvas->ensureScenes(config); // seeds or adopts scenes
+		bool firstSeed = !config.seeded;
+		canvas->ensureScenes(config); // seeds once or adopts scenes
 		canvas->verifyChannelIntegrity();
 		config.activeScene = canvas->activeSceneName();
+		if (firstSeed) {
+			config.seeded = true;
+			obs_frontend_save(); // persist the seed marker promptly
+		}
 		if (dock)
 			dock->setPreviewActive(true);
 	}
@@ -341,11 +346,22 @@ void SlDualOutput::Impl::onExit()
 		return;
 	exitCleanupDone = true;
 
-	if (output)
+	// Full teardown while the frontend is still alive (the collection was
+	// already saved: SaveProjectNow runs before OBS_FRONTEND_EVENT_EXIT).
+	// Holding canvas/scene refs into obs_module_unload extends libobs
+	// object lifetimes past the frontend's own teardown; release now,
+	// like the frontend does. shutdown() remains a safe no-op fallback.
+	if (output) {
 		output->hardStop();
+		output.reset();
+	}
 
-	// While the frontend still exists; the rest is torn down in shutdown().
 	removeDock();
+
+	if (canvas) {
+		canvas->destroy();
+		canvas.reset();
+	}
 }
 
 void SlDualOutput::Impl::onOutputState(SlDualStreamState state, const std::string &msg)
@@ -378,10 +394,14 @@ obs_data_t *SlDualOutput::Impl::buildSaveData() const
 	obs_data_set_int(d, "canvas_width", config.canvasWidth);
 	obs_data_set_int(d, "canvas_height", config.canvasHeight);
 	obs_data_set_string(d, "active_scene", config.activeScene.c_str());
+	obs_data_set_bool(d, "seeded", config.seeded);
 	obs_data_set_bool(d, "follow_program", config.followProgram);
 	obs_data_set_string(d, "fixed_scene", config.fixedScene.c_str());
 	obs_data_set_string(d, "server", config.server.c_str());
 	obs_data_set_string(d, "key", config.key.c_str());
+	obs_data_set_bool(d, "use_auth", config.useAuth);
+	obs_data_set_string(d, "auth_username", config.authUsername.c_str());
+	obs_data_set_string(d, "auth_password", config.authPassword.c_str());
 	obs_data_set_string(d, "encoder_id", config.encoderId.c_str());
 	obs_data_set_int(d, "video_bitrate", config.videoBitrateKbps);
 	obs_data_set_int(d, "audio_bitrate", config.audioBitrateKbps);
@@ -396,10 +416,14 @@ void SlDualOutput::Impl::applyLoadedData(obs_data_t *d)
 	obs_data_set_default_int(d, "canvas_width", config.canvasWidth);
 	obs_data_set_default_int(d, "canvas_height", config.canvasHeight);
 	obs_data_set_default_string(d, "active_scene", config.activeScene.c_str());
+	obs_data_set_default_bool(d, "seeded", config.seeded);
 	obs_data_set_default_bool(d, "follow_program", config.followProgram);
 	obs_data_set_default_string(d, "fixed_scene", config.fixedScene.c_str());
 	obs_data_set_default_string(d, "server", config.server.c_str());
 	obs_data_set_default_string(d, "key", config.key.c_str());
+	obs_data_set_default_bool(d, "use_auth", config.useAuth);
+	obs_data_set_default_string(d, "auth_username", config.authUsername.c_str());
+	obs_data_set_default_string(d, "auth_password", config.authPassword.c_str());
 	obs_data_set_default_string(d, "encoder_id", config.encoderId.c_str());
 	obs_data_set_default_int(d, "video_bitrate", config.videoBitrateKbps);
 	obs_data_set_default_int(d, "audio_bitrate", config.audioBitrateKbps);
@@ -409,10 +433,14 @@ void SlDualOutput::Impl::applyLoadedData(obs_data_t *d)
 	config.canvasWidth = (uint32_t)obs_data_get_int(d, "canvas_width");
 	config.canvasHeight = (uint32_t)obs_data_get_int(d, "canvas_height");
 	config.activeScene = obs_data_get_string(d, "active_scene");
+	config.seeded = obs_data_get_bool(d, "seeded");
 	config.followProgram = obs_data_get_bool(d, "follow_program");
 	config.fixedScene = obs_data_get_string(d, "fixed_scene");
 	config.server = obs_data_get_string(d, "server");
 	config.key = obs_data_get_string(d, "key");
+	config.useAuth = obs_data_get_bool(d, "use_auth");
+	config.authUsername = obs_data_get_string(d, "auth_username");
+	config.authPassword = obs_data_get_string(d, "auth_password");
 	config.encoderId = obs_data_get_string(d, "encoder_id");
 	config.videoBitrateKbps = (int)obs_data_get_int(d, "video_bitrate");
 	config.audioBitrateKbps = (int)obs_data_get_int(d, "audio_bitrate");
