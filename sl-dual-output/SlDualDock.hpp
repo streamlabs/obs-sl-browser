@@ -48,6 +48,7 @@ protected:
 	void contextMenuEvent(QContextMenuEvent *event) override;
 	void keyPressEvent(QKeyEvent *event) override;
 	void leaveEvent(QEvent *event) override;
+	void changeEvent(QEvent *event) override;
 
 private:
 	void createDisplay();

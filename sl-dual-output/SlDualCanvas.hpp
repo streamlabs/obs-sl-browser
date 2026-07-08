@@ -56,6 +56,11 @@ public:
 	static bool isProgramMirrorItem(obs_sceneitem_t *item);
 	static void markProgramMirrorItem(obs_sceneitem_t *item);
 	void applyFillTransform(obs_sceneitem_t *item) const;
+	bool activeSceneHasMirror() const;
+
+	// Logs and repairs any divergence between the rendered channel and the
+	// scene the editor/list operate on. UI thread.
+	void verifyChannelIntegrity();
 
 	// Graphics thread. Only invoked while attached; the facade removes
 	// display draw callbacks around detach()/destroy().

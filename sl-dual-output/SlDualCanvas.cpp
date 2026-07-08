@@ -479,6 +479,44 @@ void SlDualCanvas::onProgramSceneChanged()
 	obs_source_release(program);
 }
 
+bool SlDualCanvas::activeSceneHasMirror() const
+{
+	if (!m_activeScene)
+		return false;
+
+	bool found = false;
+	obs_scene_enum_items(
+		m_activeScene,
+		[](obs_scene_t *, obs_sceneitem_t *item, void *param) {
+			if (SlDualCanvas::isProgramMirrorItem(item)) {
+				*static_cast<bool *>(param) = true;
+				return false;
+			}
+			return true;
+		},
+		&found);
+	return found;
+}
+
+void SlDualCanvas::verifyChannelIntegrity()
+{
+	if (!m_canvas || !m_activeScene)
+		return;
+
+	obs_source_t *channel = obs_canvas_get_channel(m_canvas, 0);
+	obs_source_t *active = obs_scene_get_source(m_activeScene);
+
+	if (channel != active) {
+		blog(LOG_WARNING,
+		     SL_DUAL_LOG_PREFIX "channel/editor scene divergence detected (channel '%s', active '%s'), repairing",
+		     channel ? obs_source_get_name(channel) : "(none)", obs_source_get_name(active));
+		setChannelToActive();
+	}
+
+	if (channel)
+		obs_source_release(channel);
+}
+
 void SlDualCanvas::refillMirrorItems()
 {
 	for (obs_source_t *src : collectScenes(m_canvas)) {
@@ -519,7 +557,7 @@ void SlDualCanvas::renderPreview(uint32_t cx, uint32_t cy)
 	gs_ortho(0.0f, (float)m_width, 0.0f, (float)m_height, -100.0f, 100.0f);
 	gs_set_viewport(x, y, (int)vw, (int)vh);
 
-	// Black backdrop so the canvas area reads against the grey letterbox.
+	// Black backdrop behind the canvas, like the main preview's DrawBackdrop.
 	gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
 	gs_eparam_t *color = gs_effect_get_param_by_name(solid, "color");
 	struct vec4 black;
@@ -529,6 +567,24 @@ void SlDualCanvas::renderPreview(uint32_t cx, uint32_t cy)
 		gs_draw_quadf(NULL, 0, (float)m_width, (float)m_height);
 
 	obs_canvas_render(m_canvas);
+
+	// 1px outline at the canvas bounds so they read on any theme.
+	float t = scale > 0.0f ? 1.0f / scale : 1.0f; // one display px in canvas units
+	struct vec4 border;
+	vec4_set(&border, 0.35f, 0.35f, 0.35f, 1.0f);
+	gs_effect_set_vec4(color, &border);
+	while (gs_effect_loop(solid, "Solid")) {
+		gs_matrix_push();
+		gs_draw_quadf(NULL, 0, (float)m_width, t); // top
+		gs_matrix_translate3f(0.0f, (float)m_height - t, 0.0f);
+		gs_draw_quadf(NULL, 0, (float)m_width, t); // bottom
+		gs_matrix_pop();
+		gs_matrix_push();
+		gs_draw_quadf(NULL, 0, t, (float)m_height); // left
+		gs_matrix_translate3f((float)m_width - t, 0.0f, 0.0f);
+		gs_draw_quadf(NULL, 0, t, (float)m_height); // right
+		gs_matrix_pop();
+	}
 
 	gs_projection_pop();
 	gs_viewport_pop();

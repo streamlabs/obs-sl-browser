@@ -135,6 +135,7 @@ void SlDualOutput::Impl::ensureCanvas()
 		config.canvasWidth = canvas->width();
 		config.canvasHeight = canvas->height();
 		canvas->ensureScenes(config); // seeds or adopts scenes
+		canvas->verifyChannelIntegrity();
 		config.activeScene = canvas->activeSceneName();
 		if (dock)
 			dock->setPreviewActive(true);

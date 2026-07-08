@@ -151,8 +151,6 @@ bool FindItemAtPos(obs_scene_t *, obs_sceneitem_t *item, void *param)
 		return true;
 	if (obs_sceneitem_locked(item))
 		return true;
-	if (!obs_sceneitem_visible(item))
-		return true;
 
 	vec3_set(&pos3, data->pos.x, data->pos.y, 0.0f);
 
@@ -2067,7 +2065,13 @@ void SlDualEditor::buildSceneMenu(QMenu &menu, QWidget *parent)
 
 	QMenu *add = menu.addMenu("Add Source");
 
-	add->addAction("Program Mirror", [this]() { addProgramMirror(); });
+	QAction *mirrorAction = add->addAction("Program Mirror", [this]() { addProgramMirror(); });
+	SlDualCanvas *cv = m_impl.canvas.get();
+	if (cv && cv->activeSceneHasMirror()) {
+		// A second mirror stacks invisibly behind the first; disallow.
+		mirrorAction->setText("Program Mirror (already in scene)");
+		mirrorAction->setEnabled(false);
+	}
 	add->addSeparator();
 
 	QMenu *newMenu = add->addMenu("New");
