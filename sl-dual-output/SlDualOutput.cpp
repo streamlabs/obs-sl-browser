@@ -1,4 +1,36 @@
 #include "SlDualOutput.hpp"
+
+#ifndef SL_DUAL_ENABLED
+#define SL_DUAL_ENABLED 1
+#endif
+
+#if !SL_DUAL_ENABLED
+// Stub build (obs.ver below the 32.1 functional floor): the public surface
+// exists and does nothing, so the plugin's two lifecycle calls stay put.
+
+#include "SlDualConfig.hpp"
+
+#include <obs.h>
+
+struct SlDualOutput::Impl {}; // never instantiated
+
+SlDualOutput &SlDualOutput::instance()
+{
+	static SlDualOutput s_instance;
+	return s_instance;
+}
+
+void SlDualOutput::initialize()
+{
+	blog(LOG_INFO,
+	     SL_DUAL_LOG_PREFIX "built against OBS %s, below the 32.1 functional floor; dual output is disabled",
+	     SL_DUAL_OBS_VERSION_RAW);
+}
+
+void SlDualOutput::shutdown() {}
+
+#else // SL_DUAL_ENABLED
+
 #include "SlDualOutputInternal.hpp"
 #include "SlDualCanvas.hpp"
 #include "SlDualStreamOutput.hpp"
@@ -134,6 +166,7 @@ void SlDualOutput::Impl::ensureCanvas()
 	if (canvas->create(config.canvasWidth, config.canvasHeight)) {
 		config.canvasWidth = canvas->width();
 		config.canvasHeight = canvas->height();
+
 		bool firstSeed = !config.seeded;
 		canvas->ensureScenes(config); // seeds once or adopts scenes
 		canvas->verifyChannelIntegrity();
@@ -412,6 +445,7 @@ obs_data_t *SlDualOutput::Impl::buildSaveData() const
 
 void SlDualOutput::Impl::applyLoadedData(obs_data_t *d)
 {
+
 	// Absent keys fall back to the current values.
 	obs_data_set_default_int(d, "canvas_width", config.canvasWidth);
 	obs_data_set_default_int(d, "canvas_height", config.canvasHeight);
@@ -516,3 +550,5 @@ void SlDualOutput::Impl::removeDock()
 	obs_frontend_remove_dock(kDockId); // deletes the widget
 	dock = nullptr;
 }
+
+#endif // SL_DUAL_ENABLED

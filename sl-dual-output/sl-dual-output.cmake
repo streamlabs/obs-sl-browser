@@ -22,45 +22,51 @@ if(NOT SL_DUAL_OBS_VERSION)
   message(FATAL_ERROR "sl-dual-output: could not parse obs.ver ('${SL_DUAL_OBS_VER_RAW}')")
 endif()
 
-if(SL_DUAL_OBS_VERSION VERSION_LESS "31.1.0")
-  message(FATAL_ERROR
-    "sl-dual-output: OBS ${SL_DUAL_OBS_VERSION} < 31.1 has no canvas API (obs_canvas_*, "
-    "obs_frontend_add_canvas); refusing to build")
-endif()
-
-# 32.0+ additionally surfaces registered canvases in the Twitch Enhanced
-# Broadcasting settings UI. Same API either way; kept as a define for logging
-# and any future gating.
-if(SL_DUAL_OBS_VERSION VERSION_GREATER_EQUAL "32.0.0")
-  set(SL_DUAL_HAS_FRONTEND_CANVAS 1)
+# OBS 32.1.0 is the functional floor: earlier versions never save
+# plugin-canvas scenes to the scene collection (the save loop over frontend
+# canvases first shipped in 32.1.0), so dual output cannot persist on them.
+# Below the floor the build still succeeds, but only the facade is compiled,
+# as a no-op stub (SL_DUAL_ENABLED=0); initialize()/shutdown() do nothing.
+if(SL_DUAL_OBS_VERSION VERSION_LESS "32.1.0")
+  set(SL_DUAL_ENABLED 0)
+  message(STATUS "sl-dual-output: OBS ${SL_DUAL_OBS_VER_RAW} < 32.1 cannot persist "
+                 "plugin-canvas scenes; compiling dual output as a no-op stub")
 else()
-  set(SL_DUAL_HAS_FRONTEND_CANVAS 0)
+  set(SL_DUAL_ENABLED 1)
+  message(STATUS "sl-dual-output: building against OBS ${SL_DUAL_OBS_VER_RAW}")
 endif()
-
-message(STATUS "sl-dual-output: building against OBS ${SL_DUAL_OBS_VER_RAW} "
-               "(EB canvas UI: ${SL_DUAL_HAS_FRONTEND_CANVAS})")
 
 # ---- Sources ----
-set(_sl_dual_sources
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualOutput.hpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualOutput.cpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualOutputInternal.hpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualConfig.hpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualCanvas.hpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualCanvas.cpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualEditor.hpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualEditor.cpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualUndo.hpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualUndo.cpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualSourceList.hpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualSourceList.cpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualStreamOutput.hpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualStreamOutput.cpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualDock.hpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualDock.cpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualSettingsDialog.hpp"
-  "${CMAKE_CURRENT_LIST_DIR}/SlDualSettingsDialog.cpp"
-)
+if(SL_DUAL_ENABLED)
+  set(_sl_dual_sources
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualOutput.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualOutput.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualOutputInternal.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualConfig.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualCanvas.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualCanvas.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualEditor.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualEditor.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualUndo.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualUndo.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualSourceList.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualSourceList.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualStreamOutput.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualStreamOutput.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualDock.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualDock.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualSettingsDialog.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualSettingsDialog.cpp"
+  )
+else()
+  # Stub build: the facade only. Nothing else compiles, so OBS trees without
+  # the canvas API build cleanly too.
+  set(_sl_dual_sources
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualOutput.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualOutput.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualConfig.hpp"
+  )
+endif()
 
 target_sources(sl-browser-plugin PRIVATE ${_sl_dual_sources})
 source_group("sl-dual-output" FILES ${_sl_dual_sources})
@@ -68,7 +74,7 @@ source_group("sl-dual-output" FILES ${_sl_dual_sources})
 target_include_directories(sl-browser-plugin PRIVATE "${CMAKE_CURRENT_LIST_DIR}")
 
 target_compile_definitions(sl-browser-plugin PRIVATE
+  SL_DUAL_ENABLED=${SL_DUAL_ENABLED}
   SL_DUAL_OBS_VERSION="${SL_DUAL_OBS_VERSION}"
   SL_DUAL_OBS_VERSION_RAW="${SL_DUAL_OBS_VER_RAW}"
-  SL_DUAL_HAS_FRONTEND_CANVAS=${SL_DUAL_HAS_FRONTEND_CANVAS}
 )

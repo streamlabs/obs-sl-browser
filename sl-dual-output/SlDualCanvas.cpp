@@ -104,6 +104,19 @@ bool SlDualCanvas::attach()
 	// (keeps UUID stable for Enhanced Broadcasting, and brings back its
 	// scenes, which the frontend saves/loads natively via canvas_uuid).
 	m_canvas = findExistingByName();
+
+	// SCENE_REF is mandatory: without it the canvas holds no strong refs
+	// to its scenes, and obs_load_sources() destroys restored scenes the
+	// moment it releases its own references (the main canvas survives
+	// because libobs creates it with PROGRAM = ACTIVATE|MIX_AUDIO|SCENE_REF).
+	// Replace any canvas persisted by builds that lacked the flag.
+	if (m_canvas && !(obs_canvas_get_flags(m_canvas) & obs_canvas_flags::SCENE_REF)) {
+		blog(LOG_INFO, SL_DUAL_LOG_PREFIX "replacing restored canvas that lacks SCENE_REF");
+		obs_frontend_remove_canvas(m_canvas);
+		obs_canvas_release(m_canvas);
+		m_canvas = nullptr;
+	}
+
 	if (m_canvas) {
 		if (!obs_canvas_reset_video(m_canvas, &ovi)) {
 			blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "reset video failed on adopted canvas");
@@ -113,7 +126,7 @@ bool SlDualCanvas::attach()
 		}
 		blog(LOG_INFO, SL_DUAL_LOG_PREFIX "adopted canvas '%s' (%ux%u)", kCanvasName, m_width, m_height);
 	} else {
-		int flags = obs_canvas_flags::ACTIVATE | obs_canvas_flags::MIX_AUDIO;
+		int flags = obs_canvas_flags::ACTIVATE | obs_canvas_flags::MIX_AUDIO | obs_canvas_flags::SCENE_REF;
 		m_canvas = obs_frontend_add_canvas(kCanvasName, &ovi, flags);
 		if (!m_canvas) {
 			blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "obs_frontend_add_canvas failed");
@@ -320,6 +333,7 @@ bool SlDualCanvas::createScene(const std::string &name)
 	if (m_activeScene)
 		obs_scene_release(m_activeScene);
 	m_activeScene = obs_scene_get_ref(scene);
+	obs_scene_release(scene); // creation ref; the canvas (SCENE_REF) keeps it alive
 	setChannelToActive();
 	return true;
 }
