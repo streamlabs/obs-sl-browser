@@ -11,7 +11,8 @@
 #include <mutex>
 #include <string>
 
-enum class SlDualStreamState {
+enum class SlDualStreamState
+{
 	Idle,
 	Starting,
 	Live,
@@ -19,20 +20,21 @@ enum class SlDualStreamState {
 	Stopping,
 };
 
-class SlDualStreamOutput {
+class SlDualStreamOutput
+{
 public:
 	// Invoked from OBS output threads; the receiver marshals to the UI thread.
-	using StateCallback = std::function<void(SlDualStreamState, const std::string &)>;
+	using StateCallback = std::function<void(SlDualStreamState, const std::string&)>;
 
 	SlDualStreamOutput() = default;
 	~SlDualStreamOutput();
 
-	SlDualStreamOutput(const SlDualStreamOutput &) = delete;
-	SlDualStreamOutput &operator=(const SlDualStreamOutput &) = delete;
+	SlDualStreamOutput(const SlDualStreamOutput&) = delete;
+	SlDualStreamOutput& operator=(const SlDualStreamOutput&) = delete;
 
 	void setStateCallback(StateCallback callback);
 
-	bool start(const SlDualConfig &config, video_t *canvasVideo);
+	bool start(const SlDualConfig& config, video_t *canvasVideo);
 	void requestStop();
 
 	// Synchronous teardown: no state callback, force-stops if live.

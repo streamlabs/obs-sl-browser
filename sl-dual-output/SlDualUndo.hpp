@@ -7,9 +7,10 @@
 #include <string>
 #include <vector>
 
-class SlDualUndo {
+class SlDualUndo
+{
 public:
-	using Action = std::function<void(const std::string &data)>;
+	using Action = std::function<void(const std::string& data)>;
 
 	void add(std::string name, Action undo, Action redo, std::string undoData, std::string redoData);
 	bool undo();
@@ -17,7 +18,8 @@ public:
 	void clear();
 
 private:
-	struct Entry {
+	struct Entry
+	{
 		std::string name;
 		Action undo;
 		Action redo;

@@ -41,7 +41,8 @@ if(SL_DUAL_ENABLED)
   set(_sl_dual_sources
     "${CMAKE_CURRENT_LIST_DIR}/SlDualOutput.hpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualOutput.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/SlDualOutputInternal.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualController.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualController.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualConfig.hpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualCanvas.hpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualCanvas.cpp"

@@ -20,7 +20,7 @@
 
 // ---- SlDualPreview ----------------------------------------------------------
 
-SlDualPreview::SlDualPreview(SlDualOutput::Impl &impl, QWidget *parent) : QWidget(parent), m_impl(impl)
+SlDualPreview::SlDualPreview(SlDualController& controller, QWidget *parent) : QWidget(parent), m_controller(controller)
 {
 	setAttribute(Qt::WA_PaintOnScreen);
 	setAttribute(Qt::WA_StaticContents);
@@ -34,7 +34,7 @@ SlDualPreview::SlDualPreview(SlDualOutput::Impl &impl, QWidget *parent) : QWidge
 	setMinimumSize(120, 160);
 	setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
-	m_editor = std::make_unique<SlDualEditor>(impl, this);
+	m_editor = std::make_unique<SlDualEditor>(controller, this);
 }
 
 SlDualPreview::~SlDualPreview()
@@ -86,6 +86,7 @@ void SlDualPreview::destroyDisplay()
 void SlDualPreview::updateCallbackRegistration()
 {
 	bool want = m_display && m_active;
+
 	if (want == m_callbackAdded)
 		return;
 
@@ -102,7 +103,8 @@ void SlDualPreview::updateCallbackRegistration()
 void SlDualPreview::drawThunk(void *data, uint32_t cx, uint32_t cy)
 {
 	auto *self = static_cast<SlDualPreview *>(data);
-	if (SlDualCanvas *canvas = self->m_impl.canvas.get())
+
+	if (SlDualCanvas *canvas = self->m_controller.canvas.get())
 		canvas->renderPreview(cx, cy);
 	self->m_editor->drawOverlay(cx, cy);
 }
@@ -129,6 +131,7 @@ void SlDualPreview::resizeEvent(QResizeEvent *event)
 {
 	QWidget::resizeEvent(event);
 	syncEditorView();
+
 	if (m_display) {
 		QSize scaled = size() * devicePixelRatioF();
 		obs_display_resize(m_display, (uint32_t)scaled.width(), (uint32_t)scaled.height());
@@ -143,6 +146,7 @@ void SlDualPreview::paintEvent(QPaintEvent *)
 void SlDualPreview::changeEvent(QEvent *event)
 {
 	QWidget::changeEvent(event);
+
 	if (event->type() == QEvent::PaletteChange && m_display) {
 		// Recreate so the letterbox picks up the new theme color.
 		destroyDisplay();
@@ -206,10 +210,10 @@ void SlDualPreview::keyPressEvent(QKeyEvent *event)
 
 // ---- SlDualDock -------------------------------------------------------------
 
-SlDualDock::SlDualDock(SlDualOutput::Impl &impl) : QWidget(nullptr), m_impl(impl)
+SlDualDock::SlDualDock(SlDualController& controller) : QWidget(nullptr), m_controller(controller)
 {
-	m_preview = new SlDualPreview(impl, this);
-	m_sourceList = new SlDualSourceList(impl, m_preview, this);
+	m_preview = new SlDualPreview(controller, this);
+	m_sourceList = new SlDualSourceList(controller, m_preview, this);
 
 	m_sceneCombo = new QComboBox(this);
 	m_sceneCombo->setToolTip("Active canvas scene");
@@ -268,13 +272,15 @@ void SlDualDock::refreshScenes()
 	m_updatingCombo = true;
 	m_sceneCombo->clear();
 
-	SlDualCanvas *canvas = m_impl.canvas.get();
+	SlDualCanvas *canvas = m_controller.canvas.get();
+
 	if (canvas && canvas->valid()) {
 		std::string active = canvas->activeSceneName();
 		int activeIndex = 0;
 		int i = 0;
-		for (const std::string &name : canvas->sceneNames()) {
+		for (const std::string& name : canvas->sceneNames()) {
 			m_sceneCombo->addItem(QString::fromUtf8(name.c_str()));
+
 			if (name == active)
 				activeIndex = i;
 			i++;
@@ -299,7 +305,7 @@ void SlDualDock::onSceneComboChanged(int index)
 	if (m_updatingCombo || index < 0)
 		return;
 
-	m_impl.sceneSetActive(m_sceneCombo->itemText(index).toUtf8().constData());
+	m_controller.sceneSetActive(m_sceneCombo->itemText(index).toUtf8().constData());
 }
 
 void SlDualDock::onAddScene()
@@ -307,30 +313,34 @@ void SlDualDock::onAddScene()
 	bool ok = false;
 	QString name = QInputDialog::getText(this, "Add Scene", "Scene name:", QLineEdit::Normal, QString(), &ok);
 	name = name.trimmed();
+
 	if (!ok || name.isEmpty())
 		return;
 
-	if (!m_impl.sceneCreate(name.toUtf8().constData()))
+	if (!m_controller.sceneCreate(name.toUtf8().constData()))
 		QMessageBox::information(this, "Add Scene", "A scene with that name already exists on this canvas.");
 }
 
 void SlDualDock::onRemoveScene()
 {
-	SlDualCanvas *canvas = m_impl.canvas.get();
+	SlDualCanvas *canvas = m_controller.canvas.get();
+
 	if (!canvas)
 		return;
 
 	QString name = QString::fromUtf8(canvas->activeSceneName().c_str());
+
 	if (QMessageBox::question(this, "Remove Scene", QString("Remove scene '%1' and its items?").arg(name)) !=
 	    QMessageBox::Yes)
 		return;
 
-	m_impl.sceneRemoveActive();
+	m_controller.sceneRemoveActive();
 }
 
 void SlDualDock::onRenameScene()
 {
-	SlDualCanvas *canvas = m_impl.canvas.get();
+	SlDualCanvas *canvas = m_controller.canvas.get();
+
 	if (!canvas)
 		return;
 
@@ -338,10 +348,11 @@ void SlDualDock::onRenameScene()
 	QString name = QInputDialog::getText(this, "Rename Scene", "Scene name:", QLineEdit::Normal,
 					     QString::fromUtf8(canvas->activeSceneName().c_str()), &ok);
 	name = name.trimmed();
+
 	if (!ok || name.isEmpty())
 		return;
 
-	if (!m_impl.sceneRenameActive(name.toUtf8().constData()))
+	if (!m_controller.sceneRenameActive(name.toUtf8().constData()))
 		QMessageBox::information(this, "Rename Scene", "A scene with that name already exists on this canvas.");
 }
 
@@ -349,30 +360,37 @@ void SlDualDock::onStartStopClicked()
 {
 	switch (m_state) {
 	case SlDualStreamState::Idle:
-		if (m_impl.config.server.empty()) {
+	{
+		if (m_controller.config.server.empty()) {
 			openSettings();
 			return;
 		}
-		m_impl.startStream();
+		m_controller.startStream();
 		break;
+	}
 	case SlDualStreamState::Starting:
 	case SlDualStreamState::Live:
 	case SlDualStreamState::Reconnecting:
-		m_impl.stopStream();
+	{
+		m_controller.stopStream();
 		break;
+	}
 	case SlDualStreamState::Stopping:
+	{
 		break;
+	}
 	}
 }
 
 void SlDualDock::openSettings()
 {
-	SlDualSettingsDialog dialog(m_impl.config, m_impl.streamActive(), this);
+	SlDualSettingsDialog dialog(m_controller.config, m_controller.streamActive(), this);
+
 	if (dialog.exec() == QDialog::Accepted)
-		m_impl.applySettings(dialog.resultConfig());
+		m_controller.applySettings(dialog.resultConfig());
 }
 
-void SlDualDock::setStreamState(SlDualStreamState state, const std::string &msg)
+void SlDualDock::setStreamState(SlDualStreamState state, const std::string& msg)
 {
 	m_state = state;
 
@@ -380,29 +398,40 @@ void SlDualDock::setStreamState(SlDualStreamState state, const std::string &msg)
 	const char *color = "#909090";
 	switch (state) {
 	case SlDualStreamState::Starting:
+	{
 		text = "Connecting";
 		color = "#e0a800";
 		break;
+	}
 	case SlDualStreamState::Live:
+	{
 		text = "Live";
 		color = "#2ecc71";
 		break;
+	}
 	case SlDualStreamState::Reconnecting:
+	{
 		text = "Reconnecting";
 		color = "#e0a800";
 		break;
+	}
 	case SlDualStreamState::Stopping:
+	{
 		text = "Stopping";
 		color = "#909090";
 		break;
+	}
 	case SlDualStreamState::Idle:
+	{
 		break;
+	}
 	}
 
 	QString status = QString("<span style=\"color:%1\">%2</span> %3")
 				 .arg(QString::fromUtf8(color))
 				 .arg(QChar(0x25CF))
 				 .arg(QString::fromUtf8(text));
+
 	if (!msg.empty() && msg != text)
 		status += QString(" - %1").arg(QString::fromUtf8(msg.c_str()).toHtmlEscaped());
 

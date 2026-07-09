@@ -9,7 +9,8 @@
 #define SL_DUAL_OBS_VERSION_RAW "unknown"
 #endif
 
-struct SlDualConfig {
+struct SlDualConfig
+{
 	uint32_t canvasWidth = 1080;
 	uint32_t canvasHeight = 1920;
 

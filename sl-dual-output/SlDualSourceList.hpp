@@ -4,15 +4,16 @@
 // selection synced with the preview, visibility checkboxes, drag reorder,
 // and the same (undoable) item context menu as the preview editor.
 
-#include "SlDualOutputInternal.hpp"
+#include "SlDualController.hpp"
 
 #include <QListWidget>
 
 class SlDualPreview;
 
-class SlDualSourceList : public QListWidget {
+class SlDualSourceList : public QListWidget
+{
 public:
-	SlDualSourceList(SlDualOutput::Impl &impl, SlDualPreview *preview, QWidget *parent);
+	SlDualSourceList(SlDualController& controller, SlDualPreview *preview, QWidget *parent);
 	~SlDualSourceList() override;
 
 	// (Re)binds scene signals to the current active scene and rebuilds.
@@ -34,7 +35,7 @@ private:
 	void onSelectionChanged();
 	obs_sceneitem_t *sceneItemForRow(int row) const; // borrowed
 
-	SlDualOutput::Impl &m_impl;
+	SlDualController& m_controller;
 	SlDualPreview *m_preview = nullptr;
 	obs_source_t *m_boundSceneSource = nullptr; // ref'd while signals connected
 	bool m_updating = false;

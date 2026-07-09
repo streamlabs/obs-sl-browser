@@ -11,14 +11,15 @@ class QComboBox;
 class QLineEdit;
 class QSpinBox;
 
-class SlDualSettingsDialog : public QDialog {
+class SlDualSettingsDialog : public QDialog
+{
 public:
-	SlDualSettingsDialog(const SlDualConfig &current, bool streamActive, QWidget *parent);
+	SlDualSettingsDialog(const SlDualConfig& current, bool streamActive, QWidget *parent);
 
 	SlDualConfig resultConfig() const;
 
 private:
-	void populateEncoders(const std::string &currentId);
+	void populateEncoders(const std::string& currentId);
 	void onPresetChanged(int index);
 	int presetIndexFor(uint32_t width, uint32_t height) const;
 

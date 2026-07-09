@@ -2,6 +2,8 @@
 
 #include <memory>
 
+class SlDualController;
+
 // Dual output subsystem. Compiled into sl-browser-plugin; this is the only
 // header the rest of the plugin needs.
 //
@@ -12,21 +14,22 @@
 // initialize() is idempotent, has no effect until called, may be called from
 // any thread (marshals itself to the Qt main thread), and may be called late
 // in the session. shutdown() is safe to call whether or not initialize() ever
-// ran.
-class SlDualOutput {
+// ran. Everything else lives in SlDualController.
+class SlDualOutput
+{
 public:
-	static SlDualOutput &instance();
+	static SlDualOutput& instance();
 
 	void initialize();
 	void shutdown();
 
-	struct Impl;
-
 private:
-	SlDualOutput() = default;
-	~SlDualOutput() = default;
-	SlDualOutput(const SlDualOutput &) = delete;
-	SlDualOutput &operator=(const SlDualOutput &) = delete;
+	SlDualOutput();
+	~SlDualOutput();
+	SlDualOutput(const SlDualOutput&) = delete;
+	SlDualOutput& operator=(const SlDualOutput&) = delete;
 
-	std::unique_ptr<Impl> m_impl;
+	friend class SlDualController; // its output-state callback re-enters via instance()
+
+	std::unique_ptr<SlDualController> m_controller;
 };

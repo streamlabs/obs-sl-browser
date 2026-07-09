@@ -3,34 +3,48 @@
 #include <algorithm>
 #include <cstring>
 
-namespace {
-
-const char *stopCodeText(int code)
+static const char *stopCodeText(int code)
 {
 	switch (code) {
 	case OBS_OUTPUT_SUCCESS:
+	{
 		return "Stopped";
+	}
 	case OBS_OUTPUT_BAD_PATH:
+	{
 		return "Invalid stream path or URL";
+	}
 	case OBS_OUTPUT_CONNECT_FAILED:
+	{
 		return "Failed to connect to server";
+	}
 	case OBS_OUTPUT_INVALID_STREAM:
+	{
 		return "Invalid stream key or channel";
+	}
 	case OBS_OUTPUT_DISCONNECTED:
+	{
 		return "Disconnected from server";
+	}
 	case OBS_OUTPUT_UNSUPPORTED:
+	{
 		return "Output format unsupported";
+	}
 	case OBS_OUTPUT_NO_SPACE:
+	{
 		return "Out of disk space";
+	}
 	case OBS_OUTPUT_ENCODE_ERROR:
+	{
 		return "Encoder error";
+	}
 	case OBS_OUTPUT_ERROR:
 	default:
+	{
 		return "Output error";
 	}
+	}
 }
-
-} // namespace
 
 SlDualStreamOutput::~SlDualStreamOutput()
 {
@@ -48,7 +62,7 @@ bool SlDualStreamOutput::active() const
 	return m_output && obs_output_active(m_output);
 }
 
-bool SlDualStreamOutput::start(const SlDualConfig &config, video_t *canvasVideo)
+bool SlDualStreamOutput::start(const SlDualConfig& config, video_t *canvasVideo)
 {
 	if (m_state.load() == SlDualStreamState::Stopping)
 		return false; // let the previous stop finish
@@ -72,6 +86,7 @@ bool SlDualStreamOutput::start(const SlDualConfig &config, video_t *canvasVideo)
 	obs_data_set_string(serviceSettings, "server", config.server.c_str());
 	obs_data_set_string(serviceSettings, "key", config.key.c_str());
 	obs_data_set_bool(serviceSettings, "use_auth", config.useAuth);
+
 	if (config.useAuth) {
 		obs_data_set_string(serviceSettings, "username", config.authUsername.c_str());
 		obs_data_set_string(serviceSettings, "password", config.authPassword.c_str());
@@ -86,6 +101,7 @@ bool SlDualStreamOutput::start(const SlDualConfig &config, video_t *canvasVideo)
 
 	const char *encoderId = config.encoderId.empty() ? "obs_x264" : config.encoderId.c_str();
 	m_videoEncoder = obs_video_encoder_create(encoderId, "sl-dual-video-encoder", videoSettings, nullptr);
+
 	if (!m_videoEncoder && strcmp(encoderId, "obs_x264") != 0) {
 		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "encoder '%s' unavailable, falling back to obs_x264", encoderId);
 		m_videoEncoder = obs_video_encoder_create("obs_x264", "sl-dual-video-encoder", videoSettings, nullptr);
@@ -109,10 +125,12 @@ bool SlDualStreamOutput::start(const SlDualConfig &config, video_t *canvasVideo)
 	obs_encoder_set_audio(m_audioEncoder, obs_get_audio());
 
 	const char *outputType = obs_service_get_preferred_output_type(m_service);
+
 	if (!outputType)
 		outputType = "rtmp_output";
 
 	m_output = obs_output_create(outputType, "sl-dual-stream", nullptr, nullptr);
+
 	if (!m_output) {
 		releaseAll();
 		setState(SlDualStreamState::Idle, "Failed to create RTMP output");
@@ -196,14 +214,17 @@ void SlDualStreamOutput::releaseAll()
 		obs_output_release(m_output);
 		m_output = nullptr;
 	}
+
 	if (m_videoEncoder) {
 		obs_encoder_release(m_videoEncoder);
 		m_videoEncoder = nullptr;
 	}
+
 	if (m_audioEncoder) {
 		obs_encoder_release(m_audioEncoder);
 		m_audioEncoder = nullptr;
 	}
+
 	if (m_service) {
 		obs_service_release(m_service);
 		m_service = nullptr;
@@ -219,6 +240,7 @@ void SlDualStreamOutput::setState(SlDualStreamState state, const char *msg)
 		std::lock_guard<std::mutex> lock(m_callbackMutex);
 		callback = m_callback;
 	}
+
 	if (callback)
 		callback(state, msg ? std::string(msg) : std::string());
 }
@@ -236,6 +258,7 @@ void SlDualStreamOutput::onStopSignal(void *data, calldata_t *cd)
 	const char *lastError = calldata_string(cd, "last_error");
 
 	const char *msg;
+
 	if (code == OBS_OUTPUT_SUCCESS)
 		msg = "Stopped";
 	else if (lastError && *lastError)

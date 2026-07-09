@@ -34,7 +34,8 @@ bool SlDualUndo::undo()
 	if (m_pos == 0)
 		return false;
 
-	Entry &entry = m_stack[--m_pos];
+	Entry& entry = m_stack[--m_pos];
+
 	if (entry.undo)
 		entry.undo(entry.undoData);
 	scheduleCollectionSave();
@@ -46,7 +47,8 @@ bool SlDualUndo::redo()
 	if (m_pos >= m_stack.size())
 		return false;
 
-	Entry &entry = m_stack[m_pos++];
+	Entry& entry = m_stack[m_pos++];
+
 	if (entry.redo)
 		entry.redo(entry.redoData);
 	scheduleCollectionSave();

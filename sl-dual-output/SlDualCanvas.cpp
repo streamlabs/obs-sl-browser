@@ -6,46 +6,42 @@
 #include <algorithm>
 #include <cstring>
 
-namespace {
+static const char *kCanvasName = "Streamlabs Dual Output";
+static const char *kMirrorFlag = "sl_dual_program_mirror";
+static const char *kDefaultSceneName = "Vertical";
 
-const char *kCanvasName = "Streamlabs Dual Output";
-const char *kMirrorFlag = "sl_dual_program_mirror";
-const char *kDefaultSceneName = "Vertical";
-
-uint32_t alignedWidth(uint32_t w)
+static uint32_t alignedWidth(uint32_t w)
 {
 	return std::clamp(w, 32u, 8192u) & ~uint32_t(3);
 }
 
-uint32_t alignedHeight(uint32_t h)
+static uint32_t alignedHeight(uint32_t h)
 {
 	return std::clamp(h, 32u, 8192u) & ~uint32_t(1);
 }
 
-bool collectSceneProc(void *param, obs_source_t *source)
+static bool collectSceneProc(void *param, obs_source_t *source)
 {
-	static_cast<std::vector<obs_source_t *> *>(param)->push_back(source); // borrowed
+	static_cast<std::vector<obs_source_t *> *>(param)->push_back(source);
 	return true;
 }
 
-// Canvas holds strong refs to its scenes (SCENE_REF), so borrowed pointers
-// collected here stay valid for the duration of the calling UI-thread scope.
-std::vector<obs_source_t *> collectScenes(obs_canvas_t *canvas)
+// Canvas holds strong refs to its scenes (SCENE_REF), so borrowed pointers collected here stay valid for the duration of the calling UI-thread scope.
+static std::vector<obs_source_t *> collectScenes(obs_canvas_t *canvas)
 {
 	std::vector<obs_source_t *> scenes;
+
 	if (canvas)
 		obs_canvas_enum_scenes(canvas, collectSceneProc, &scenes);
 	return scenes;
 }
-
-} // namespace
 
 SlDualCanvas::~SlDualCanvas()
 {
 	destroy();
 }
 
-bool SlDualCanvas::buildVideoInfo(struct obs_video_info &ovi, uint32_t width, uint32_t height) const
+bool SlDualCanvas::buildVideoInfo(struct obs_video_info& ovi, uint32_t width, uint32_t height) const
 {
 	if (!obs_get_video_info(&ovi))
 		return false;
@@ -66,6 +62,7 @@ obs_canvas_t *SlDualCanvas::findExistingByName() const
 	for (size_t i = 0; i < list.canvases.num; i++) {
 		obs_canvas_t *c = list.canvases.array[i];
 		const char *name = obs_canvas_get_name(c);
+
 		if (!found && name && strcmp(name, kCanvasName) == 0)
 			found = obs_canvas_get_ref(c);
 	}
@@ -95,6 +92,7 @@ bool SlDualCanvas::attach()
 		return true;
 
 	obs_video_info ovi;
+
 	if (!buildVideoInfo(ovi, m_width, m_height)) {
 		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "main video not initialized, cannot create canvas");
 		return false;
@@ -128,6 +126,7 @@ bool SlDualCanvas::attach()
 	} else {
 		int flags = obs_canvas_flags::ACTIVATE | obs_canvas_flags::MIX_AUDIO | obs_canvas_flags::SCENE_REF;
 		m_canvas = obs_frontend_add_canvas(kCanvasName, &ovi, flags);
+
 		if (!m_canvas) {
 			blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "obs_frontend_add_canvas failed");
 			return false;
@@ -138,7 +137,7 @@ bool SlDualCanvas::attach()
 	return true;
 }
 
-void SlDualCanvas::ensureScenes(const SlDualConfig &config)
+void SlDualCanvas::ensureScenes(const SlDualConfig& config)
 {
 	if (!m_canvas)
 		return;
@@ -157,11 +156,14 @@ void SlDualCanvas::ensureScenes(const SlDualConfig &config)
 				addProgramMirrorItem();
 			} else if (!config.fixedScene.empty()) {
 				obs_source_t *src = obs_get_source_by_name(config.fixedScene.c_str());
+
 				if (src && obs_source_is_scene(src)) {
 					obs_sceneitem_t *item = obs_scene_add(m_activeScene, src);
+
 					if (item)
 						applyFillTransform(item);
 				}
+
 				if (src)
 					obs_source_release(src);
 			}
@@ -175,11 +177,12 @@ void SlDualCanvas::ensureScenes(const SlDualConfig &config)
 	}
 
 	std::string joined;
-	for (const std::string &n : names)
+	for (const std::string& n : names)
 		joined += (joined.empty() ? "" : ", ") + n;
 	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "adopted %zu canvas scene(s): %s", names.size(), joined.c_str());
 
-	const std::string &want = config.activeScene.empty() ? names.front() : config.activeScene;
+	const std::string& want = config.activeScene.empty() ? names.front() : config.activeScene;
+
 	if (!setActiveScene(want))
 		setActiveScene(names.front());
 }
@@ -219,6 +222,7 @@ bool SlDualCanvas::resetVideo(uint32_t width, uint32_t height)
 		return true;
 
 	obs_video_info ovi;
+
 	if (!buildVideoInfo(ovi, w, h))
 		return false;
 
@@ -245,6 +249,7 @@ std::vector<std::string> SlDualCanvas::sceneNames() const
 	std::vector<std::string> names;
 	for (obs_source_t *src : collectScenes(m_canvas)) {
 		const char *name = obs_source_get_name(src);
+
 		if (name)
 			names.emplace_back(name);
 	}
@@ -259,10 +264,11 @@ std::string SlDualCanvas::activeSceneName() const
 	return name ? name : std::string();
 }
 
-obs_scene_t *SlDualCanvas::findSceneByName(const std::string &name) const
+obs_scene_t *SlDualCanvas::findSceneByName(const std::string& name) const
 {
 	for (obs_source_t *src : collectScenes(m_canvas)) {
 		const char *n = obs_source_get_name(src);
+
 		if (n && name == n) {
 			obs_scene_t *scene = obs_scene_from_source(src);
 			return scene ? obs_scene_get_ref(scene) : nullptr;
@@ -291,12 +297,13 @@ void SlDualCanvas::deselectAllInActive()
 		nullptr);
 }
 
-bool SlDualCanvas::setActiveScene(const std::string &name)
+bool SlDualCanvas::setActiveScene(const std::string& name)
 {
 	if (!m_canvas)
 		return false;
 
 	obs_scene_t *scene = findSceneByName(name);
+
 	if (!scene)
 		return false;
 
@@ -306,6 +313,7 @@ bool SlDualCanvas::setActiveScene(const std::string &name)
 	}
 
 	deselectAllInActive();
+
 	if (m_activeScene)
 		obs_scene_release(m_activeScene);
 	m_activeScene = scene;
@@ -313,7 +321,7 @@ bool SlDualCanvas::setActiveScene(const std::string &name)
 	return true;
 }
 
-bool SlDualCanvas::createScene(const std::string &name)
+bool SlDualCanvas::createScene(const std::string& name)
 {
 	if (!m_canvas || name.empty())
 		return false;
@@ -324,12 +332,14 @@ bool SlDualCanvas::createScene(const std::string &name)
 	}
 
 	obs_scene_t *scene = obs_canvas_scene_create(m_canvas, name.c_str());
+
 	if (!scene) {
 		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "obs_canvas_scene_create '%s' failed", name.c_str());
 		return false;
 	}
 
 	deselectAllInActive();
+
 	if (m_activeScene)
 		obs_scene_release(m_activeScene);
 	m_activeScene = obs_scene_get_ref(scene);
@@ -354,12 +364,13 @@ bool SlDualCanvas::removeActiveScene()
 	obs_scene_release(dying);
 
 	std::vector<std::string> remaining = sceneNames();
+
 	if (!remaining.empty())
 		setActiveScene(remaining.front());
 	return true;
 }
 
-bool SlDualCanvas::renameActiveScene(const std::string &newName)
+bool SlDualCanvas::renameActiveScene(const std::string& newName)
 {
 	if (!m_canvas || !m_activeScene || newName.empty())
 		return false;
@@ -416,11 +427,13 @@ obs_sceneitem_t *SlDualCanvas::addProgramMirrorItem()
 		return nullptr;
 
 	obs_source_t *program = obs_frontend_get_current_scene();
+
 	if (!program)
 		return nullptr;
 
 	obs_sceneitem_t *item = obs_scene_add(m_activeScene, program);
 	obs_source_release(program);
+
 	if (!item)
 		return nullptr;
 
@@ -429,16 +442,16 @@ obs_sceneitem_t *SlDualCanvas::addProgramMirrorItem()
 	return item;
 }
 
-namespace {
-
-struct MirrorCollect {
+struct MirrorCollect
+{
 	std::vector<std::pair<obs_sceneitem_t *, int>> flagged; // addref'd + order index
 	int index = 0;
 };
 
-bool collectMirrorProc(obs_scene_t *, obs_sceneitem_t *item, void *param)
+static bool collectMirrorProc(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
 	auto *ctx = static_cast<MirrorCollect *>(param);
+
 	if (SlDualCanvas::isProgramMirrorItem(item)) {
 		obs_sceneitem_addref(item);
 		ctx->flagged.emplace_back(item, ctx->index);
@@ -447,14 +460,12 @@ bool collectMirrorProc(obs_scene_t *, obs_sceneitem_t *item, void *param)
 	return true;
 }
 
-} // namespace
-
 void SlDualCanvas::refreshMirrorItemsInScene(obs_scene_t *scene, obs_source_t *program)
 {
 	MirrorCollect ctx;
 	obs_scene_enum_items(scene, collectMirrorProc, &ctx);
 
-	for (auto &entry : ctx.flagged) {
+	for (auto& entry : ctx.flagged) {
 		obs_sceneitem_t *item = entry.first;
 
 		if (obs_sceneitem_get_source(item) == program) {
@@ -474,6 +485,7 @@ void SlDualCanvas::refreshMirrorItemsInScene(obs_scene_t *scene, obs_source_t *p
 		obs_sceneitem_release(item);
 
 		obs_sceneitem_t *replacement = obs_scene_add(scene, program);
+
 		if (!replacement)
 			continue;
 
@@ -485,6 +497,7 @@ void SlDualCanvas::refreshMirrorItemsInScene(obs_scene_t *scene, obs_source_t *p
 		obs_sceneitem_defer_update_end(replacement);
 		markProgramMirrorItem(replacement);
 		obs_sceneitem_set_order_position(replacement, entry.second);
+
 		if (selected)
 			obs_sceneitem_select(replacement, true);
 	}
@@ -496,6 +509,7 @@ void SlDualCanvas::onProgramSceneChanged()
 		return;
 
 	obs_source_t *program = obs_frontend_get_current_scene();
+
 	if (!program)
 		return;
 
@@ -549,6 +563,7 @@ void SlDualCanvas::refillMirrorItems()
 {
 	for (obs_source_t *src : collectScenes(m_canvas)) {
 		obs_scene_t *scene = obs_scene_from_source(src);
+
 		if (!scene)
 			continue;
 

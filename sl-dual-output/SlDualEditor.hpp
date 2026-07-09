@@ -10,7 +10,7 @@
 // Mouse/key input arrives on the UI thread in widget-local logical pixels;
 // drawOverlay runs on the graphics thread inside the display draw callback.
 
-#include "SlDualOutputInternal.hpp"
+#include "SlDualController.hpp"
 #include "SlDualUndo.hpp"
 
 #include <obs.h>
@@ -35,7 +35,8 @@ class QWidget;
 #define SL_ITEM_BOTTOM (1 << 3)
 #define SL_ITEM_ROT (1 << 4)
 
-enum class SlItemHandle : uint32_t {
+enum class SlItemHandle : uint32_t
+{
 	None = 0,
 	TopLeft = SL_ITEM_TOP | SL_ITEM_LEFT,
 	TopCenter = SL_ITEM_TOP,
@@ -48,23 +49,24 @@ enum class SlItemHandle : uint32_t {
 	Rot = SL_ITEM_ROT,
 };
 
-class SlDualEditor {
+class SlDualEditor
+{
 public:
-	SlDualEditor(SlDualOutput::Impl &impl, QWidget *widget);
+	SlDualEditor(SlDualController& controller, QWidget *widget);
 	~SlDualEditor();
 
-	SlDualEditor(const SlDualEditor &) = delete;
-	SlDualEditor &operator=(const SlDualEditor &) = delete;
+	SlDualEditor(const SlDualEditor&) = delete;
+	SlDualEditor& operator=(const SlDualEditor&) = delete;
 
-	void setViewSize(const QSizeF &sizeLogical, qreal dpr);
+	void setViewSize(const QSizeF& sizeLogical, qreal dpr);
 
-	void mousePress(const QPointF &pos, Qt::MouseButton button, Qt::KeyboardModifiers mods);
-	void mouseMove(const QPointF &pos, bool buttonDown, Qt::KeyboardModifiers mods);
-	void mouseRelease(const QPointF &pos, Qt::MouseButton button, Qt::KeyboardModifiers mods);
-	void mouseDoubleClick(const QPointF &pos);
+	void mousePress(const QPointF& pos, Qt::MouseButton button, Qt::KeyboardModifiers mods);
+	void mouseMove(const QPointF& pos, bool buttonDown, Qt::KeyboardModifiers mods);
+	void mouseRelease(const QPointF& pos, Qt::MouseButton button, Qt::KeyboardModifiers mods);
+	void mouseDoubleClick(const QPointF& pos);
 	void mouseLeave();
 	bool keyPress(int key, Qt::KeyboardModifiers mods);
-	void contextMenu(const QPointF &pos, QWidget *parent);
+	void contextMenu(const QPointF& pos, QWidget *parent);
 
 	// Drops drag/hover interaction state; optionally the undo stack too
 	// (scene collection changes). Transform undo entries target scenes by
@@ -73,16 +75,17 @@ public:
 
 	// Shared with the source list so both UIs produce identical, undoable
 	// operations.
-	void showItemMenu(obs_sceneitem_t *item, const QPoint &globalPos, QWidget *parent);
+	void showItemMenu(obs_sceneitem_t *item, const QPoint& globalPos, QWidget *parent);
 	void setItemVisibleUndoable(obs_sceneitem_t *item, bool visible);
-	void applyOrderUndoable(const std::vector<int64_t> &newOrderBottomToTop);
+	void applyOrderUndoable(const std::vector<int64_t>& newOrderBottomToTop);
 	void removeSelectedItemsPublic(QWidget *parent) { removeSelectedItems(parent); }
 
 	// Graphics thread.
 	void drawOverlay(uint32_t cx, uint32_t cy);
 
 private:
-	struct ViewMap {
+	struct ViewMap
+	{
 		bool valid = false;
 		float scale = 1.0f; // physical px per canvas unit
 		float offX = 0.0f;  // physical px
@@ -95,40 +98,40 @@ private:
 
 	ViewMap viewMap() const;
 	ViewMap viewMapFor(uint32_t cx, uint32_t cy) const;
-	bool widgetToCanvas(const QPointF &p, struct vec2 &out) const;
+	bool widgetToCanvas(const QPointF& p, struct vec2& out) const;
 	float pixelRatio() const { return (float)m_dpr; }
 
 	obs_scene_t *scene() const; // borrowed active scene
 	vec2 canvasSize() const;
 
 	// Selection / hit testing (ported)
-	obs_sceneitem_t *getItemAtPos(const struct vec2 &pos, bool selectBelow) const;
-	bool selectedAtPos(const struct vec2 &pos) const;
-	void doSelect(const struct vec2 &pos);
-	void doCtrlSelect(const struct vec2 &pos);
-	void processClick(const struct vec2 &pos, Qt::KeyboardModifiers mods);
-	void getStretchHandleData(const struct vec2 &pos, bool ignoreGroup);
+	obs_sceneitem_t *getItemAtPos(const struct vec2& pos, bool selectBelow) const;
+	bool selectedAtPos(const struct vec2& pos) const;
+	void doSelect(const struct vec2& pos);
+	void doCtrlSelect(const struct vec2& pos);
+	void processClick(const struct vec2& pos, Qt::KeyboardModifiers mods);
+	void getStretchHandleData(const struct vec2& pos, bool ignoreGroup);
 	void clearStretch();
 	void updateCursor(uint32_t flags);
 
 	// Transforms (ported)
-	struct vec3 getSnapOffset(const struct vec3 &tl, const struct vec3 &br) const;
-	void snapItemMovement(struct vec2 &offset) const;
-	void moveItems(const struct vec2 &pos, Qt::KeyboardModifiers mods);
-	void boxItems(const struct vec2 &startPos, const struct vec2 &pos);
-	void snapStretchingToScreen(struct vec3 &tl, struct vec3 &br) const;
-	void clampAspect(struct vec3 &tl, struct vec3 &br, struct vec2 &size, const struct vec2 &baseSize) const;
-	struct vec3 calculateStretchPos(const struct vec3 &tl, const struct vec3 &br) const;
-	void cropItem(const struct vec2 &pos);
-	void stretchItem(const struct vec2 &pos, Qt::KeyboardModifiers mods);
-	void rotateItem(const struct vec2 &pos, Qt::KeyboardModifiers mods);
+	struct vec3 getSnapOffset(const struct vec3& tl, const struct vec3& br) const;
+	void snapItemMovement(struct vec2& offset) const;
+	void moveItems(const struct vec2& pos, Qt::KeyboardModifiers mods);
+	void boxItems(const struct vec2& startPos, const struct vec2& pos);
+	void snapStretchingToScreen(struct vec3& tl, struct vec3& br) const;
+	void clampAspect(struct vec3& tl, struct vec3& br, struct vec2& size, const struct vec2& baseSize) const;
+	struct vec3 calculateStretchPos(const struct vec3& tl, const struct vec3& br) const;
+	void cropItem(const struct vec2& pos);
+	void stretchItem(const struct vec2& pos, Qt::KeyboardModifiers mods);
+	void rotateItem(const struct vec2& pos, Qt::KeyboardModifiers mods);
 
 	// Context menu / item operations
-	void buildItemMenu(QMenu &menu, obs_sceneitem_t *item, QWidget *parent);
-	void buildSceneMenu(QMenu &menu, QWidget *parent);
+	void buildItemMenu(QMenu& menu, obs_sceneitem_t *item, QWidget *parent);
+	void buildSceneMenu(QMenu& menu, QWidget *parent);
 	void flagUndoable(obs_sceneitem_t *item, bool isVisibility, bool value);
-	void addNewSource(const std::string &typeId);
-	void addExistingSource(const std::string &name);
+	void addNewSource(const std::string& typeId);
+	void addExistingSource(const std::string& name);
 	void addProgramMirror();
 	void placeNewItem(obs_sceneitem_t *item);
 	void removeSelectedItems(QWidget *parent);
@@ -138,7 +141,7 @@ private:
 	std::string snapshot() const;
 	void beginUndoSnapshot();
 	void finishUndoSnapshot(const char *name);
-	void transformAction(const char *name, const std::function<void()> &fn);
+	void transformAction(const char *name, const std::function<void()>& fn);
 	void recordItemAdd(obs_sceneitem_t *item, const char *name);
 	void recordItemRemoveAndRemove(obs_sceneitem_t *item);
 	bool undoOnce();
@@ -146,17 +149,17 @@ private:
 
 	// Drawing (ported; graphics thread)
 	void ensureGraphics();
-	void drawOverflow(const ViewMap &map);
-	void drawSceneEditing(const ViewMap &map);
-	void drawSpacingHelpers(const ViewMap &map);
+	void drawOverflow(const ViewMap& map);
+	void drawSceneEditing(const ViewMap& map);
+	void drawSpacingHelpers(const ViewMap& map);
 	static bool drawSelectedItemProc(obs_scene_t *scene, obs_sceneitem_t *item, void *param);
 	static bool drawSelectedOverflowProc(obs_scene_t *scene, obs_sceneitem_t *item, void *param);
 	void drawSelectionBox(float x1, float y1, float x2, float y2);
 	void drawStripedLine(float x1, float y1, float x2, float y2, float thickness, struct vec2 scale);
-	void renderSpacingHelper(int index, struct vec3 &start, struct vec3 &end, struct vec3 &viewport,
+	void renderSpacingHelper(int index, struct vec3& start, struct vec3& end, struct vec3& viewport,
 				 float pixelRatio, uint32_t baseW, uint32_t baseH);
 
-	SlDualOutput::Impl &m_impl;
+	SlDualController& m_controller;
 	QWidget *m_widget = nullptr;
 
 	QSizeF m_viewSize;

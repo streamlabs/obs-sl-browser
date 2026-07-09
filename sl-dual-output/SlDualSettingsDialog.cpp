@@ -15,24 +15,21 @@
 #include <algorithm>
 #include <cstring>
 
-namespace {
-
-struct SizePreset {
+struct SizePreset
+{
 	const char *label;
 	uint32_t width;
 	uint32_t height;
 };
 
-const SizePreset kPresets[] = {
+static const SizePreset kPresets[] = {
 	{"1080 x 1920 (9:16 vertical)", 1080, 1920},
 	{"720 x 1280 (9:16 vertical)", 720, 1280},
 	{"1080 x 1080 (1:1 square)", 1080, 1080},
 };
-const int kCustomIndex = 3;
+static const int kCustomIndex = 3;
 
-} // namespace
-
-SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig &current, bool streamActive, QWidget *parent)
+SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool streamActive, QWidget *parent)
 	: QDialog(parent),
 	  m_base(current)
 {
@@ -43,7 +40,7 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig &current, bool str
 
 	// Canvas size
 	m_sizePreset = new QComboBox(this);
-	for (const SizePreset &preset : kPresets)
+	for (const SizePreset& preset : kPresets)
 		m_sizePreset->addItem(preset.label);
 	m_sizePreset->addItem("Custom");
 
@@ -177,7 +174,7 @@ void SlDualSettingsDialog::onPresetChanged(int index)
 	}
 }
 
-void SlDualSettingsDialog::populateEncoders(const std::string &currentId)
+void SlDualSettingsDialog::populateEncoders(const std::string& currentId)
 {
 	const char *id = nullptr;
 	for (size_t i = 0; obs_enum_encoder_types(i, &id); i++) {
@@ -185,10 +182,12 @@ void SlDualSettingsDialog::populateEncoders(const std::string &currentId)
 			continue;
 
 		const char *codec = obs_get_encoder_codec(id);
+
 		if (!codec || strcmp(codec, "h264") != 0)
 			continue;
 
 		uint32_t caps = obs_get_encoder_caps(id);
+
 		if (caps & (OBS_ENCODER_CAP_DEPRECATED | OBS_ENCODER_CAP_INTERNAL))
 			continue;
 
@@ -197,6 +196,7 @@ void SlDualSettingsDialog::populateEncoders(const std::string &currentId)
 	}
 
 	int index = m_encoder->findData(QString::fromUtf8(currentId.c_str()));
+
 	if (index < 0 && !currentId.empty()) {
 		m_encoder->addItem(QString::fromUtf8(currentId.c_str()), QString::fromUtf8(currentId.c_str()));
 		index = m_encoder->count() - 1;
