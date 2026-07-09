@@ -18,9 +18,11 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-// ---- SlDualPreview ----------------------------------------------------------
+/**
+* SlDualPreview
+*/
 
-SlDualPreview::SlDualPreview(SlDualController& controller, QWidget *parent) : QWidget(parent), m_controller(controller)
+SlDualPreview::SlDualPreview(SlDualController& controller, QWidget* parent) : QWidget(parent), m_controller(controller)
 {
 	setAttribute(Qt::WA_PaintOnScreen);
 	setAttribute(Qt::WA_StaticContents);
@@ -30,7 +32,9 @@ SlDualPreview::SlDualPreview(SlDualController& controller, QWidget *parent) : QW
 	setAttribute(Qt::WA_NativeWindow);
 
 	setFocusPolicy(Qt::ClickFocus);
-	setMouseTracking(true); // hover cursors, like the main OBS preview
+
+	// hover cursors, like the main OBS preview
+	setMouseTracking(true);
 	setMinimumSize(120, 160);
 	setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
@@ -62,8 +66,7 @@ void SlDualPreview::createDisplay()
 	info.zsformat = GS_ZS_NONE;
 	info.window.hwnd = (HWND)winId();
 
-	// Letterbox uses the theme's window color, matching the main OBS
-	// preview background; renderPreview outlines the canvas bounds.
+	// Letterbox uses the theme's window color, matching the main OBS preview background; renderPreview outlines the canvas bounds.
 	QColor bg = palette().color(QPalette::Window);
 	uint32_t bgColor = 0xFF000000 | ((uint32_t)bg.red() << 16) | ((uint32_t)bg.green() << 8) | (uint32_t)bg.blue();
 	m_display = obs_display_create(&info, bgColor);
@@ -75,7 +78,8 @@ void SlDualPreview::destroyDisplay()
 	if (!m_display)
 		return;
 
-	if (m_callbackAdded) {
+	if (m_callbackAdded)
+	{
 		obs_display_remove_draw_callback(m_display, drawThunk, this);
 		m_callbackAdded = false;
 	}
@@ -90,21 +94,24 @@ void SlDualPreview::updateCallbackRegistration()
 	if (want == m_callbackAdded)
 		return;
 
-	if (want) {
+	if (want)
+	{
 		obs_display_add_draw_callback(m_display, drawThunk, this);
 		m_callbackAdded = true;
-	} else if (m_display) {
+	}
+	else if (m_display)
+	{
 		// Synchronous: no draw callback is running once this returns.
 		obs_display_remove_draw_callback(m_display, drawThunk, this);
 		m_callbackAdded = false;
 	}
 }
 
-void SlDualPreview::drawThunk(void *data, uint32_t cx, uint32_t cy)
+void SlDualPreview::drawThunk(void* data, uint32_t cx, uint32_t cy)
 {
-	auto *self = static_cast<SlDualPreview *>(data);
+	auto* self = static_cast<SlDualPreview*>(data);
 
-	if (SlDualCanvas *canvas = self->m_controller.canvas.get())
+	if (SlDualCanvas* canvas = self->m_controller.canvas.get())
 		canvas->renderPreview(cx, cy);
 	self->m_editor->drawOverlay(cx, cy);
 }
@@ -114,67 +121,69 @@ void SlDualPreview::syncEditorView()
 	m_editor->setViewSize(QSizeF(size()), devicePixelRatioF());
 }
 
-void SlDualPreview::showEvent(QShowEvent *event)
+void SlDualPreview::showEvent(QShowEvent* event)
 {
 	QWidget::showEvent(event);
 	syncEditorView();
 	createDisplay();
 }
 
-void SlDualPreview::hideEvent(QHideEvent *event)
+void SlDualPreview::hideEvent(QHideEvent* event)
 {
 	destroyDisplay();
 	QWidget::hideEvent(event);
 }
 
-void SlDualPreview::resizeEvent(QResizeEvent *event)
+void SlDualPreview::resizeEvent(QResizeEvent* event)
 {
 	QWidget::resizeEvent(event);
 	syncEditorView();
 
-	if (m_display) {
+	if (m_display)
+	{
 		QSize scaled = size() * devicePixelRatioF();
 		obs_display_resize(m_display, (uint32_t)scaled.width(), (uint32_t)scaled.height());
 	}
 }
 
-void SlDualPreview::paintEvent(QPaintEvent *)
+void SlDualPreview::paintEvent(QPaintEvent*)
 {
 	// Rendering is done by libobs into the native window.
 }
 
-void SlDualPreview::changeEvent(QEvent *event)
+void SlDualPreview::changeEvent(QEvent* event)
 {
 	QWidget::changeEvent(event);
 
-	if (event->type() == QEvent::PaletteChange && m_display) {
+	if (event->type() == QEvent::PaletteChange && m_display)
+	{
 		// Recreate so the letterbox picks up the new theme color.
 		destroyDisplay();
 		createDisplay();
 	}
 }
 
-void SlDualPreview::mousePressEvent(QMouseEvent *event)
+void SlDualPreview::mousePressEvent(QMouseEvent* event)
 {
 	syncEditorView();
 	m_editor->mousePress(event->position(), event->button(), event->modifiers());
 	QWidget::mousePressEvent(event);
 }
 
-void SlDualPreview::mouseMoveEvent(QMouseEvent *event)
+void SlDualPreview::mouseMoveEvent(QMouseEvent* event)
 {
 	syncEditorView();
 	m_editor->mouseMove(event->position(), (event->buttons() & Qt::LeftButton) != 0, event->modifiers());
 	QWidget::mouseMoveEvent(event);
 }
 
-void SlDualPreview::mouseReleaseEvent(QMouseEvent *event)
+void SlDualPreview::mouseReleaseEvent(QMouseEvent* event)
 {
 	m_editor->mouseRelease(event->position(), event->button(), event->modifiers());
 	QWidget::mouseReleaseEvent(event);
 }
 
-void SlDualPreview::leaveEvent(QEvent *event)
+void SlDualPreview::leaveEvent(QEvent* event)
 {
 	m_editor->mouseLeave();
 	QWidget::leaveEvent(event);
@@ -185,30 +194,33 @@ void SlDualPreview::resetEditor(bool clearUndo)
 	m_editor->reset(clearUndo);
 }
 
-void SlDualPreview::mouseDoubleClickEvent(QMouseEvent *event)
+void SlDualPreview::mouseDoubleClickEvent(QMouseEvent* event)
 {
 	syncEditorView();
 	m_editor->mouseDoubleClick(event->position());
 	QWidget::mouseDoubleClickEvent(event);
 }
 
-void SlDualPreview::contextMenuEvent(QContextMenuEvent *event)
+void SlDualPreview::contextMenuEvent(QContextMenuEvent* event)
 {
 	syncEditorView();
 	m_editor->contextMenu(QPointF(event->pos()), this);
 	event->accept();
 }
 
-void SlDualPreview::keyPressEvent(QKeyEvent *event)
+void SlDualPreview::keyPressEvent(QKeyEvent* event)
 {
-	if (m_editor->keyPress(event->key(), event->modifiers())) {
+	if (m_editor->keyPress(event->key(), event->modifiers()))
+	{
 		event->accept();
 		return;
 	}
 	QWidget::keyPressEvent(event);
 }
 
-// ---- SlDualDock -------------------------------------------------------------
+/**
+* SlDualDock
+*/
 
 SlDualDock::SlDualDock(SlDualController& controller) : QWidget(nullptr), m_controller(controller)
 {
@@ -228,7 +240,7 @@ SlDualDock::SlDualDock(SlDualController& controller) : QWidget(nullptr), m_contr
 	m_renameSceneButton->setText("R");
 	m_renameSceneButton->setToolTip("Rename scene");
 
-	auto *sceneRow = new QHBoxLayout();
+	auto* sceneRow = new QHBoxLayout();
 	sceneRow->setContentsMargins(0, 0, 0, 0);
 	sceneRow->addWidget(new QLabel("Scene:", this));
 	sceneRow->addWidget(m_sceneCombo, 1);
@@ -241,13 +253,13 @@ SlDualDock::SlDualDock(SlDualController& controller) : QWidget(nullptr), m_contr
 	m_statusLabel = new QLabel(this);
 	m_statusLabel->setTextFormat(Qt::RichText);
 
-	auto *controls = new QHBoxLayout();
+	auto* controls = new QHBoxLayout();
 	controls->setContentsMargins(0, 0, 0, 0);
 	controls->addWidget(m_statusLabel, 1);
 	controls->addWidget(m_settingsButton);
 	controls->addWidget(m_startStopButton);
 
-	auto *layout = new QVBoxLayout(this);
+	auto* layout = new QVBoxLayout(this);
 	layout->setContentsMargins(4, 4, 4, 4);
 	layout->setSpacing(4);
 	layout->addWidget(m_preview, 1);
@@ -272,19 +284,23 @@ void SlDualDock::refreshScenes()
 	m_updatingCombo = true;
 	m_sceneCombo->clear();
 
-	SlDualCanvas *canvas = m_controller.canvas.get();
+	SlDualCanvas* canvas = m_controller.canvas.get();
 
-	if (canvas && canvas->valid()) {
+	if (canvas && canvas->valid())
+	{
 		std::string active = canvas->activeSceneName();
 		int activeIndex = 0;
 		int i = 0;
-		for (const std::string& name : canvas->sceneNames()) {
+
+		for (const std::string& name : canvas->sceneNames())
+		{
 			m_sceneCombo->addItem(QString::fromUtf8(name.c_str()));
 
 			if (name == active)
 				activeIndex = i;
 			i++;
 		}
+
 		m_sceneCombo->setCurrentIndex(activeIndex);
 	}
 
@@ -323,7 +339,7 @@ void SlDualDock::onAddScene()
 
 void SlDualDock::onRemoveScene()
 {
-	SlDualCanvas *canvas = m_controller.canvas.get();
+	SlDualCanvas* canvas = m_controller.canvas.get();
 
 	if (!canvas)
 		return;
@@ -339,7 +355,7 @@ void SlDualDock::onRemoveScene()
 
 void SlDualDock::onRenameScene()
 {
-	SlDualCanvas *canvas = m_controller.canvas.get();
+	SlDualCanvas* canvas = m_controller.canvas.get();
 
 	if (!canvas)
 		return;
@@ -358,10 +374,12 @@ void SlDualDock::onRenameScene()
 
 void SlDualDock::onStartStopClicked()
 {
-	switch (m_state) {
+	switch (m_state)
+	{
 	case SlDualStreamState::Idle:
 	{
-		if (m_controller.config.server.empty()) {
+		if (m_controller.config.server.empty())
+		{
 			openSettings();
 			return;
 		}
@@ -394,9 +412,10 @@ void SlDualDock::setStreamState(SlDualStreamState state, const std::string& msg)
 {
 	m_state = state;
 
-	const char *text = "Idle";
-	const char *color = "#909090";
-	switch (state) {
+	const char* text = "Idle";
+	const char* color = "#909090";
+	switch (state)
+	{
 	case SlDualStreamState::Starting:
 	{
 		text = "Connecting";

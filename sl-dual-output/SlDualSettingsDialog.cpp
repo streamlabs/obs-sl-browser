@@ -17,7 +17,7 @@
 
 struct SizePreset
 {
-	const char *label;
+	const char* label;
 	uint32_t width;
 	uint32_t height;
 };
@@ -29,19 +29,21 @@ static const SizePreset kPresets[] = {
 };
 static const int kCustomIndex = 3;
 
-SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool streamActive, QWidget *parent)
+SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool streamActive, QWidget* parent)
 	: QDialog(parent),
 	  m_base(current)
 {
 	setWindowTitle("Dual Output Settings");
 	setMinimumWidth(420);
 
-	auto *form = new QFormLayout();
+	auto* form = new QFormLayout();
 
 	// Canvas size
 	m_sizePreset = new QComboBox(this);
+
 	for (const SizePreset& preset : kPresets)
 		m_sizePreset->addItem(preset.label);
+
 	m_sizePreset->addItem("Custom");
 
 	m_width = new QSpinBox(this);
@@ -54,7 +56,7 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	m_height->setSingleStep(2);
 	m_height->setValue((int)current.canvasHeight);
 
-	auto *sizeRow = new QHBoxLayout();
+	auto* sizeRow = new QHBoxLayout();
 	sizeRow->addWidget(m_width);
 	sizeRow->addWidget(new QLabel("x", this));
 	sizeRow->addWidget(m_height);
@@ -78,11 +80,12 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	m_key = new QLineEdit(QString::fromUtf8(current.key.c_str()), this);
 	m_key->setEchoMode(QLineEdit::Password);
 	m_showKey = new QCheckBox("Show", this);
-	QObject::connect(m_showKey, &QCheckBox::toggled, this, [this](bool checked) {
+	QObject::connect(m_showKey, &QCheckBox::toggled, this, [this](bool checked)
+	{
 		m_key->setEchoMode(checked ? QLineEdit::Normal : QLineEdit::Password);
 	});
 
-	auto *keyRow = new QHBoxLayout();
+	auto* keyRow = new QHBoxLayout();
 	keyRow->addWidget(m_key, 1);
 	keyRow->addWidget(m_showKey);
 	form->addRow("Stream key:", keyRow);
@@ -99,7 +102,8 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	m_authPassword->setEchoMode(QLineEdit::Password);
 	form->addRow("Password:", m_authPassword);
 
-	auto syncAuth = [this](bool on) {
+	auto syncAuth = [this](bool on)
+	{
 		m_authUsername->setEnabled(on);
 		m_authPassword->setEnabled(on);
 	};
@@ -119,8 +123,10 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	form->addRow("Video bitrate:", m_videoBitrate);
 
 	m_audioTrack = new QComboBox(this);
+
 	for (int i = 1; i <= (int)MAX_AUDIO_MIXES; i++)
 		m_audioTrack->addItem(QString("Track %1").arg(i));
+
 	m_audioTrack->setCurrentIndex(std::clamp(current.audioTrack, 1, (int)MAX_AUDIO_MIXES) - 1);
 	form->addRow("Audio track:", m_audioTrack);
 
@@ -135,19 +141,20 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	m_autoStart->setChecked(current.autoStart);
 	form->addRow(QString(), m_autoStart);
 
-	auto *layout = new QVBoxLayout(this);
+	auto* layout = new QVBoxLayout(this);
 	layout->addLayout(form);
 
-	if (streamActive) {
+	if (streamActive)
+	{
 		m_sizePreset->setEnabled(false);
 		m_width->setEnabled(false);
 		m_height->setEnabled(false);
-		auto *note = new QLabel("Canvas size is locked while the dual output stream is live.", this);
+		auto* note = new QLabel("Canvas size is locked while the dual output stream is live.", this);
 		note->setWordWrap(true);
 		layout->addWidget(note);
 	}
 
-	auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+	auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 	QObject::connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
 	QObject::connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 	layout->addWidget(buttons);
@@ -155,10 +162,12 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 
 int SlDualSettingsDialog::presetIndexFor(uint32_t width, uint32_t height) const
 {
-	for (int i = 0; i < (int)(sizeof(kPresets) / sizeof(kPresets[0])); i++) {
+	for (int i = 0; i < (int)(sizeof(kPresets) / sizeof(kPresets[0])); i++)
+	{
 		if (kPresets[i].width == width && kPresets[i].height == height)
 			return i;
 	}
+
 	return kCustomIndex;
 }
 
@@ -168,7 +177,8 @@ void SlDualSettingsDialog::onPresetChanged(int index)
 	m_width->setEnabled(custom && m_sizePreset->isEnabled());
 	m_height->setEnabled(custom && m_sizePreset->isEnabled());
 
-	if (!custom && index >= 0 && index < kCustomIndex) {
+	if (!custom && index >= 0 && index < kCustomIndex)
+	{
 		m_width->setValue((int)kPresets[index].width);
 		m_height->setValue((int)kPresets[index].height);
 	}
@@ -176,12 +186,14 @@ void SlDualSettingsDialog::onPresetChanged(int index)
 
 void SlDualSettingsDialog::populateEncoders(const std::string& currentId)
 {
-	const char *id = nullptr;
-	for (size_t i = 0; obs_enum_encoder_types(i, &id); i++) {
+	const char* id = nullptr;
+
+	for (size_t i = 0; obs_enum_encoder_types(i, &id); i++)
+	{
 		if (obs_get_encoder_type(id) != OBS_ENCODER_VIDEO)
 			continue;
 
-		const char *codec = obs_get_encoder_codec(id);
+		const char* codec = obs_get_encoder_codec(id);
 
 		if (!codec || strcmp(codec, "h264") != 0)
 			continue;
@@ -191,13 +203,14 @@ void SlDualSettingsDialog::populateEncoders(const std::string& currentId)
 		if (caps & (OBS_ENCODER_CAP_DEPRECATED | OBS_ENCODER_CAP_INTERNAL))
 			continue;
 
-		const char *display = obs_encoder_get_display_name(id);
+		const char* display = obs_encoder_get_display_name(id);
 		m_encoder->addItem(QString::fromUtf8(display ? display : id), QString::fromUtf8(id));
 	}
 
 	int index = m_encoder->findData(QString::fromUtf8(currentId.c_str()));
 
-	if (index < 0 && !currentId.empty()) {
+	if (index < 0 && !currentId.empty())
+	{
 		m_encoder->addItem(QString::fromUtf8(currentId.c_str()), QString::fromUtf8(currentId.c_str()));
 		index = m_encoder->count() - 1;
 	}

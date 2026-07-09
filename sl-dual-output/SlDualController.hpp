@@ -1,8 +1,8 @@
 #pragma once
 
-// Module-internal. Owns the dual-output state and logic: canvas, stream
-// output, dock, persistence, frontend event handling. The SlDualOutput
-// facade creates one of these in initialize() and destroys it in shutdown().
+// Module-internal.
+// Owns the dual-output state and logic: canvas, stream output, dock, persistence, frontend event handling.
+// The SlDualOutput facade creates one of these in initialize() and destroys it in shutdown().
 
 #include "SlDualConfig.hpp"
 
@@ -20,7 +20,9 @@ enum class SlDualStreamState;
 class SlDualController
 {
 public: // lifecycle (called by the facade)
-	SlDualController(); // defined out of line: members are incomplete types here
+
+	// defined out of line: members are incomplete types here
+	SlDualController();
 	~SlDualController();
 
 	SlDualController(const SlDualController&) = delete;
@@ -44,7 +46,9 @@ public: // state shared with the dock, editor and source list
 	SlDualConfig config;
 	std::unique_ptr<SlDualCanvas> canvas;
 	std::unique_ptr<SlDualStreamOutput> output;
-	SlDualDock* dock = nullptr; // owned by the frontend once added
+
+	// owned by the frontend once added
+	SlDualDock* dock = nullptr;
 
 public: // frontend events (invoked by the registered callbacks)
 	void onFrontendEvent(enum obs_frontend_event event);
@@ -56,9 +60,8 @@ private: // event details
 	void onCollectionChanged();
 	void onExit();
 
-	// (Re)creates/adopts the canvas and applies current config to it. Safe
-	// to call repeatedly; used at init, FINISHED_LOADING and collection
-	// changes, since the frontend owns canvas lifetime per collection.
+	// (Re)creates/adopts the canvas and applies current config to it.
+	// Safe to call repeatedly; used at init, FINISHED_LOADING and collection changes, since the frontend owns canvas lifetime per collection.
 	void ensureCanvas();
 
 private: // persistence (scene collection, key "sl-dual-output")

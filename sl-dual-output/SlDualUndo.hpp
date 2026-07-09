@@ -1,7 +1,7 @@
 #pragma once
 
-// Module-internal. Undo/redo stack for dual-canvas editing, mirroring the
-// snapshot pattern OBS's preview uses (scene transform-state save/load).
+// Module-internal.
+// Undo/redo stack for dual-canvas editing, mirroring the snapshot pattern OBS's preview uses (scene transform-state save/load).
 
 #include <functional>
 #include <string>
@@ -30,5 +30,7 @@ private:
 	static const size_t kMaxEntries = 64;
 
 	std::vector<Entry> m_stack;
-	size_t m_pos = 0; // entries [0, m_pos) have been applied
+
+	// entries [0, m_pos) have been applied
+	size_t m_pos = 0;
 };

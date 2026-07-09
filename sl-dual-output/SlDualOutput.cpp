@@ -5,14 +5,14 @@
 #endif
 
 #if !SL_DUAL_ENABLED
-// Stub build (obs.ver below the 32.1 functional floor): the public surface
-// exists and does nothing, so the plugin's two lifecycle calls stay put.
+// Stub build (obs.ver below the 32.1 functional floor): the public surface exists and does nothing, so the plugin's two lifecycle calls stay put.
 
 #include "SlDualConfig.hpp"
 
 #include <obs.h>
 
-class SlDualController // never instantiated
+// never instantiated
+class SlDualController
 {
 };
 
@@ -56,7 +56,8 @@ void SlDualOutput::initialize()
 	if (!qApp)
 		return;
 
-	if (QThread::currentThread() != qApp->thread()) {
+	if (QThread::currentThread() != qApp->thread())
+	{
 		QMetaObject::invokeMethod(
 			qApp, []() { SlDualOutput::instance().initialize(); }, Qt::QueuedConnection);
 		return;
@@ -67,9 +68,12 @@ void SlDualOutput::initialize()
 
 	auto controller = std::make_unique<SlDualController>();
 
-	if (!controller->init()) {
+	if (!controller->init())
+	{
 		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "initialize failed");
-		return; // the controller cleans itself up; initialize() may be retried
+
+		// the controller cleans itself up; initialize() may be retried
+		return;
 	}
 
 	m_controller = std::move(controller);

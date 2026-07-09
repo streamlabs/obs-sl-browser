@@ -1,14 +1,12 @@
 #pragma once
 
-// Module-internal. Interactive editing on the dual canvas preview, ported
-// from obs-studio's OBSBasicPreview (frontend/widgets/OBSBasicPreview.cpp,
-// GPL-2.0-or-later) and adapted to operate on the dual canvas's active scene
-// instead of the main program scene. Multi-select (click / Ctrl-click /
-// rubber-band), move with OBS-config snapping, 8-handle stretch, Alt-crop,
-// rotation handle, hover cursors, spacing helpers, and a local undo stack.
+// Module-internal.
+// Interactive editing on the dual canvas preview, ported from obs-studio's OBSBasicPreview (frontend/widgets/OBSBasicPreview.cpp,
+//	GPL-2.0-or-later) and adapted to operate on the dual canvas's active scene instead of the main program scene.
+// Multi-select (click / Ctrl-click / rubber-band), move with OBS-config snapping, 8-handle stretch, Alt-crop, rotation handle, hover cursors,
+//	spacing helpers, and a local undo stack.
 //
-// Mouse/key input arrives on the UI thread in widget-local logical pixels;
-// drawOverlay runs on the graphics thread inside the display draw callback.
+// Mouse/key input arrives on the UI thread in widget-local logical pixels; drawOverlay runs on the graphics thread inside the display draw callback.
 
 #include "SlDualController.hpp"
 #include "SlDualUndo.hpp"
@@ -52,7 +50,7 @@ enum class SlItemHandle : uint32_t
 class SlDualEditor
 {
 public:
-	SlDualEditor(SlDualController& controller, QWidget *widget);
+	SlDualEditor(SlDualController& controller, QWidget* widget);
 	~SlDualEditor();
 
 	SlDualEditor(const SlDualEditor&) = delete;
@@ -66,19 +64,17 @@ public:
 	void mouseDoubleClick(const QPointF& pos);
 	void mouseLeave();
 	bool keyPress(int key, Qt::KeyboardModifiers mods);
-	void contextMenu(const QPointF& pos, QWidget *parent);
+	void contextMenu(const QPointF& pos, QWidget* parent);
 
-	// Drops drag/hover interaction state; optionally the undo stack too
-	// (scene collection changes). Transform undo entries target scenes by
-	// UUID, so plain scene switches keep history, like the main preview.
+	// Drops drag/hover interaction state; optionally the undo stack too (scene collection changes).
+	// Transform undo entries target scenes by UUID, so plain scene switches keep history, like the main preview.
 	void reset(bool clearUndo);
 
-	// Shared with the source list so both UIs produce identical, undoable
-	// operations.
-	void showItemMenu(obs_sceneitem_t *item, const QPoint& globalPos, QWidget *parent);
-	void setItemVisibleUndoable(obs_sceneitem_t *item, bool visible);
+	// Shared with the source list so both UIs produce identical, undoable operations.
+	void showItemMenu(obs_sceneitem_t* item, const QPoint& globalPos, QWidget* parent);
+	void setItemVisibleUndoable(obs_sceneitem_t* item, bool visible);
 	void applyOrderUndoable(const std::vector<int64_t>& newOrderBottomToTop);
-	void removeSelectedItemsPublic(QWidget *parent) { removeSelectedItems(parent); }
+	void removeSelectedItemsPublic(QWidget* parent) { removeSelectedItems(parent); }
 
 	// Graphics thread.
 	void drawOverlay(uint32_t cx, uint32_t cy);
@@ -87,8 +83,12 @@ private:
 	struct ViewMap
 	{
 		bool valid = false;
-		float scale = 1.0f; // physical px per canvas unit
-		float offX = 0.0f;  // physical px
+
+		// physical px per canvas unit
+		float scale = 1.0f;
+
+		// physical px
+		float offX = 0.0f;
 		float offY = 0.0f;
 		float cxDisp = 0.0f;
 		float cyDisp = 0.0f;
@@ -101,11 +101,12 @@ private:
 	bool widgetToCanvas(const QPointF& p, struct vec2& out) const;
 	float pixelRatio() const { return (float)m_dpr; }
 
-	obs_scene_t *scene() const; // borrowed active scene
+	// borrowed active scene
+	obs_scene_t* scene() const;
 	vec2 canvasSize() const;
 
 	// Selection / hit testing (ported)
-	obs_sceneitem_t *getItemAtPos(const struct vec2& pos, bool selectBelow) const;
+	obs_sceneitem_t* getItemAtPos(const struct vec2& pos, bool selectBelow) const;
 	bool selectedAtPos(const struct vec2& pos) const;
 	void doSelect(const struct vec2& pos);
 	void doCtrlSelect(const struct vec2& pos);
@@ -127,23 +128,23 @@ private:
 	void rotateItem(const struct vec2& pos, Qt::KeyboardModifiers mods);
 
 	// Context menu / item operations
-	void buildItemMenu(QMenu& menu, obs_sceneitem_t *item, QWidget *parent);
-	void buildSceneMenu(QMenu& menu, QWidget *parent);
-	void flagUndoable(obs_sceneitem_t *item, bool isVisibility, bool value);
+	void buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* parent);
+	void buildSceneMenu(QMenu& menu, QWidget* parent);
+	void flagUndoable(obs_sceneitem_t* item, bool isVisibility, bool value);
 	void addNewSource(const std::string& typeId);
 	void addExistingSource(const std::string& name);
 	void addProgramMirror();
-	void placeNewItem(obs_sceneitem_t *item);
-	void removeSelectedItems(QWidget *parent);
+	void placeNewItem(obs_sceneitem_t* item);
+	void removeSelectedItems(QWidget* parent);
 	void nudgeSelected(float dx, float dy);
 
 	// Undo helpers
 	std::string snapshot() const;
 	void beginUndoSnapshot();
-	void finishUndoSnapshot(const char *name);
-	void transformAction(const char *name, const std::function<void()>& fn);
-	void recordItemAdd(obs_sceneitem_t *item, const char *name);
-	void recordItemRemoveAndRemove(obs_sceneitem_t *item);
+	void finishUndoSnapshot(const char* name);
+	void transformAction(const char* name, const std::function<void()>& fn);
+	void recordItemAdd(obs_sceneitem_t* item, const char* name);
+	void recordItemRemoveAndRemove(obs_sceneitem_t* item);
 	bool undoOnce();
 	bool redoOnce();
 
@@ -152,15 +153,15 @@ private:
 	void drawOverflow(const ViewMap& map);
 	void drawSceneEditing(const ViewMap& map);
 	void drawSpacingHelpers(const ViewMap& map);
-	static bool drawSelectedItemProc(obs_scene_t *scene, obs_sceneitem_t *item, void *param);
-	static bool drawSelectedOverflowProc(obs_scene_t *scene, obs_sceneitem_t *item, void *param);
+	static bool drawSelectedItemProc(obs_scene_t* scene, obs_sceneitem_t* item, void* param);
+	static bool drawSelectedOverflowProc(obs_scene_t* scene, obs_sceneitem_t* item, void* param);
 	void drawSelectionBox(float x1, float y1, float x2, float y2);
 	void drawStripedLine(float x1, float y1, float x2, float y2, float thickness, struct vec2 scale);
 	void renderSpacingHelper(int index, struct vec3& start, struct vec3& end, struct vec3& viewport,
 				 float pixelRatio, uint32_t baseW, uint32_t baseH);
 
 	SlDualController& m_controller;
-	QWidget *m_widget = nullptr;
+	QWidget* m_widget = nullptr;
 
 	QSizeF m_viewSize;
 	qreal m_dpr = 1.0;
@@ -169,8 +170,12 @@ private:
 	obs_sceneitem_crop m_startCrop = {};
 	struct vec2 m_startItemPos = {};
 	struct vec2 m_cropSize = {};
-	obs_sceneitem_t *m_stretchGroup = nullptr; // addref'd
-	obs_sceneitem_t *m_stretchItem = nullptr;  // addref'd
+
+	// addref'd
+	obs_sceneitem_t* m_stretchGroup = nullptr;
+
+	// addref'd
+	obs_sceneitem_t* m_stretchItem = nullptr;
 	SlItemHandle m_stretchHandle = SlItemHandle::None;
 	float m_rotateAngle = 0.0f;
 	struct vec2 m_rotatePoint = {};
@@ -191,8 +196,12 @@ private:
 	float m_groupRot = 0.0f;
 
 	mutable std::mutex m_selectMutex;
-	std::vector<obs_sceneitem_t *> m_hoveredPreviewItems; // borrowed
-	std::vector<obs_sceneitem_t *> m_selectedItems;       // borrowed
+
+	// borrowed
+	std::vector<obs_sceneitem_t*> m_hoveredPreviewItems;
+
+	// borrowed
+	std::vector<obs_sceneitem_t*> m_selectedItems;
 
 	// Undo
 	SlDualUndo m_undo;
@@ -200,15 +209,15 @@ private:
 	bool m_changed = false;
 
 	// Graphics resources (graphics thread)
-	gs_vertbuffer_t *m_squareFill = nullptr;
-	gs_vertbuffer_t *m_circleFill = nullptr;
-	gs_effect_t *m_stripedLineEffect = nullptr;
-	gs_texture_t *m_overflowTexture = nullptr;
+	gs_vertbuffer_t* m_squareFill = nullptr;
+	gs_vertbuffer_t* m_circleFill = nullptr;
+	gs_effect_t* m_stripedLineEffect = nullptr;
+	gs_texture_t* m_overflowTexture = nullptr;
 	bool m_stripedLineTried = false;
 	bool m_overflowTried = false;
 
 	// Spacing helper labels (private text sources)
-	obs_source_t *m_spacerLabel[4] = {};
+	obs_source_t* m_spacerLabel[4] = {};
 	int m_spacerPx[4] = {};
 
 	friend struct SlDrawCtx;

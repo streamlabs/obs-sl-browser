@@ -10,7 +10,7 @@
 
 #include <vector>
 
-static const char *kSceneSignals[] = {"item_add",     "item_remove", "reorder",     "refresh",
+static const char* kSceneSignals[] = {"item_add",     "item_remove", "reorder",     "refresh",
 			       "item_visible", "item_locked", "item_select", "item_deselect"};
 
 struct RowInfo
@@ -22,11 +22,12 @@ struct RowInfo
 	bool mirror;
 };
 
-static bool collectRowsProc(obs_scene_t *, obs_sceneitem_t *item, void *param)
+static bool collectRowsProc(obs_scene_t*, obs_sceneitem_t* item, void* param)
 {
-	auto *rows = static_cast<std::vector<RowInfo> *>(param); // bottom to top
-	obs_source_t *source = obs_sceneitem_get_source(item);
-	const char *name = source ? obs_source_get_name(source) : nullptr;
+	// bottom to top
+	auto* rows = static_cast<std::vector<RowInfo>*>(param);
+	obs_source_t* source = obs_sceneitem_get_source(item);
+	const char* name = source ? obs_source_get_name(source) : nullptr;
 
 	RowInfo row;
 	row.id = obs_sceneitem_get_id(item);
@@ -38,7 +39,7 @@ static bool collectRowsProc(obs_scene_t *, obs_sceneitem_t *item, void *param)
 	return true;
 }
 
-SlDualSourceList::SlDualSourceList(SlDualController& controller, SlDualPreview *preview, QWidget *parent)
+SlDualSourceList::SlDualSourceList(SlDualController& controller, SlDualPreview* preview, QWidget* parent)
 	: QListWidget(parent),
 	  m_controller(controller),
 	  m_preview(preview)
@@ -49,7 +50,7 @@ SlDualSourceList::SlDualSourceList(SlDualController& controller, SlDualPreview *
 	setMaximumHeight(140);
 
 	QObject::connect(this, &QListWidget::itemChanged, this,
-			 [this](QListWidgetItem *item) { onItemChanged(item); });
+			 [this](QListWidgetItem* item) { onItemChanged(item); });
 	QObject::connect(this, &QListWidget::itemSelectionChanged, this, [this]() { onSelectionChanged(); });
 }
 
@@ -58,11 +59,10 @@ SlDualSourceList::~SlDualSourceList()
 	unbindScene();
 }
 
-void SlDualSourceList::sceneSignalThunk(void *data, calldata_t *)
+void SlDualSourceList::sceneSignalThunk(void* data, calldata_t*)
 {
-	// Scene signals can fire from the graphics thread (e.g. libobs pruning
-	// items of removed sources during a tick); hop to the UI thread.
-	auto *self = static_cast<SlDualSourceList *>(data);
+	// Scene signals can fire from the graphics thread (e.g. libobs pruning items of removed sources during a tick); hop to the UI thread.
+	auto* self = static_cast<SlDualSourceList*>(data);
 	QMetaObject::invokeMethod(self, [self]() { self->rebuild(); }, Qt::QueuedConnection);
 }
 
@@ -71,8 +71,9 @@ void SlDualSourceList::unbindScene()
 	if (!m_boundSceneSource)
 		return;
 
-	signal_handler_t *sh = obs_source_get_signal_handler(m_boundSceneSource);
-	for (const char *signal : kSceneSignals)
+	signal_handler_t* sh = obs_source_get_signal_handler(m_boundSceneSource);
+
+	for (const char* signal : kSceneSignals)
 		signal_handler_disconnect(sh, signal, sceneSignalThunk, this);
 
 	obs_source_release(m_boundSceneSource);
@@ -83,15 +84,17 @@ void SlDualSourceList::bindActiveScene()
 {
 	unbindScene();
 
-	SlDualCanvas *canvas = m_controller.canvas.get();
-	obs_scene_t *scene = canvas ? canvas->activeScene() : nullptr;
+	SlDualCanvas* canvas = m_controller.canvas.get();
+	obs_scene_t* scene = canvas ? canvas->activeScene() : nullptr;
 
-	if (scene) {
+	if (scene)
+	{
 		m_boundSceneSource = obs_scene_get_source(scene);
 		obs_source_get_ref(m_boundSceneSource);
 
-		signal_handler_t *sh = obs_source_get_signal_handler(m_boundSceneSource);
-		for (const char *signal : kSceneSignals)
+		signal_handler_t* sh = obs_source_get_signal_handler(m_boundSceneSource);
+
+		for (const char* signal : kSceneSignals)
 			signal_handler_connect(sh, signal, sceneSignalThunk, this);
 	}
 
@@ -103,16 +106,18 @@ void SlDualSourceList::rebuild()
 	m_updating = true;
 	clear();
 
-	SlDualCanvas *canvas = m_controller.canvas.get();
-	obs_scene_t *scene = canvas ? canvas->activeScene() : nullptr;
+	SlDualCanvas* canvas = m_controller.canvas.get();
+	obs_scene_t* scene = canvas ? canvas->activeScene() : nullptr;
 
-	if (scene) {
+	if (scene)
+	{
 		std::vector<RowInfo> rows;
 		obs_scene_enum_items(scene, collectRowsProc, &rows);
 
 		// Display topmost first, like the OBS Sources dock.
-		for (auto it = rows.rbegin(); it != rows.rend(); ++it) {
-			auto *listItem = new QListWidgetItem(it->name, this);
+		for (auto it = rows.rbegin(); it != rows.rend(); ++it)
+		{
+			auto* listItem = new QListWidgetItem(it->name, this);
 			listItem->setFlags(listItem->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsDragEnabled);
 			listItem->setCheckState(it->visible ? Qt::Checked : Qt::Unchecked);
 			listItem->setData(Qt::UserRole, QVariant::fromValue<qlonglong>(it->id));
@@ -124,11 +129,11 @@ void SlDualSourceList::rebuild()
 	m_updating = false;
 }
 
-obs_sceneitem_t *SlDualSourceList::sceneItemForRow(int row) const
+obs_sceneitem_t* SlDualSourceList::sceneItemForRow(int row) const
 {
-	SlDualCanvas *canvas = m_controller.canvas.get();
-	obs_scene_t *scene = canvas ? canvas->activeScene() : nullptr;
-	QListWidgetItem *listItem = item(row);
+	SlDualCanvas* canvas = m_controller.canvas.get();
+	obs_scene_t* scene = canvas ? canvas->activeScene() : nullptr;
+	QListWidgetItem* listItem = item(row);
 
 	if (!scene || !listItem)
 		return nullptr;
@@ -136,12 +141,12 @@ obs_sceneitem_t *SlDualSourceList::sceneItemForRow(int row) const
 	return obs_scene_find_sceneitem_by_id(scene, (int64_t)listItem->data(Qt::UserRole).toLongLong());
 }
 
-void SlDualSourceList::onItemChanged(QListWidgetItem *listItem)
+void SlDualSourceList::onItemChanged(QListWidgetItem* listItem)
 {
 	if (m_updating || !listItem)
 		return;
 
-	obs_sceneitem_t *sceneItem = sceneItemForRow(row(listItem));
+	obs_sceneitem_t* sceneItem = sceneItemForRow(row(listItem));
 
 	if (sceneItem && m_preview)
 		m_preview->editor().setItemVisibleUndoable(sceneItem, listItem->checkState() == Qt::Checked);
@@ -152,31 +157,37 @@ void SlDualSourceList::onSelectionChanged()
 	if (m_updating)
 		return;
 
-	m_updating = true; // scene item_select signals rebuild otherwise
-	for (int i = 0; i < count(); i++) {
-		obs_sceneitem_t *sceneItem = sceneItemForRow(i);
+	// scene item_select signals rebuild otherwise
+	m_updating = true;
+
+	for (int i = 0; i < count(); i++)
+	{
+		obs_sceneitem_t* sceneItem = sceneItemForRow(i);
 
 		if (sceneItem)
 			obs_sceneitem_select(sceneItem, item(i)->isSelected());
 	}
+
 	m_updating = false;
 }
 
-void SlDualSourceList::contextMenuEvent(QContextMenuEvent *event)
+void SlDualSourceList::contextMenuEvent(QContextMenuEvent* event)
 {
-	QListWidgetItem *listItem = itemAt(event->pos());
+	QListWidgetItem* listItem = itemAt(event->pos());
 
-	if (!listItem) {
+	if (!listItem)
+	{
 		event->ignore();
 		return;
 	}
 
-	obs_sceneitem_t *sceneItem = sceneItemForRow(row(listItem));
+	obs_sceneitem_t* sceneItem = sceneItemForRow(row(listItem));
 
 	if (!sceneItem || !m_preview)
 		return;
 
-	if (!obs_sceneitem_selected(sceneItem)) {
+	if (!obs_sceneitem_selected(sceneItem))
+	{
 		m_updating = true;
 		clearSelection();
 		listItem->setSelected(true);
@@ -188,9 +199,10 @@ void SlDualSourceList::contextMenuEvent(QContextMenuEvent *event)
 	event->accept();
 }
 
-void SlDualSourceList::keyPressEvent(QKeyEvent *event)
+void SlDualSourceList::keyPressEvent(QKeyEvent* event)
 {
-	if ((event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) && m_preview) {
+	if ((event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) && m_preview)
+	{
 		m_preview->editor().removeSelectedItemsPublic(this);
 		event->accept();
 		return;
@@ -198,17 +210,20 @@ void SlDualSourceList::keyPressEvent(QKeyEvent *event)
 	QListWidget::keyPressEvent(event);
 }
 
-void SlDualSourceList::mouseDoubleClickEvent(QMouseEvent *event)
+void SlDualSourceList::mouseDoubleClickEvent(QMouseEvent* event)
 {
-	QListWidgetItem *listItem = itemAt(event->position().toPoint());
+	QListWidgetItem* listItem = itemAt(event->position().toPoint());
 
-	if (listItem) {
-		obs_sceneitem_t *sceneItem = sceneItemForRow(row(listItem));
+	if (listItem)
+	{
+		obs_sceneitem_t* sceneItem = sceneItemForRow(row(listItem));
 
-		if (sceneItem && !SlDualCanvas::isProgramMirrorItem(sceneItem)) {
-			obs_source_t *source = obs_sceneitem_get_source(sceneItem);
+		if (sceneItem && !SlDualCanvas::isProgramMirrorItem(sceneItem))
+		{
+			obs_source_t* source = obs_sceneitem_get_source(sceneItem);
 
-			if (source && obs_source_configurable(source)) {
+			if (source && obs_source_configurable(source))
+			{
 				obs_frontend_open_source_properties(source);
 				event->accept();
 				return;
@@ -218,7 +233,7 @@ void SlDualSourceList::mouseDoubleClickEvent(QMouseEvent *event)
 	QListWidget::mouseDoubleClickEvent(event);
 }
 
-void SlDualSourceList::dropEvent(QDropEvent *event)
+void SlDualSourceList::dropEvent(QDropEvent* event)
 {
 	QListWidget::dropEvent(event);
 
@@ -227,6 +242,7 @@ void SlDualSourceList::dropEvent(QDropEvent *event)
 
 	// List shows topmost first; scene order is bottom to top.
 	std::vector<int64_t> newOrderBottomToTop;
+
 	for (int i = count() - 1; i >= 0; i--)
 		newOrderBottomToTop.push_back((int64_t)item(i)->data(Qt::UserRole).toLongLong());
 
