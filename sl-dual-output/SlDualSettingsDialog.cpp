@@ -27,6 +27,7 @@ static const SizePreset kPresets[] = {
 	{"720 x 1280 (9:16 vertical)", 720, 1280},
 	{"1080 x 1080 (1:1 square)", 1080, 1080},
 };
+
 static const int kCustomIndex = 3;
 
 SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool streamActive, QWidget* parent)
@@ -65,8 +66,7 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	form->addRow("Canvas size:", m_sizePreset);
 	form->addRow(QString(), sizeRow);
 
-	QObject::connect(m_sizePreset, &QComboBox::currentIndexChanged, this,
-			 [this](int index) { onPresetChanged(index); });
+	QObject::connect(m_sizePreset, &QComboBox::currentIndexChanged, this, [this](int index) { onPresetChanged(index); });
 
 	int presetIndex = presetIndexFor(current.canvasWidth, current.canvasHeight);
 	m_sizePreset->setCurrentIndex(presetIndex);
@@ -107,6 +107,7 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 		m_authUsername->setEnabled(on);
 		m_authPassword->setEnabled(on);
 	};
+
 	syncAuth(current.useAuth);
 	QObject::connect(m_useAuth, &QCheckBox::toggled, this, syncAuth);
 
@@ -214,6 +215,7 @@ void SlDualSettingsDialog::populateEncoders(const std::string& currentId)
 		m_encoder->addItem(QString::fromUtf8(currentId.c_str()), QString::fromUtf8(currentId.c_str()));
 		index = m_encoder->count() - 1;
 	}
+
 	m_encoder->setCurrentIndex(index >= 0 ? index : 0);
 }
 

@@ -72,6 +72,9 @@ public:
 
 	// Shared with the source list so both UIs produce identical, undoable operations.
 	void showItemMenu(obs_sceneitem_t* item, const QPoint& globalPos, QWidget* parent);
+
+	// "+" in the sources dock: the scene menu's Add Source contents as a standalone menu.
+	void showAddSourceMenu(const QPoint& globalPos, QWidget* parent);
 	void setItemVisibleUndoable(obs_sceneitem_t* item, bool visible);
 	void applyOrderUndoable(const std::vector<int64_t>& newOrderBottomToTop);
 	void removeSelectedItemsPublic(QWidget* parent) { removeSelectedItems(parent); }
@@ -130,6 +133,7 @@ private:
 	// Context menu / item operations
 	void buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* parent);
 	void buildSceneMenu(QMenu& menu, QWidget* parent);
+	void buildAddSourceMenu(QMenu& menu);
 	void flagUndoable(obs_sceneitem_t* item, bool isVisibility, bool value);
 	void addNewSource(const std::string& typeId);
 	void addExistingSource(const std::string& name);
@@ -157,8 +161,7 @@ private:
 	static bool drawSelectedOverflowProc(obs_scene_t* scene, obs_sceneitem_t* item, void* param);
 	void drawSelectionBox(float x1, float y1, float x2, float y2);
 	void drawStripedLine(float x1, float y1, float x2, float y2, float thickness, struct vec2 scale);
-	void renderSpacingHelper(int index, struct vec3& start, struct vec3& end, struct vec3& viewport,
-				 float pixelRatio, uint32_t baseW, uint32_t baseH);
+	void renderSpacingHelper(int index, struct vec3& start, struct vec3& end, struct vec3& viewport, float pixelRatio, uint32_t baseW, uint32_t baseH);
 
 	SlDualController& m_controller;
 	QWidget* m_widget = nullptr;

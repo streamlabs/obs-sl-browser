@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #define SL_DUAL_LOG_PREFIX "[sl-dual-output] "
 
@@ -16,6 +17,9 @@ struct SlDualConfig
 
 	// active canvas scene
 	std::string activeScene;
+
+	// scenes dock display order
+	std::vector<std::string> sceneOrder;
 
 	// first scene was seeded once; never seed again
 	bool seeded = false;

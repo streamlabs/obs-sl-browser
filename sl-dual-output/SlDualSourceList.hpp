@@ -20,6 +20,11 @@ public:
 	void bindActiveScene();
 	void rebuild();
 
+	// Toolbar operations (SlDualSourcesDock).
+	void removeSelected();
+	void openSelectedProperties();
+	void moveSelected(int direction);
+
 protected:
 	void contextMenuEvent(QContextMenuEvent* event) override;
 	void keyPressEvent(QKeyEvent* event) override;

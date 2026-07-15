@@ -96,6 +96,7 @@ bool SlDualStreamOutput::start(const SlDualConfig& config, video_t* canvasVideo)
 		obs_data_set_string(serviceSettings, "username", config.authUsername.c_str());
 		obs_data_set_string(serviceSettings, "password", config.authPassword.c_str());
 	}
+
 	m_service = obs_service_create("rtmp_custom", "sl-dual-service", serviceSettings, nullptr);
 	obs_data_release(serviceSettings);
 
@@ -112,6 +113,7 @@ bool SlDualStreamOutput::start(const SlDualConfig& config, video_t* canvasVideo)
 		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "encoder '%s' unavailable, falling back to obs_x264", encoderId);
 		m_videoEncoder = obs_video_encoder_create("obs_x264", "sl-dual-video-encoder", videoSettings, nullptr);
 	}
+
 	obs_data_release(videoSettings);
 
 	obs_data_t* audioSettings = obs_data_create();
@@ -164,8 +166,7 @@ bool SlDualStreamOutput::start(const SlDualConfig& config, video_t* canvasVideo)
 		return false;
 	}
 
-	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "dual output started (%s, encoder %s, %d kbps, track %d)",
-	     config.server.c_str(), encoderId, config.videoBitrateKbps, config.audioTrack);
+	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "dual output started (%s, encoder %s, %d kbps, track %d)", config.server.c_str(), encoderId, config.videoBitrateKbps, config.audioTrack);
 	return true;
 }
 

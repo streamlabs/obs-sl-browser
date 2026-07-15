@@ -125,6 +125,7 @@ bool SlDualCanvas::attach()
 			m_canvas = nullptr;
 			return false;
 		}
+
 		blog(LOG_INFO, SL_DUAL_LOG_PREFIX "adopted canvas '%s' (%ux%u)", kCanvasName, m_width, m_height);
 	}
 	else
@@ -137,6 +138,7 @@ bool SlDualCanvas::attach()
 			blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "obs_frontend_add_canvas failed");
 			return false;
 		}
+
 		blog(LOG_INFO, SL_DUAL_LOG_PREFIX "created canvas '%s' (%ux%u)", kCanvasName, m_width, m_height);
 	}
 
@@ -178,14 +180,14 @@ void SlDualCanvas::ensureScenes(const SlDualConfig& config)
 				if (src)
 					obs_source_release(src);
 			}
+
 			blog(LOG_INFO, SL_DUAL_LOG_PREFIX "seeded scene '%s'", kDefaultSceneName);
 		}
 		else
 		{
-			blog(LOG_WARNING, SL_DUAL_LOG_PREFIX
-			     "no canvas scenes restored from the collection; created empty scene '%s'",
-			     kDefaultSceneName);
+			blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "no canvas scenes restored from the collection; created empty scene '%s'", kDefaultSceneName);
 		}
+
 		return;
 	}
 
@@ -496,6 +498,7 @@ static bool collectMirrorProc(obs_scene_t*, obs_sceneitem_t* item, void* param)
 		obs_sceneitem_addref(item);
 		ctx->flagged.emplace_back(item, ctx->index);
 	}
+
 	ctx->index++;
 	return true;
 }
@@ -579,6 +582,7 @@ bool SlDualCanvas::activeSceneHasMirror() const
 				*static_cast<bool*>(param) = true;
 				return false;
 			}
+
 			return true;
 		},
 		&found);
@@ -595,9 +599,7 @@ void SlDualCanvas::verifyChannelIntegrity()
 
 	if (channel != active)
 	{
-		blog(LOG_WARNING,
-		     SL_DUAL_LOG_PREFIX "channel/editor scene divergence detected (channel '%s', active '%s'), repairing",
-		     channel ? obs_source_get_name(channel) : "(none)", obs_source_get_name(active));
+		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "channel/editor scene divergence detected (channel '%s', active '%s'), repairing", channel ? obs_source_get_name(channel) : "(none)", obs_source_get_name(active));
 		setChannelToActive();
 	}
 

@@ -56,6 +56,10 @@ if(SL_DUAL_ENABLED)
     "${CMAKE_CURRENT_LIST_DIR}/SlDualStreamOutput.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualDock.hpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualDock.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualScenesDock.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualScenesDock.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualSourcesDock.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualSourcesDock.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualSettingsDialog.hpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualSettingsDialog.cpp"
   )

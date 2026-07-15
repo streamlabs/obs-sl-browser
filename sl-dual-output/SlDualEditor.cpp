@@ -75,13 +75,13 @@ static vec4 accessibilityColor(const char* overrideKey, float r, float g, float 
 	if (cfg && config_get_bool(cfg, "Accessibility", "OverrideColors"))
 	{
 		uint32_t rgb = (uint32_t)config_get_int(cfg, "Accessibility", overrideKey);
-		vec4_set(&color, (float)(rgb & 0xFF) / 255.0f, (float)((rgb >> 8) & 0xFF) / 255.0f,
-			 (float)((rgb >> 16) & 0xFF) / 255.0f, 1.0f);
+		vec4_set(&color, (float)(rgb & 0xFF) / 255.0f, (float)((rgb >> 8) & 0xFF) / 255.0f, (float)((rgb >> 16) & 0xFF) / 255.0f, 1.0f);
 	}
 	else
 	{
 		vec4_set(&color, r, g, b, 1.0f);
 	}
+
 	return color;
 }
 
@@ -351,8 +351,7 @@ static bool FindHandleAtPos(obs_scene_t*, obs_sceneitem_t* item, void* param)
 			data.angle = obs_sceneitem_get_rot(item);
 			data.handle = SlItemHandle::Rot;
 
-			vec2_set(&data.rotatePoint, transform.t.x + transform.x.x / 2 + transform.y.x / 2,
-				 transform.t.y + transform.x.y / 2 + transform.y.y / 2);
+			vec2_set(&data.rotatePoint, transform.t.x + transform.x.x / 2 + transform.y.x / 2, transform.t.y + transform.x.y / 2 + transform.y.y / 2);
 
 			obs_sceneitem_get_pos(item, &data.offsetPoint);
 			data.offsetPoint.x -= data.rotatePoint.x;
@@ -959,6 +958,7 @@ SlDualEditor::~SlDualEditor()
 			gs_texture_destroy(m_overflowTexture);
 		obs_leave_graphics();
 	}
+
 	m_squareFill = nullptr;
 	m_circleFill = nullptr;
 	m_stripedLineEffect = nullptr;
@@ -1118,6 +1118,7 @@ void SlDualEditor::clearStretch()
 		obs_sceneitem_release(m_stretchItem);
 		m_stretchItem = nullptr;
 	}
+
 	m_stretchHandle = SlItemHandle::None;
 }
 
@@ -1144,6 +1145,7 @@ void SlDualEditor::getStretchHandleData(const struct vec2& pos, bool ignoreGroup
 		m_stretchItem = data.item;
 		obs_sceneitem_addref(m_stretchItem);
 	}
+
 	m_stretchHandle = data.handle;
 
 	m_rotateAngle = data.angle;
@@ -1247,8 +1249,7 @@ void SlDualEditor::updateCursor(uint32_t flags)
 		}
 		else
 		{
-			flags = (flags % 4 == 0) ? flags | flags >> ((flags / 2) - 1)
-						 : flags | ((flags >> 2) | (flags << 2));
+			flags = (flags % 4 == 0) ? flags | flags >> ((flags / 2) - 1) : flags | ((flags >> 2) | (flags << 2));
 		}
 	}
 
@@ -1430,8 +1431,7 @@ struct vec3 SlDualEditor::calculateStretchPos(const struct vec3& tl, const struc
 	return pos;
 }
 
-void SlDualEditor::clampAspect(struct vec3& tl, struct vec3& br, struct vec2& size,
-			       const struct vec2& baseSize) const
+void SlDualEditor::clampAspect(struct vec3& tl, struct vec3& br, struct vec2& size, const struct vec2& baseSize) const
 {
 	float baseAspect = baseSize.x / baseSize.y;
 	float aspect = size.x / size.y;
@@ -1539,8 +1539,7 @@ void SlDualEditor::cropItem(const struct vec2& pos)
 	vec2 scale, rawscale;
 
 	obs_sceneitem_get_scale(m_stretchItem, &rawscale);
-	vec2_set(&scale, boundsType == OBS_BOUNDS_NONE ? rawscale.x : fabsf(rawscale.x),
-		 boundsType == OBS_BOUNDS_NONE ? rawscale.y : fabsf(rawscale.y));
+	vec2_set(&scale, boundsType == OBS_BOUNDS_NONE ? rawscale.x : fabsf(rawscale.x), boundsType == OBS_BOUNDS_NONE ? rawscale.y : fabsf(rawscale.y));
 
 	vec2 max_tl;
 	vec2 max_br;
@@ -1983,6 +1982,7 @@ void SlDualEditor::mouseRelease(const QPointF& pos, Qt::MouseButton button, Qt::
 		auto loadStates = [](const std::string& data) { obs_scene_load_transform_states(data.c_str()); };
 		m_undo.add("Transform", loadStates, loadStates, m_dragSnapshot, redoSnapshot);
 	}
+
 	m_dragSnapshot.clear();
 }
 
@@ -2230,6 +2230,7 @@ void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* pa
 			if (it)
 				obs_sceneitem_set_order_position(it, atoi(data.c_str()));
 		};
+
 		m_undo.add("Reorder", apply, apply, std::to_string(before), std::to_string(after));
 	};
 
@@ -2276,6 +2277,7 @@ void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* pa
 			});
 		});
 	}
+
 	transform->addAction("Reset", [this, item]()
 	{
 		transformAction("Reset Transform", [&]()
@@ -2326,8 +2328,22 @@ void SlDualEditor::buildSceneMenu(QMenu& menu, QWidget* parent)
 	Q_UNUSED(parent);
 
 	QMenu* add = menu.addMenu("Add Source");
+	buildAddSourceMenu(*add);
+}
 
-	QAction* mirrorAction = add->addAction("Program Mirror", [this]() { addProgramMirror(); });
+void SlDualEditor::showAddSourceMenu(const QPoint& globalPos, QWidget* parent)
+{
+	if (!scene())
+		return;
+
+	QMenu menu(parent);
+	buildAddSourceMenu(menu);
+	menu.exec(globalPos);
+}
+
+void SlDualEditor::buildAddSourceMenu(QMenu& menu)
+{
+	QAction* mirrorAction = menu.addAction("Program Mirror", [this]() { addProgramMirror(); });
 	SlDualCanvas* cv = m_controller.canvas.get();
 
 	if (cv && cv->activeSceneHasMirror())
@@ -2336,9 +2352,10 @@ void SlDualEditor::buildSceneMenu(QMenu& menu, QWidget* parent)
 		mirrorAction->setText("Program Mirror (already in scene)");
 		mirrorAction->setEnabled(false);
 	}
-	add->addSeparator();
 
-	QMenu* newMenu = add->addMenu("New");
+	menu.addSeparator();
+
+	QMenu* newMenu = menu.addMenu("New");
 	const char* typeId = nullptr;
 
 	for (size_t i = 0; obs_enum_source_types(i, &typeId); i++)
@@ -2353,11 +2370,10 @@ void SlDualEditor::buildSceneMenu(QMenu& menu, QWidget* parent)
 
 		const char* display = obs_source_get_display_name(typeId);
 		std::string idCopy = typeId;
-		newMenu->addAction(QString::fromUtf8(display ? display : typeId),
-				   [this, idCopy]() { addNewSource(idCopy); });
+		newMenu->addAction(QString::fromUtf8(display ? display : typeId), [this, idCopy]() { addNewSource(idCopy); });
 	}
 
-	QMenu* existing = add->addMenu("Existing");
+	QMenu* existing = menu.addMenu("Existing");
 
 	obs_frontend_source_list scenes = {};
 	obs_frontend_get_scenes(&scenes);
@@ -2387,6 +2403,7 @@ void SlDualEditor::buildSceneMenu(QMenu& menu, QWidget* parent)
 				if (name)
 					static_cast<std::vector<std::string>*>(param)->push_back(name);
 			}
+
 			return true;
 		},
 		&sourceNames);
@@ -2496,11 +2513,7 @@ void SlDualEditor::removeSelectedItems(QWidget* parent)
 	if (data.sceneItems.empty())
 		return;
 
-	QString question = data.sceneItems.size() == 1
-				   ? QString("Remove '%1'?")
-					     .arg(QString::fromUtf8(obs_source_get_name(
-						     obs_sceneitem_get_source(data.sceneItems[0]))))
-				   : QString("Remove %1 items?").arg(data.sceneItems.size());
+	QString question = data.sceneItems.size() == 1 ? QString("Remove '%1'?").arg(QString::fromUtf8(obs_source_get_name(obs_sceneitem_get_source(data.sceneItems[0])))) : QString("Remove %1 items?").arg(data.sceneItems.size());
 
 	if (QMessageBox::question(parent, "Remove Items", question) != QMessageBox::Yes)
 		return;
@@ -2546,6 +2559,7 @@ void SlDualEditor::flagUndoable(obs_sceneitem_t* item, bool isVisibility, bool v
 		else
 			obs_sceneitem_set_locked(it, data == "1");
 	};
+
 	m_undo.add(isVisibility ? "Visibility" : "Lock", apply, apply, oldValue ? "1" : "0", value ? "1" : "0");
 }
 
@@ -2645,6 +2659,7 @@ void SlDualEditor::applyOrderUndoable(const std::vector<int64_t>& newOrderBottom
 		if (sc)
 			applyOrder(sc, orderFromString(data));
 	};
+
 	m_undo.add("Reorder", apply, apply, orderToString(before), orderToString(newOrderBottomToTop));
 }
 
@@ -3210,8 +3225,7 @@ void SlDualEditor::drawSceneEditing(const ViewMap& map)
 
 		while (gs_effect_loop(solid, "Solid"))
 		{
-			drawSelectionBox(m_startPos.x * map.scale, m_startPos.y * map.scale, m_mousePos.x * map.scale,
-					 m_mousePos.y * map.scale);
+			drawSelectionBox(m_startPos.x * map.scale, m_startPos.y * map.scale, m_mousePos.x * map.scale, m_mousePos.y * map.scale);
 		}
 	}
 
@@ -3291,8 +3305,7 @@ static void DrawSpacingLine(vec3& start, vec3& end, vec3& viewport, float pixelR
 	gs_technique_end(tech);
 }
 
-void SlDualEditor::renderSpacingHelper(int index, struct vec3& start, struct vec3& end, struct vec3& viewport,
-				       float pixelRatio, uint32_t baseW, uint32_t baseH)
+void SlDualEditor::renderSpacingHelper(int index, struct vec3& start, struct vec3& end, struct vec3& viewport, float pixelRatio, uint32_t baseW, uint32_t baseH)
 {
 	bool horizontal = (index == 2 || index == 3);
 

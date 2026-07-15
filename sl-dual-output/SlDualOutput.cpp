@@ -27,9 +27,7 @@ SlDualOutput& SlDualOutput::instance()
 
 void SlDualOutput::initialize()
 {
-	blog(LOG_INFO,
-	     SL_DUAL_LOG_PREFIX "built against OBS %s, below the 32.1 functional floor; dual output is disabled",
-	     SL_DUAL_OBS_VERSION_RAW);
+	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "built against OBS %s, below the 32.1 functional floor; dual output is disabled", SL_DUAL_OBS_VERSION_RAW);
 }
 
 void SlDualOutput::shutdown() {}
@@ -58,8 +56,7 @@ void SlDualOutput::initialize()
 
 	if (QThread::currentThread() != qApp->thread())
 	{
-		QMetaObject::invokeMethod(
-			qApp, []() { SlDualOutput::instance().initialize(); }, Qt::QueuedConnection);
+		QMetaObject::invokeMethod(qApp, []() { SlDualOutput::instance().initialize(); }, Qt::QueuedConnection);
 		return;
 	}
 

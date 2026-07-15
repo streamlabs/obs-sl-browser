@@ -4,18 +4,13 @@
 #include "SlDualCanvas.hpp"
 #include "SlDualEditor.hpp"
 #include "SlDualSettingsDialog.hpp"
-#include "SlDualSourceList.hpp"
 
-#include <QComboBox>
 #include <QContextMenuEvent>
 #include <QHBoxLayout>
-#include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
-#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPushButton>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 /**
@@ -83,6 +78,7 @@ void SlDualPreview::destroyDisplay()
 		obs_display_remove_draw_callback(m_display, drawThunk, this);
 		m_callbackAdded = false;
 	}
+
 	obs_display_destroy(m_display);
 	m_display = nullptr;
 }
@@ -215,6 +211,7 @@ void SlDualPreview::keyPressEvent(QKeyEvent* event)
 		event->accept();
 		return;
 	}
+
 	QWidget::keyPressEvent(event);
 }
 
@@ -225,28 +222,6 @@ void SlDualPreview::keyPressEvent(QKeyEvent* event)
 SlDualDock::SlDualDock(SlDualController& controller) : QWidget(nullptr), m_controller(controller)
 {
 	m_preview = new SlDualPreview(controller, this);
-	m_sourceList = new SlDualSourceList(controller, m_preview, this);
-
-	m_sceneCombo = new QComboBox(this);
-	m_sceneCombo->setToolTip("Active canvas scene");
-
-	m_addSceneButton = new QToolButton(this);
-	m_addSceneButton->setText("+");
-	m_addSceneButton->setToolTip("Add scene");
-	m_removeSceneButton = new QToolButton(this);
-	m_removeSceneButton->setText("-");
-	m_removeSceneButton->setToolTip("Remove scene");
-	m_renameSceneButton = new QToolButton(this);
-	m_renameSceneButton->setText("R");
-	m_renameSceneButton->setToolTip("Rename scene");
-
-	auto* sceneRow = new QHBoxLayout();
-	sceneRow->setContentsMargins(0, 0, 0, 0);
-	sceneRow->addWidget(new QLabel("Scene:", this));
-	sceneRow->addWidget(m_sceneCombo, 1);
-	sceneRow->addWidget(m_addSceneButton);
-	sceneRow->addWidget(m_removeSceneButton);
-	sceneRow->addWidget(m_renameSceneButton);
 
 	m_settingsButton = new QPushButton("Settings", this);
 	m_startStopButton = new QPushButton("Start", this);
@@ -263,113 +238,12 @@ SlDualDock::SlDualDock(SlDualController& controller) : QWidget(nullptr), m_contr
 	layout->setContentsMargins(4, 4, 4, 4);
 	layout->setSpacing(4);
 	layout->addWidget(m_preview, 1);
-	layout->addLayout(sceneRow);
-	layout->addWidget(m_sourceList);
 	layout->addLayout(controls);
 
-	QObject::connect(m_sceneCombo, &QComboBox::currentIndexChanged, this,
-			 [this](int index) { onSceneComboChanged(index); });
-	QObject::connect(m_addSceneButton, &QToolButton::clicked, this, [this]() { onAddScene(); });
-	QObject::connect(m_removeSceneButton, &QToolButton::clicked, this, [this]() { onRemoveScene(); });
-	QObject::connect(m_renameSceneButton, &QToolButton::clicked, this, [this]() { onRenameScene(); });
 	QObject::connect(m_settingsButton, &QPushButton::clicked, this, [this]() { openSettings(); });
 	QObject::connect(m_startStopButton, &QPushButton::clicked, this, [this]() { onStartStopClicked(); });
 
-	refreshScenes();
 	setStreamState(SlDualStreamState::Idle, std::string());
-}
-
-void SlDualDock::refreshScenes()
-{
-	m_updatingCombo = true;
-	m_sceneCombo->clear();
-
-	SlDualCanvas* canvas = m_controller.canvas.get();
-
-	if (canvas && canvas->valid())
-	{
-		std::string active = canvas->activeSceneName();
-		int activeIndex = 0;
-		int i = 0;
-
-		for (const std::string& name : canvas->sceneNames())
-		{
-			m_sceneCombo->addItem(QString::fromUtf8(name.c_str()));
-
-			if (name == active)
-				activeIndex = i;
-			i++;
-		}
-
-		m_sceneCombo->setCurrentIndex(activeIndex);
-	}
-
-	bool haveScenes = m_sceneCombo->count() > 0;
-	m_sceneCombo->setEnabled(haveScenes);
-	m_removeSceneButton->setEnabled(m_sceneCombo->count() > 1);
-	m_renameSceneButton->setEnabled(haveScenes);
-	m_addSceneButton->setEnabled(canvas && canvas->valid());
-
-	m_updatingCombo = false;
-
-	if (m_sourceList)
-		m_sourceList->bindActiveScene();
-}
-
-void SlDualDock::onSceneComboChanged(int index)
-{
-	if (m_updatingCombo || index < 0)
-		return;
-
-	m_controller.sceneSetActive(m_sceneCombo->itemText(index).toUtf8().constData());
-}
-
-void SlDualDock::onAddScene()
-{
-	bool ok = false;
-	QString name = QInputDialog::getText(this, "Add Scene", "Scene name:", QLineEdit::Normal, QString(), &ok);
-	name = name.trimmed();
-
-	if (!ok || name.isEmpty())
-		return;
-
-	if (!m_controller.sceneCreate(name.toUtf8().constData()))
-		QMessageBox::information(this, "Add Scene", "A scene with that name already exists on this canvas.");
-}
-
-void SlDualDock::onRemoveScene()
-{
-	SlDualCanvas* canvas = m_controller.canvas.get();
-
-	if (!canvas)
-		return;
-
-	QString name = QString::fromUtf8(canvas->activeSceneName().c_str());
-
-	if (QMessageBox::question(this, "Remove Scene", QString("Remove scene '%1' and its items?").arg(name)) !=
-	    QMessageBox::Yes)
-		return;
-
-	m_controller.sceneRemoveActive();
-}
-
-void SlDualDock::onRenameScene()
-{
-	SlDualCanvas* canvas = m_controller.canvas.get();
-
-	if (!canvas)
-		return;
-
-	bool ok = false;
-	QString name = QInputDialog::getText(this, "Rename Scene", "Scene name:", QLineEdit::Normal,
-					     QString::fromUtf8(canvas->activeSceneName().c_str()), &ok);
-	name = name.trimmed();
-
-	if (!ok || name.isEmpty())
-		return;
-
-	if (!m_controller.sceneRenameActive(name.toUtf8().constData()))
-		QMessageBox::information(this, "Rename Scene", "A scene with that name already exists on this canvas.");
 }
 
 void SlDualDock::onStartStopClicked()
@@ -383,6 +257,7 @@ void SlDualDock::onStartStopClicked()
 			openSettings();
 			return;
 		}
+
 		m_controller.startStream();
 		break;
 	}
@@ -446,10 +321,7 @@ void SlDualDock::setStreamState(SlDualStreamState state, const std::string& msg)
 	}
 	}
 
-	QString status = QString("<span style=\"color:%1\">%2</span> %3")
-				 .arg(QString::fromUtf8(color))
-				 .arg(QChar(0x25CF))
-				 .arg(QString::fromUtf8(text));
+	QString status = QString("<span style=\"color:%1\">%2</span> %3").arg(QString::fromUtf8(color)).arg(QChar(0x25CF)).arg(QString::fromUtf8(text));
 
 	if (!msg.empty() && msg != text)
 		status += QString(" - %1").arg(QString::fromUtf8(msg.c_str()).toHtmlEscaped());

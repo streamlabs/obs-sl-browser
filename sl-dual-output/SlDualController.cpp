@@ -3,6 +3,8 @@
 #include "SlDualCanvas.hpp"
 #include "SlDualStreamOutput.hpp"
 #include "SlDualDock.hpp"
+#include "SlDualScenesDock.hpp"
+#include "SlDualSourcesDock.hpp"
 
 #include <util/platform.h>
 
@@ -10,11 +12,14 @@
 #include <QMetaObject>
 #include <QThread>
 
+#include <algorithm>
 #include <cstring>
 #include <filesystem>
 
 static const char* kSaveKey = "sl-dual-output";
-static const char* kDockId = "sl-dual-output-dock";
+static const char* kPreviewDockId = "sl-dual-output-dock";
+static const char* kScenesDockId = "sl-dual-output-scenes-dock";
+static const char* kSourcesDockId = "sl-dual-output-sources-dock";
 
 static void frontendEventThunk(enum obs_frontend_event event, void* data)
 {
@@ -70,14 +75,13 @@ bool SlDualController::init()
 			Qt::QueuedConnection);
 	});
 
-	createDock();
+	createDocks();
 
 	obs_frontend_add_event_callback(frontendEventThunk, this);
 	obs_frontend_add_save_callback(saveThunk, this);
 	m_callbacksRegistered = true;
 
-	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "ready (canvas %ux%u%s)", config.canvasWidth, config.canvasHeight,
-	     canvas->valid() ? "" : ", attach deferred until collection load");
+	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "ready (canvas %ux%u%s)", config.canvasWidth, config.canvasHeight, canvas->valid() ? "" : ", attach deferred until collection load");
 	return true;
 }
 
@@ -124,7 +128,7 @@ void SlDualController::shutdown()
 		m_callbacksRegistered = false;
 	}
 
-	removeDock();
+	removeDocks();
 
 	if (output)
 	{
@@ -191,8 +195,7 @@ void SlDualController::sceneSetActive(const std::string& name)
 			dock->resetEditorState(false);
 	}
 
-	if (dock)
-		dock->refreshScenes();
+	refreshSceneUi();
 }
 
 bool SlDualController::sceneCreate(const std::string& name)
@@ -203,13 +206,15 @@ bool SlDualController::sceneCreate(const std::string& name)
 	{
 		config.activeScene = canvas->activeSceneName();
 
+		if (std::find(config.sceneOrder.begin(), config.sceneOrder.end(), name) == config.sceneOrder.end())
+			config.sceneOrder.push_back(name);
+
 		if (dock)
 			dock->resetEditorState(false);
 		obs_frontend_save();
 	}
 
-	if (dock)
-		dock->refreshScenes();
+	refreshSceneUi();
 	return ok;
 }
 
@@ -225,31 +230,34 @@ void SlDualController::sceneRemoveActive()
 		dock->resetEditorState(false);
 	}
 
+	std::string removed = canvas->activeSceneName();
+
 	if (canvas->removeActiveScene())
 	{
 		config.activeScene = canvas->activeSceneName();
+		config.sceneOrder.erase(std::remove(config.sceneOrder.begin(), config.sceneOrder.end(), removed), config.sceneOrder.end());
 		obs_frontend_save();
 	}
 
 	if (dock)
-	{
 		dock->setPreviewActive(true);
-		dock->refreshScenes();
-	}
+
+	refreshSceneUi();
 }
 
 bool SlDualController::sceneRenameActive(const std::string& name)
 {
+	std::string oldName = canvas ? canvas->activeSceneName() : std::string();
 	bool ok = canvas && canvas->renameActiveScene(name);
 
 	if (ok)
 	{
 		config.activeScene = canvas->activeSceneName();
+		std::replace(config.sceneOrder.begin(), config.sceneOrder.end(), oldName, name);
 		obs_frontend_save();
 	}
 
-	if (dock)
-		dock->refreshScenes();
+	refreshSceneUi();
 	return ok;
 }
 
@@ -293,9 +301,7 @@ void SlDualController::onFrontendEvent(enum obs_frontend_event event)
 	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
 	{
 		ensureCanvas();
-
-		if (dock)
-			dock->refreshScenes();
+		refreshSceneUi();
 		break;
 	}
 	case OBS_FRONTEND_EVENT_EXIT:
@@ -334,17 +340,14 @@ void SlDualController::onCollectionChanging()
 		canvas->detach();
 
 	// unbinds the source list from dying scenes
-	if (dock)
-		dock->refreshScenes();
+	refreshSceneUi();
 }
 
 void SlDualController::onCollectionChanged()
 {
 	// If the new collection carried our settings, the save callback has already applied them to `config` during load.
 	ensureCanvas();
-
-	if (dock)
-		dock->refreshScenes();
+	refreshSceneUi();
 
 	if (m_restartOutputAfterCollectionChange)
 	{
@@ -368,7 +371,7 @@ void SlDualController::onExit()
 		output.reset();
 	}
 
-	removeDock();
+	removeDocks();
 
 	if (canvas)
 	{
@@ -410,10 +413,23 @@ void SlDualController::onSaveLoad(obs_data_t* saveData, bool saving)
 obs_data_t* SlDualController::buildSaveData() const
 {
 	obs_data_t* d = obs_data_create();
-	obs_data_set_int(d, "version", 2);
+	obs_data_set_int(d, "version", 3);
 	obs_data_set_int(d, "canvas_width", config.canvasWidth);
 	obs_data_set_int(d, "canvas_height", config.canvasHeight);
 	obs_data_set_string(d, "active_scene", config.activeScene.c_str());
+
+	obs_data_array_t* order = obs_data_array_create();
+
+	for (const std::string& name : config.sceneOrder)
+	{
+		obs_data_t* entry = obs_data_create();
+		obs_data_set_string(entry, "name", name.c_str());
+		obs_data_array_push_back(order, entry);
+		obs_data_release(entry);
+	}
+
+	obs_data_set_array(d, "scene_order", order);
+	obs_data_array_release(order);
 	obs_data_set_bool(d, "seeded", config.seeded);
 	obs_data_set_bool(d, "follow_program", config.followProgram);
 	obs_data_set_string(d, "fixed_scene", config.fixedScene.c_str());
@@ -454,6 +470,28 @@ void SlDualController::applyLoadedData(obs_data_t* d)
 	config.canvasWidth = (uint32_t)obs_data_get_int(d, "canvas_width");
 	config.canvasHeight = (uint32_t)obs_data_get_int(d, "canvas_height");
 	config.activeScene = obs_data_get_string(d, "active_scene");
+
+	// Absent (pre-v3 saves): keep whatever order is already known.
+	obs_data_array_t* order = obs_data_get_array(d, "scene_order");
+
+	if (order)
+	{
+		config.sceneOrder.clear();
+		size_t n = obs_data_array_count(order);
+
+		for (size_t i = 0; i < n; i++)
+		{
+			obs_data_t* entry = obs_data_array_item(order, i);
+			const char* name = obs_data_get_string(entry, "name");
+
+			if (name && *name)
+				config.sceneOrder.push_back(name);
+			obs_data_release(entry);
+		}
+
+		obs_data_array_release(order);
+	}
+
 	config.seeded = obs_data_get_bool(d, "seeded");
 	config.followProgram = obs_data_get_bool(d, "follow_program");
 	config.fixedScene = obs_data_get_string(d, "fixed_scene");
@@ -510,8 +548,7 @@ void SlDualController::restoreFromCollectionFile()
 				{
 					applyLoadedData(ours);
 					obs_data_release(ours);
-					blog(LOG_INFO, SL_DUAL_LOG_PREFIX "restored settings from collection '%s'",
-					     name);
+					blog(LOG_INFO, SL_DUAL_LOG_PREFIX "restored settings from collection '%s'", name);
 				}
 			}
 
@@ -530,28 +567,68 @@ void SlDualController::restoreFromCollectionFile()
 }
 
 /**
-* Dock
+* Docks
 */
 
-void SlDualController::createDock()
+void SlDualController::createDocks()
 {
 	dock = new SlDualDock(*this);
 
-	if (!obs_frontend_add_dock_by_id(kDockId, "Dual Output", dock))
+	if (!obs_frontend_add_dock_by_id(kPreviewDockId, "Dual Output", dock))
 	{
-		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add dock");
+		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add preview dock");
 		delete dock;
+		dock = nullptr;
+		return;
+	}
+
+	scenesDock = new SlDualScenesDock(*this);
+
+	if (!obs_frontend_add_dock_by_id(kScenesDockId, "Dual Output Scenes", scenesDock))
+	{
+		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add scenes dock");
+		delete scenesDock;
+		scenesDock = nullptr;
+	}
+
+	sourcesDock = new SlDualSourcesDock(*this, dock->preview());
+
+	if (!obs_frontend_add_dock_by_id(kSourcesDockId, "Dual Output Sources", sourcesDock))
+	{
+		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add sources dock");
+		delete sourcesDock;
+		sourcesDock = nullptr;
+	}
+}
+
+void SlDualController::removeDocks()
+{
+	// The frontend deletes each widget on remove; drop the sources dock first, it borrows the preview.
+	if (sourcesDock)
+	{
+		obs_frontend_remove_dock(kSourcesDockId);
+		sourcesDock = nullptr;
+	}
+
+	if (scenesDock)
+	{
+		obs_frontend_remove_dock(kScenesDockId);
+		scenesDock = nullptr;
+	}
+
+	if (dock)
+	{
+		obs_frontend_remove_dock(kPreviewDockId);
 		dock = nullptr;
 	}
 }
 
-void SlDualController::removeDock()
+void SlDualController::refreshSceneUi()
 {
-	if (!dock)
-		return;
+	if (scenesDock)
+		scenesDock->refresh();
 
-	// deletes the widget
-	obs_frontend_remove_dock(kDockId);
-	dock = nullptr;
+	if (sourcesDock)
+		sourcesDock->refreshBinding();
 }
 

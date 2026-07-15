@@ -1,7 +1,7 @@
 #pragma once
 
 // Module-internal.
-// Owns the dual-output state and logic: canvas, stream output, dock, persistence, frontend event handling.
+// Owns the dual-output state and logic: canvas, stream output, docks, persistence, frontend event handling.
 // The SlDualOutput facade creates one of these in initialize() and destroys it in shutdown().
 
 #include "SlDualConfig.hpp"
@@ -15,6 +15,8 @@
 class SlDualCanvas;
 class SlDualStreamOutput;
 class SlDualDock;
+class SlDualScenesDock;
+class SlDualSourcesDock;
 enum class SlDualStreamState;
 
 class SlDualController
@@ -42,13 +44,15 @@ public: // actions, UI thread (dock / editor / settings dialog)
 	void sceneRemoveActive();
 	bool sceneRenameActive(const std::string& name);
 
-public: // state shared with the dock, editor and source list
+public: // state shared with the docks, editor and source list
 	SlDualConfig config;
 	std::unique_ptr<SlDualCanvas> canvas;
 	std::unique_ptr<SlDualStreamOutput> output;
 
 	// owned by the frontend once added
 	SlDualDock* dock = nullptr;
+	SlDualScenesDock* scenesDock = nullptr;
+	SlDualSourcesDock* sourcesDock = nullptr;
 
 public: // frontend events (invoked by the registered callbacks)
 	void onFrontendEvent(enum obs_frontend_event event);
@@ -69,9 +73,12 @@ private: // persistence (scene collection, key "sl-dual-output")
 	void applyLoadedData(obs_data_t* data);
 	void restoreFromCollectionFile();
 
-private: // dock
-	void createDock();
-	void removeDock();
+private: // docks
+	void createDocks();
+	void removeDocks();
+
+	// Refreshes the scenes dock and rebinds the sources dock after any scene set/canvas change.
+	void refreshSceneUi();
 
 private:
 	bool m_callbacksRegistered = false;

@@ -8,6 +8,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 
+#include <utility>
 #include <vector>
 
 static const char* kSceneSignals[] = {"item_add",     "item_remove", "reorder",     "refresh",
@@ -47,10 +48,8 @@ SlDualSourceList::SlDualSourceList(SlDualController& controller, SlDualPreview* 
 	setSelectionMode(QAbstractItemView::ExtendedSelection);
 	setDragDropMode(QAbstractItemView::InternalMove);
 	setDefaultDropAction(Qt::MoveAction);
-	setMaximumHeight(140);
 
-	QObject::connect(this, &QListWidget::itemChanged, this,
-			 [this](QListWidgetItem* item) { onItemChanged(item); });
+	QObject::connect(this, &QListWidget::itemChanged, this, [this](QListWidgetItem* item) { onItemChanged(item); });
 	QObject::connect(this, &QListWidget::itemSelectionChanged, this, [this]() { onSelectionChanged(); });
 }
 
@@ -171,6 +170,45 @@ void SlDualSourceList::onSelectionChanged()
 	m_updating = false;
 }
 
+void SlDualSourceList::removeSelected()
+{
+	if (m_preview)
+		m_preview->editor().removeSelectedItemsPublic(this);
+}
+
+void SlDualSourceList::openSelectedProperties()
+{
+	obs_sceneitem_t* sceneItem = sceneItemForRow(currentRow());
+
+	if (!sceneItem || SlDualCanvas::isProgramMirrorItem(sceneItem))
+		return;
+
+	obs_source_t* source = obs_sceneitem_get_source(sceneItem);
+
+	if (source && obs_source_configurable(source))
+		obs_frontend_open_source_properties(source);
+}
+
+void SlDualSourceList::moveSelected(int direction)
+{
+	int row = currentRow();
+	int target = row + direction;
+
+	if (row < 0 || target < 0 || target >= count() || !m_preview)
+		return;
+
+	// Rows are topmost-first; scene order is bottom to top.
+	std::vector<int64_t> order;
+
+	for (int i = count() - 1; i >= 0; i--)
+		order.push_back((int64_t)item(i)->data(Qt::UserRole).toLongLong());
+
+	size_t a = (size_t)(count() - 1 - row);
+	size_t b = (size_t)(count() - 1 - target);
+	std::swap(order[a], order[b]);
+	m_preview->editor().applyOrderUndoable(order);
+}
+
 void SlDualSourceList::contextMenuEvent(QContextMenuEvent* event)
 {
 	QListWidgetItem* listItem = itemAt(event->pos());
@@ -207,6 +245,7 @@ void SlDualSourceList::keyPressEvent(QKeyEvent* event)
 		event->accept();
 		return;
 	}
+
 	QListWidget::keyPressEvent(event);
 }
 
@@ -230,6 +269,7 @@ void SlDualSourceList::mouseDoubleClickEvent(QMouseEvent* event)
 			}
 		}
 	}
+
 	QListWidget::mouseDoubleClickEvent(event);
 }
 

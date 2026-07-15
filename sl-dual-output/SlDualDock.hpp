@@ -1,7 +1,8 @@
 #pragma once
 
 // Module-internal.
-// Dock content widget: interactive canvas preview, scene management row, settings, start/stop.
+// Preview dock content: interactive canvas preview with stream status, settings and start/stop.
+// Scene and source management live in their own docks (SlDualScenesDock / SlDualSourcesDock).
 
 #include "SlDualController.hpp"
 #include "SlDualStreamOutput.hpp"
@@ -11,12 +12,9 @@
 #include <memory>
 #include <string>
 
-class QComboBox;
 class QLabel;
 class QPushButton;
-class QToolButton;
 class SlDualEditor;
-class SlDualSourceList;
 
 class SlDualPreview : public QWidget
 {
@@ -68,29 +66,20 @@ class SlDualDock : public QWidget
 public:
 	explicit SlDualDock(SlDualController& controller);
 
-	void refreshScenes();
 	void setStreamState(SlDualStreamState state, const std::string& msg);
 	void setPreviewActive(bool active);
 	void resetEditorState(bool clearUndo);
 
+	SlDualPreview* preview() const { return m_preview; }
+
 private:
-	void onSceneComboChanged(int index);
-	void onAddScene();
-	void onRemoveScene();
-	void onRenameScene();
 	void onStartStopClicked();
 	void openSettings();
 
 	SlDualController& m_controller;
 	SlDualPreview* m_preview = nullptr;
-	SlDualSourceList* m_sourceList = nullptr;
-	QComboBox* m_sceneCombo = nullptr;
-	QToolButton* m_addSceneButton = nullptr;
-	QToolButton* m_removeSceneButton = nullptr;
-	QToolButton* m_renameSceneButton = nullptr;
 	QLabel* m_statusLabel = nullptr;
 	QPushButton* m_settingsButton = nullptr;
 	QPushButton* m_startStopButton = nullptr;
 	SlDualStreamState m_state = SlDualStreamState::Idle;
-	bool m_updatingCombo = false;
 };
