@@ -1995,7 +1995,7 @@ void SlDualEditor::mouseDoubleClick(const QPointF& pos)
 
 	obs_sceneitem_t* hit = getItemAtPos(cpos, true);
 
-	if (!hit || SlDualCanvas::isProgramMirrorItem(hit))
+	if (!hit)
 		return;
 
 	obs_source_t* source = obs_sceneitem_get_source(hit);
@@ -2196,12 +2196,11 @@ void SlDualEditor::contextMenu(const QPointF& pos, QWidget* parent)
 void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* parent)
 {
 	obs_source_t* source = obs_sceneitem_get_source(item);
-	bool mirror = SlDualCanvas::isProgramMirrorItem(item);
 
-	if (!mirror && source && obs_source_configurable(source))
+	if (source && obs_source_configurable(source))
 		menu.addAction("Properties", [source]() { obs_frontend_open_source_properties(source); });
 
-	if (!mirror && source)
+	if (source)
 		menu.addAction("Filters", [source]() { obs_frontend_open_source_filters(source); });
 
 	if (!menu.isEmpty())
@@ -2341,20 +2340,18 @@ void SlDualEditor::showAddSourceMenu(const QPoint& globalPos, QWidget* parent)
 	menu.exec(globalPos);
 }
 
+void SlDualEditor::showSceneMenu(const QPoint& globalPos, QWidget* parent)
+{
+	if (!scene())
+		return;
+
+	QMenu menu(parent);
+	buildSceneMenu(menu, parent);
+	menu.exec(globalPos);
+}
+
 void SlDualEditor::buildAddSourceMenu(QMenu& menu)
 {
-	QAction* mirrorAction = menu.addAction("Program Mirror", [this]() { addProgramMirror(); });
-	SlDualCanvas* cv = m_controller.canvas.get();
-
-	if (cv && cv->activeSceneHasMirror())
-	{
-		// A second mirror stacks invisibly behind the first; disallow.
-		mirrorAction->setText("Program Mirror (already in scene)");
-		mirrorAction->setEnabled(false);
-	}
-
-	menu.addSeparator();
-
 	QMenu* newMenu = menu.addMenu("New");
 	const char* typeId = nullptr;
 
@@ -2428,19 +2425,6 @@ void SlDualEditor::placeNewItem(obs_sceneitem_t* item)
 
 	obs_scene_t* s = obs_sceneitem_get_scene(item);
 	obs_scene_enum_items(s, select_one, item);
-}
-
-void SlDualEditor::addProgramMirror()
-{
-	SlDualCanvas* canvas = m_controller.canvas.get();
-
-	if (!canvas)
-		return;
-
-	obs_sceneitem_t* item = canvas->addProgramMirrorItem();
-
-	if (item)
-		recordItemAdd(item, "Add Program Mirror");
 }
 
 void SlDualEditor::addNewSource(const std::string& typeId)

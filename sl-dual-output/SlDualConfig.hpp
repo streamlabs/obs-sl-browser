@@ -24,10 +24,6 @@ struct SlDualConfig
 	// first scene was seeded once; never seed again
 	bool seeded = false;
 
-	// Legacy (pre-editor) fields, used only for the one-time seed.
-	bool followProgram = true;
-	std::string fixedScene;
-
 	std::string server;
 	std::string key;
 

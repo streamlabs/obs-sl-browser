@@ -281,13 +281,6 @@ void SlDualController::onFrontendEvent(enum obs_frontend_event event)
 			stopStream();
 		break;
 	}
-	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
-	{
-		// retarget program-mirror items
-		if (canvas)
-			canvas->onProgramSceneChanged();
-		break;
-	}
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING:
 	{
 		onCollectionChanging();
@@ -431,8 +424,6 @@ obs_data_t* SlDualController::buildSaveData() const
 	obs_data_set_array(d, "scene_order", order);
 	obs_data_array_release(order);
 	obs_data_set_bool(d, "seeded", config.seeded);
-	obs_data_set_bool(d, "follow_program", config.followProgram);
-	obs_data_set_string(d, "fixed_scene", config.fixedScene.c_str());
 	obs_data_set_string(d, "server", config.server.c_str());
 	obs_data_set_string(d, "key", config.key.c_str());
 	obs_data_set_bool(d, "use_auth", config.useAuth);
@@ -454,8 +445,6 @@ void SlDualController::applyLoadedData(obs_data_t* d)
 	obs_data_set_default_int(d, "canvas_height", config.canvasHeight);
 	obs_data_set_default_string(d, "active_scene", config.activeScene.c_str());
 	obs_data_set_default_bool(d, "seeded", config.seeded);
-	obs_data_set_default_bool(d, "follow_program", config.followProgram);
-	obs_data_set_default_string(d, "fixed_scene", config.fixedScene.c_str());
 	obs_data_set_default_string(d, "server", config.server.c_str());
 	obs_data_set_default_string(d, "key", config.key.c_str());
 	obs_data_set_default_bool(d, "use_auth", config.useAuth);
@@ -493,8 +482,6 @@ void SlDualController::applyLoadedData(obs_data_t* d)
 	}
 
 	config.seeded = obs_data_get_bool(d, "seeded");
-	config.followProgram = obs_data_get_bool(d, "follow_program");
-	config.fixedScene = obs_data_get_string(d, "fixed_scene");
 	config.server = obs_data_get_string(d, "server");
 	config.key = obs_data_get_string(d, "key");
 	config.useAuth = obs_data_get_bool(d, "use_auth");

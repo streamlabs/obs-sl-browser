@@ -53,16 +53,8 @@ public:
 	bool removeActiveScene();
 	bool renameActiveScene(const std::string& newName);
 
-	// Program mirror items: scene items tagged to always show the current program scene.
-	// Tag lives in item private settings and persists.
-	void onProgramSceneChanged();
-
-	// into the active scene, fill transform
-	obs_sceneitem_t* addProgramMirrorItem();
-	static bool isProgramMirrorItem(obs_sceneitem_t* item);
-	static void markProgramMirrorItem(obs_sceneitem_t* item);
+	// Scale-to-fill, centered (the editor's Fill Canvas preset).
 	void applyFillTransform(obs_sceneitem_t* item) const;
-	bool activeSceneHasMirror() const;
 
 	// Logs and repairs any divergence between the rendered channel and the scene the editor/list operate on.
 	// UI thread.
@@ -81,8 +73,6 @@ private:
 	obs_scene_t* findSceneByName(const std::string& name) const;
 	void setChannelToActive();
 	void deselectAllInActive();
-	void refreshMirrorItemsInScene(obs_scene_t* scene, obs_source_t* program);
-	void refillMirrorItems();
 
 	obs_canvas_t* m_canvas = nullptr;
 

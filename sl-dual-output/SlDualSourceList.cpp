@@ -20,7 +20,6 @@ struct RowInfo
 	QString name;
 	bool visible;
 	bool selected;
-	bool mirror;
 };
 
 static bool collectRowsProc(obs_scene_t*, obs_sceneitem_t* item, void* param)
@@ -32,8 +31,7 @@ static bool collectRowsProc(obs_scene_t*, obs_sceneitem_t* item, void* param)
 
 	RowInfo row;
 	row.id = obs_sceneitem_get_id(item);
-	row.mirror = SlDualCanvas::isProgramMirrorItem(item);
-	row.name = row.mirror ? QString("Program Mirror") : QString::fromUtf8(name ? name : "(unnamed)");
+	row.name = QString::fromUtf8(name ? name : "(unnamed)");
 	row.visible = obs_sceneitem_visible(item);
 	row.selected = obs_sceneitem_selected(item);
 	rows->push_back(row);
@@ -180,7 +178,7 @@ void SlDualSourceList::openSelectedProperties()
 {
 	obs_sceneitem_t* sceneItem = sceneItemForRow(currentRow());
 
-	if (!sceneItem || SlDualCanvas::isProgramMirrorItem(sceneItem))
+	if (!sceneItem)
 		return;
 
 	obs_source_t* source = obs_sceneitem_get_source(sceneItem);
@@ -215,7 +213,11 @@ void SlDualSourceList::contextMenuEvent(QContextMenuEvent* event)
 
 	if (!listItem)
 	{
-		event->ignore();
+		// Empty space: same menu as empty-space right-click on the preview.
+		if (m_preview)
+			m_preview->editor().showSceneMenu(event->globalPos(), this);
+
+		event->accept();
 		return;
 	}
 
@@ -257,7 +259,7 @@ void SlDualSourceList::mouseDoubleClickEvent(QMouseEvent* event)
 	{
 		obs_sceneitem_t* sceneItem = sceneItemForRow(row(listItem));
 
-		if (sceneItem && !SlDualCanvas::isProgramMirrorItem(sceneItem))
+		if (sceneItem)
 		{
 			obs_source_t* source = obs_sceneitem_get_source(sceneItem);
 

@@ -7,7 +7,6 @@
 #include <cstring>
 
 static const char* kCanvasName = "Streamlabs Dual Output";
-static const char* kMirrorFlag = "sl_dual_program_mirror";
 static const char* kDefaultSceneName = "Vertical";
 
 static uint32_t alignedWidth(uint32_t w)
@@ -157,36 +156,11 @@ void SlDualCanvas::ensureScenes(const SlDualConfig& config)
 		if (!createScene(kDefaultSceneName))
 			return;
 
-		// Content seed happens exactly once, ever.
-		// If a later load finds no scenes (e.g. a save was lost), the user gets an empty scene, never surprise content over their work.
+		// First run creates an empty default scene; finding no scenes on a later load means a restore went missing.
 		if (!config.seeded)
-		{
-			if (config.followProgram)
-			{
-				addProgramMirrorItem();
-			}
-			else if (!config.fixedScene.empty())
-			{
-				obs_source_t* src = obs_get_source_by_name(config.fixedScene.c_str());
-
-				if (src && obs_source_is_scene(src))
-				{
-					obs_sceneitem_t* item = obs_scene_add(m_activeScene, src);
-
-					if (item)
-						applyFillTransform(item);
-				}
-
-				if (src)
-					obs_source_release(src);
-			}
-
 			blog(LOG_INFO, SL_DUAL_LOG_PREFIX "seeded scene '%s'", kDefaultSceneName);
-		}
 		else
-		{
 			blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "no canvas scenes restored from the collection; created empty scene '%s'", kDefaultSceneName);
-		}
 
 		return;
 	}
@@ -255,7 +229,6 @@ bool SlDualCanvas::resetVideo(uint32_t width, uint32_t height)
 
 	m_width = w;
 	m_height = h;
-	refillMirrorItems();
 	return true;
 }
 
@@ -423,23 +396,8 @@ bool SlDualCanvas::renameActiveScene(const std::string& newName)
 }
 
 /**
-* Program mirror items
+* Item transform
 */
-
-void SlDualCanvas::markProgramMirrorItem(obs_sceneitem_t* item)
-{
-	obs_data_t* ps = obs_sceneitem_get_private_settings(item);
-	obs_data_set_bool(ps, kMirrorFlag, true);
-	obs_data_release(ps);
-}
-
-bool SlDualCanvas::isProgramMirrorItem(obs_sceneitem_t* item)
-{
-	obs_data_t* ps = obs_sceneitem_get_private_settings(item);
-	bool mirror = obs_data_get_bool(ps, kMirrorFlag);
-	obs_data_release(ps);
-	return mirror;
-}
 
 void SlDualCanvas::applyFillTransform(obs_sceneitem_t* item) const
 {
@@ -461,134 +419,6 @@ void SlDualCanvas::applyFillTransform(obs_sceneitem_t* item) const
 	obs_sceneitem_set_info2(item, &info);
 }
 
-obs_sceneitem_t* SlDualCanvas::addProgramMirrorItem()
-{
-	if (!m_activeScene)
-		return nullptr;
-
-	obs_source_t* program = obs_frontend_get_current_scene();
-
-	if (!program)
-		return nullptr;
-
-	obs_sceneitem_t* item = obs_scene_add(m_activeScene, program);
-	obs_source_release(program);
-
-	if (!item)
-		return nullptr;
-
-	markProgramMirrorItem(item);
-	applyFillTransform(item);
-	return item;
-}
-
-struct MirrorCollect
-{
-	// addref'd + order index
-	std::vector<std::pair<obs_sceneitem_t*, int>> flagged;
-	int index = 0;
-};
-
-static bool collectMirrorProc(obs_scene_t*, obs_sceneitem_t* item, void* param)
-{
-	auto* ctx = static_cast<MirrorCollect*>(param);
-
-	if (SlDualCanvas::isProgramMirrorItem(item))
-	{
-		obs_sceneitem_addref(item);
-		ctx->flagged.emplace_back(item, ctx->index);
-	}
-
-	ctx->index++;
-	return true;
-}
-
-void SlDualCanvas::refreshMirrorItemsInScene(obs_scene_t* scene, obs_source_t* program)
-{
-	MirrorCollect ctx;
-	obs_scene_enum_items(scene, collectMirrorProc, &ctx);
-
-	for (auto& entry : ctx.flagged)
-	{
-		obs_sceneitem_t* item = entry.first;
-
-		if (obs_sceneitem_get_source(item) == program)
-		{
-			obs_sceneitem_release(item);
-			continue;
-		}
-
-		struct obs_transform_info info;
-		struct obs_sceneitem_crop crop;
-		obs_sceneitem_get_info2(item, &info);
-		obs_sceneitem_get_crop(item, &crop);
-		bool visible = obs_sceneitem_visible(item);
-		bool locked = obs_sceneitem_locked(item);
-		bool selected = obs_sceneitem_selected(item);
-
-		obs_sceneitem_remove(item);
-		obs_sceneitem_release(item);
-
-		obs_sceneitem_t* replacement = obs_scene_add(scene, program);
-
-		if (!replacement)
-			continue;
-
-		obs_sceneitem_defer_update_begin(replacement);
-		obs_sceneitem_set_info2(replacement, &info);
-		obs_sceneitem_set_crop(replacement, &crop);
-		obs_sceneitem_set_visible(replacement, visible);
-		obs_sceneitem_set_locked(replacement, locked);
-		obs_sceneitem_defer_update_end(replacement);
-		markProgramMirrorItem(replacement);
-		obs_sceneitem_set_order_position(replacement, entry.second);
-
-		if (selected)
-			obs_sceneitem_select(replacement, true);
-	}
-}
-
-void SlDualCanvas::onProgramSceneChanged()
-{
-	if (!m_canvas)
-		return;
-
-	obs_source_t* program = obs_frontend_get_current_scene();
-
-	if (!program)
-		return;
-
-	for (obs_source_t* src : collectScenes(m_canvas))
-	{
-		if (obs_scene_t* scene = obs_scene_from_source(src))
-			refreshMirrorItemsInScene(scene, program);
-	}
-
-	obs_source_release(program);
-}
-
-bool SlDualCanvas::activeSceneHasMirror() const
-{
-	if (!m_activeScene)
-		return false;
-
-	bool found = false;
-	obs_scene_enum_items(
-		m_activeScene,
-		[](obs_scene_t*, obs_sceneitem_t* item, void* param)
-		{
-			if (SlDualCanvas::isProgramMirrorItem(item))
-			{
-				*static_cast<bool*>(param) = true;
-				return false;
-			}
-
-			return true;
-		},
-		&found);
-	return found;
-}
-
 void SlDualCanvas::verifyChannelIntegrity()
 {
 	if (!m_canvas || !m_activeScene)
@@ -605,31 +435,6 @@ void SlDualCanvas::verifyChannelIntegrity()
 
 	if (channel)
 		obs_source_release(channel);
-}
-
-void SlDualCanvas::refillMirrorItems()
-{
-	for (obs_source_t* src : collectScenes(m_canvas))
-	{
-		obs_scene_t* scene = obs_scene_from_source(src);
-
-		if (!scene)
-			continue;
-
-		std::vector<obs_sceneitem_t*> flagged;
-		obs_scene_enum_items(
-			scene,
-			[](obs_scene_t*, obs_sceneitem_t* item, void* param)
-			{
-				if (SlDualCanvas::isProgramMirrorItem(item))
-					static_cast<std::vector<obs_sceneitem_t*>*>(param)->push_back(item);
-				return true;
-			},
-			&flagged);
-
-		for (obs_sceneitem_t* item : flagged)
-			applyFillTransform(item);
-	}
 }
 
 /**
@@ -665,7 +470,7 @@ void SlDualCanvas::renderPreview(uint32_t cx, uint32_t cy)
 	obs_canvas_render(m_canvas);
 
 	// 1px outline at the canvas bounds so they read on any theme.
-	// one display px in canvas units
+	// One display px in canvas units.
 	float t = scale > 0.0f ? 1.0f / scale : 1.0f;
 	struct vec4 border;
 	vec4_set(&border, 0.35f, 0.35f, 0.35f, 1.0f);

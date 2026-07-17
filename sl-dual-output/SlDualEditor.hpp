@@ -75,6 +75,9 @@ public:
 
 	// "+" in the sources dock: the scene menu's Add Source contents as a standalone menu.
 	void showAddSourceMenu(const QPoint& globalPos, QWidget* parent);
+
+	// Empty-space right-click in the sources dock: same menu as empty-space right-click on the preview.
+	void showSceneMenu(const QPoint& globalPos, QWidget* parent);
 	void setItemVisibleUndoable(obs_sceneitem_t* item, bool visible);
 	void applyOrderUndoable(const std::vector<int64_t>& newOrderBottomToTop);
 	void removeSelectedItemsPublic(QWidget* parent) { removeSelectedItems(parent); }
@@ -137,7 +140,6 @@ private:
 	void flagUndoable(obs_sceneitem_t* item, bool isVisibility, bool value);
 	void addNewSource(const std::string& typeId);
 	void addExistingSource(const std::string& name);
-	void addProgramMirror();
 	void placeNewItem(obs_sceneitem_t* item);
 	void removeSelectedItems(QWidget* parent);
 	void nudgeSelected(float dx, float dy);
