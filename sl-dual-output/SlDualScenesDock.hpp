@@ -11,9 +11,10 @@
 #include <string>
 #include <vector>
 
+class QAction;
 class QListWidget;
 class QListWidgetItem;
-class QToolButton;
+class QToolBar;
 
 class SlDualScenesDock : public QWidget
 {
@@ -37,9 +38,10 @@ private:
 
 	SlDualController& m_controller;
 	QListWidget* m_list = nullptr;
-	QToolButton* m_addButton = nullptr;
-	QToolButton* m_removeButton = nullptr;
-	QToolButton* m_upButton = nullptr;
-	QToolButton* m_downButton = nullptr;
+	QToolBar* m_toolbar = nullptr;
+	QAction* m_addAction = nullptr;
+	QAction* m_removeAction = nullptr;
+	QAction* m_upAction = nullptr;
+	QAction* m_downAction = nullptr;
 	bool m_updating = false;
 };

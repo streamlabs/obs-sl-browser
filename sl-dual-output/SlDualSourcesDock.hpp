@@ -7,7 +7,8 @@
 
 #include <QWidget>
 
-class QToolButton;
+class QAction;
+class QToolBar;
 class SlDualPreview;
 class SlDualSourceList;
 
@@ -26,9 +27,10 @@ private:
 	SlDualController& m_controller;
 	SlDualPreview* m_preview = nullptr;
 	SlDualSourceList* m_list = nullptr;
-	QToolButton* m_addButton = nullptr;
-	QToolButton* m_removeButton = nullptr;
-	QToolButton* m_propertiesButton = nullptr;
-	QToolButton* m_upButton = nullptr;
-	QToolButton* m_downButton = nullptr;
+	QToolBar* m_toolbar = nullptr;
+	QAction* m_addAction = nullptr;
+	QAction* m_removeAction = nullptr;
+	QAction* m_propertiesAction = nullptr;
+	QAction* m_upAction = nullptr;
+	QAction* m_downAction = nullptr;
 };

@@ -1,13 +1,12 @@
 #include "SlDualScenesDock.hpp"
 #include "SlDualCanvas.hpp"
+#include "SlDualToolbar.hpp"
 
 #include <QAbstractItemModel>
-#include <QHBoxLayout>
 #include <QInputDialog>
 #include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -21,44 +20,33 @@ SlDualScenesDock::SlDualScenesDock(SlDualController& controller) : QWidget(nullp
 	m_list->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
 	m_list->setContextMenuPolicy(Qt::CustomContextMenu);
 
-	m_addButton = new QToolButton(this);
-	m_addButton->setText("+");
-	m_addButton->setToolTip("Add scene");
+	// Same construction as the main dock toolbars: OBS's own icons, theme classes and OBSDock toolbar chrome.
+	m_toolbar = new QToolBar(this);
+	m_toolbar->setIconSize(QSize(16, 16));
+	m_toolbar->setFloatable(false);
+	m_toolbar->setMovable(false);
 
-	m_removeButton = new QToolButton(this);
-	m_removeButton->setText("-");
-	m_removeButton->setToolTip("Remove scene");
-
-	m_upButton = new QToolButton(this);
-	m_upButton->setText(QString(QChar(0x25B2)));
-	m_upButton->setToolTip("Move scene up");
-
-	m_downButton = new QToolButton(this);
-	m_downButton->setText(QString(QChar(0x25BC)));
-	m_downButton->setToolTip("Move scene down");
-
-	auto* toolbar = new QHBoxLayout();
-	toolbar->setContentsMargins(0, 0, 0, 0);
-	toolbar->addWidget(m_addButton);
-	toolbar->addWidget(m_removeButton);
-	toolbar->addStretch(1);
-	toolbar->addWidget(m_upButton);
-	toolbar->addWidget(m_downButton);
+	m_addAction = slDualToolAction(m_toolbar, ":/res/images/plus.svg", "icon-plus", "Add", "Add scene");
+	m_removeAction = slDualToolAction(m_toolbar, ":/res/images/minus.svg", "icon-trash", "Remove", "Remove scene");
+	m_toolbar->addSeparator();
+	m_upAction = slDualToolAction(m_toolbar, ":/res/images/up.svg", "icon-up", "Move Up", "Move scene up");
+	m_downAction = slDualToolAction(m_toolbar, ":/res/images/down.svg", "icon-down", "Move Down", "Move scene down");
+	slDualApplyThemeProperties(m_toolbar);
 
 	auto* layout = new QVBoxLayout(this);
-	layout->setContentsMargins(4, 4, 4, 4);
-	layout->setSpacing(4);
+	layout->setContentsMargins(0, 0, 0, 0);
+	layout->setSpacing(0);
 	layout->addWidget(m_list, 1);
-	layout->addLayout(toolbar);
+	layout->addWidget(m_toolbar);
 
 	QObject::connect(m_list, &QListWidget::itemSelectionChanged, this, [this]() { onSelectionChanged(); });
 	QObject::connect(m_list, &QListWidget::itemChanged, this, [this](QListWidgetItem* item) { onItemEdited(item); });
 	QObject::connect(m_list, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) { showContextMenu(pos); });
 	QObject::connect(m_list->model(), &QAbstractItemModel::rowsMoved, this, [this]() { onOrderDropped(); });
-	QObject::connect(m_addButton, &QToolButton::clicked, this, [this]() { onAdd(); });
-	QObject::connect(m_removeButton, &QToolButton::clicked, this, [this]() { onRemove(); });
-	QObject::connect(m_upButton, &QToolButton::clicked, this, [this]() { onMove(-1); });
-	QObject::connect(m_downButton, &QToolButton::clicked, this, [this]() { onMove(1); });
+	QObject::connect(m_addAction, &QAction::triggered, this, [this]() { onAdd(); });
+	QObject::connect(m_removeAction, &QAction::triggered, this, [this]() { onRemove(); });
+	QObject::connect(m_upAction, &QAction::triggered, this, [this]() { onMove(-1); });
+	QObject::connect(m_downAction, &QAction::triggered, this, [this]() { onMove(1); });
 
 	refresh();
 }
@@ -109,10 +97,10 @@ void SlDualScenesDock::refresh()
 	}
 
 	m_list->setEnabled(haveCanvas);
-	m_addButton->setEnabled(haveCanvas);
-	m_removeButton->setEnabled(m_list->count() > 1);
-	m_upButton->setEnabled(m_list->count() > 1);
-	m_downButton->setEnabled(m_list->count() > 1);
+	m_addAction->setEnabled(haveCanvas);
+	m_removeAction->setEnabled(m_list->count() > 1);
+	m_upAction->setEnabled(m_list->count() > 1);
+	m_downAction->setEnabled(m_list->count() > 1);
 	m_updating = false;
 }
 
