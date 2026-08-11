@@ -60,7 +60,20 @@ void SlDualPreview::createDisplay()
 	info.format = GS_BGRA;
 	info.zsformat = GS_ZS_NONE;
 	info.window.hwnd = (HWND)winId();
-	m_display = obs_display_create(&info, 0xFF1A1413);
+
+	// Default bg color
+	uint32_t bgColor = 0xFF1A1413;
+	auto* main = static_cast<QWidget*>(obs_frontend_get_main_window());
+	QWidget* mainPreview = main ? main->findChild<QWidget*>("preview") : nullptr;
+	QVariant themed = mainPreview ? mainPreview->property("displayBackgroundColor") : QVariant();
+
+	if (themed.isValid() && themed.value<QColor>().isValid())
+	{
+		QColor bg = themed.value<QColor>();
+		bgColor = ((uint32_t)bg.alpha() << 24) | ((uint32_t)bg.blue() << 16) | ((uint32_t)bg.green() << 8) | (uint32_t)bg.red();
+	}
+
+	m_display = obs_display_create(&info, bgColor);
 	updateCallbackRegistration();
 }
 
