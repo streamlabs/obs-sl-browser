@@ -61,6 +61,10 @@ if(SL_DUAL_ENABLED)
     "${CMAKE_CURRENT_LIST_DIR}/SlDualSourcesDock.hpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualSourcesDock.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualToolbar.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualTransitions.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualTransitions.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualTransitionsDock.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/SlDualTransitionsDock.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualSettingsDialog.hpp"
     "${CMAKE_CURRENT_LIST_DIR}/SlDualSettingsDialog.cpp"
   )

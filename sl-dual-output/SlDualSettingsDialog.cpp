@@ -22,10 +22,11 @@ struct SizePreset
 	uint32_t height;
 };
 
+// Strict 9:16 only (the aspect vertical platforms deliver); 1080/720/540 are the standard encode rungs, all mod-4 safe.
 static const SizePreset kPresets[] = {
 	{"1080 x 1920 (9:16 vertical)", 1080, 1920},
 	{"720 x 1280 (9:16 vertical)", 720, 1280},
-	{"1080 x 1080 (1:1 square)", 1080, 1080},
+	{"540 x 960 (9:16 vertical)", 540, 960},
 };
 
 static const int kCustomIndex = 3;
@@ -34,7 +35,7 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	: QDialog(parent),
 	  m_base(current)
 {
-	setWindowTitle("Dual Output Settings");
+	setWindowTitle("Vertical Settings");
 	setMinimumWidth(420);
 
 	auto* form = new QFormLayout();
@@ -150,7 +151,7 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 		m_sizePreset->setEnabled(false);
 		m_width->setEnabled(false);
 		m_height->setEnabled(false);
-		auto* note = new QLabel("Canvas size is locked while the dual output stream is live.", this);
+		auto* note = new QLabel("Canvas size is locked while the vertical stream is live.", this);
 		note->setWordWrap(true);
 		layout->addWidget(note);
 	}

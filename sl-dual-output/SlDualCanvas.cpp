@@ -6,8 +6,9 @@
 #include <algorithm>
 #include <cstring>
 
-static const char* kCanvasName = "Streamlabs Dual Output";
-static const char* kDefaultSceneName = "Vertical";
+static const char* kCanvasName = "Streamlabs Vertical";
+static const char* kLegacyCanvasName = "Streamlabs Dual Output";
+static const char* kDefaultSceneName = "Scene";
 
 static uint32_t alignedWidth(uint32_t w)
 {
@@ -59,17 +60,35 @@ obs_canvas_t* SlDualCanvas::findExistingByName() const
 	obs_frontend_get_canvases(&list);
 
 	obs_canvas_t* found = nullptr;
+	obs_canvas_t* legacy = nullptr;
 
 	for (size_t i = 0; i < list.canvases.num; i++)
 	{
 		obs_canvas_t* c = list.canvases.array[i];
 		const char* name = obs_canvas_get_name(c);
 
-		if (!found && name && strcmp(name, kCanvasName) == 0)
+		if (!name)
+			continue;
+
+		if (!found && strcmp(name, kCanvasName) == 0)
 			found = obs_canvas_get_ref(c);
+
+		if (!legacy && strcmp(name, kLegacyCanvasName) == 0)
+			legacy = obs_canvas_get_ref(c);
 	}
 
 	obs_frontend_canvas_list_free(&list);
+
+	if (!found && legacy)
+	{
+		// Persisted by a build that used the old name; adopt and rename once (UUID stays stable).
+		obs_canvas_set_name(legacy, kCanvasName);
+		blog(LOG_INFO, SL_DUAL_LOG_PREFIX "renamed legacy canvas '%s' to '%s'", kLegacyCanvasName, kCanvasName);
+		return legacy;
+	}
+
+	if (legacy)
+		obs_canvas_release(legacy);
 	return found;
 }
 
@@ -186,6 +205,12 @@ void SlDualCanvas::detach()
 		m_activeScene = nullptr;
 	}
 
+	if (m_transition)
+	{
+		obs_source_release(m_transition);
+		m_transition = nullptr;
+	}
+
 	if (!m_canvas)
 		return;
 
@@ -229,6 +254,9 @@ bool SlDualCanvas::resetVideo(uint32_t width, uint32_t height)
 
 	m_width = w;
 	m_height = h;
+
+	if (m_transition)
+		obs_transition_set_size(m_transition, m_width, m_height);
 	return true;
 }
 
@@ -282,8 +310,76 @@ obs_scene_t* SlDualCanvas::findSceneByName(const std::string& name) const
 
 void SlDualCanvas::setChannelToActive()
 {
-	if (m_canvas)
-		obs_canvas_set_channel(m_canvas, 0, m_activeScene ? obs_scene_get_source(m_activeScene) : nullptr);
+	if (!m_canvas)
+		return;
+
+	obs_source_t* active = m_activeScene ? obs_scene_get_source(m_activeScene) : nullptr;
+
+	if (m_transition)
+	{
+		// Hard cut; animated switches go through transitionToActive().
+		obs_transition_set(m_transition, active);
+		obs_canvas_set_channel(m_canvas, 0, m_transition);
+	}
+	else
+		obs_canvas_set_channel(m_canvas, 0, active);
+}
+
+void SlDualCanvas::transitionToActive(obs_source_t* previous)
+{
+	if (!m_canvas)
+		return;
+
+	obs_source_t* active = m_activeScene ? obs_scene_get_source(m_activeScene) : nullptr;
+
+	if (!m_transition || !active)
+	{
+		setChannelToActive();
+		return;
+	}
+
+	// Keep the A side coherent when the channel was last set outside a transition (adopt, integrity repair).
+	obs_source_t* sourceA = obs_transition_get_source(m_transition, OBS_TRANSITION_SOURCE_A);
+
+	if (previous && sourceA != previous)
+		obs_transition_set(m_transition, previous);
+
+	if (sourceA)
+		obs_source_release(sourceA);
+
+	obs_transition_start(m_transition, OBS_TRANSITION_MODE_AUTO, m_transitionDurationMs, active);
+}
+
+void SlDualCanvas::setTransition(obs_source_t* transition)
+{
+	if (transition == m_transition)
+	{
+		setChannelToActive();
+		return;
+	}
+
+	obs_source_t* old = m_transition;
+	m_transition = transition ? obs_source_get_ref(transition) : nullptr;
+
+	if (m_transition)
+	{
+		obs_transition_set_size(m_transition, m_width, m_height);
+
+		// Same live swap the main dock's SetTransition does; plain set when nothing was showing yet or a transition is running.
+		if (old && m_canvas && !obs_transition_is_active(old))
+		{
+			obs_transition_swap_begin(m_transition, old);
+			obs_canvas_set_channel(m_canvas, 0, m_transition);
+			obs_transition_swap_end(m_transition, old);
+		}
+		else
+			setChannelToActive();
+	}
+	else
+		setChannelToActive();
+
+	if (old)
+		obs_source_release(old);
 }
 
 void SlDualCanvas::deselectAllInActive()
@@ -319,10 +415,12 @@ bool SlDualCanvas::setActiveScene(const std::string& name)
 
 	deselectAllInActive();
 
+	obs_source_t* previous = m_activeScene ? obs_scene_get_source(m_activeScene) : nullptr;
+
 	if (m_activeScene)
 		obs_scene_release(m_activeScene);
 	m_activeScene = scene;
-	setChannelToActive();
+	transitionToActive(previous);
 	return true;
 }
 
@@ -368,7 +466,10 @@ bool SlDualCanvas::removeActiveScene()
 
 	obs_scene_t* dying = m_activeScene;
 	m_activeScene = nullptr;
-	obs_canvas_set_channel(m_canvas, 0, nullptr);
+
+	// Without a transition the channel would render the dying scene; with one, the transition holds its own ref and fades it out.
+	if (!m_transition)
+		obs_canvas_set_channel(m_canvas, 0, nullptr);
 
 	obs_canvas_scene_remove(dying);
 	obs_scene_release(dying);
@@ -425,11 +526,11 @@ void SlDualCanvas::verifyChannelIntegrity()
 		return;
 
 	obs_source_t* channel = obs_canvas_get_channel(m_canvas, 0);
-	obs_source_t* active = obs_scene_get_source(m_activeScene);
+	obs_source_t* expected = m_transition ? m_transition : obs_scene_get_source(m_activeScene);
 
-	if (channel != active)
+	if (channel != expected)
 	{
-		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "channel/editor scene divergence detected (channel '%s', active '%s'), repairing", channel ? obs_source_get_name(channel) : "(none)", obs_source_get_name(active));
+		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "channel divergence detected (channel '%s', expected '%s'), repairing", channel ? obs_source_get_name(channel) : "(none)", obs_source_get_name(expected));
 		setChannelToActive();
 	}
 

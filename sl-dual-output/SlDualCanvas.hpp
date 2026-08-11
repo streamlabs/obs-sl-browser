@@ -53,6 +53,11 @@ public:
 	bool removeActiveScene();
 	bool renameActiveScene(const std::string& newName);
 
+	// Channel 0 holds the transition (like the main output's channel 0); scene switches obs_transition_start through it.
+	// The reference drops on detach; the controller re-applies it after every (re)attach.
+	void setTransition(obs_source_t* transition);
+	void setTransitionDuration(int ms) { m_transitionDurationMs = ms; }
+
 	// Scale-to-fill, centered (the editor's Fill Canvas preset).
 	void applyFillTransform(obs_sceneitem_t* item) const;
 
@@ -72,9 +77,16 @@ private:
 	// new reference
 	obs_scene_t* findSceneByName(const std::string& name) const;
 	void setChannelToActive();
+
+	// Animated switch to the active scene; previous is the scene source shown before the switch (nullable).
+	void transitionToActive(obs_source_t* previous);
 	void deselectAllInActive();
 
 	obs_canvas_t* m_canvas = nullptr;
+
+	// owned reference, instance belongs to SlDualTransitions
+	obs_source_t* m_transition = nullptr;
+	int m_transitionDurationMs = 300;
 
 	// strong reference
 	obs_scene_t* m_activeScene = nullptr;

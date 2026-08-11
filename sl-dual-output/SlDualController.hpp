@@ -14,9 +14,11 @@
 
 class SlDualCanvas;
 class SlDualStreamOutput;
+class SlDualTransitions;
 class SlDualDock;
 class SlDualScenesDock;
 class SlDualSourcesDock;
+class SlDualTransitionsDock;
 enum class SlDualStreamState;
 
 class SlDualController
@@ -44,15 +46,22 @@ public: // actions, UI thread (dock / editor / settings dialog)
 	void sceneRemoveActive();
 	bool sceneRenameActive(const std::string& name);
 
+	void transitionSelect(const std::string& name);
+	void transitionSetDuration(int ms);
+	bool transitionAdd(const std::string& typeId, const std::string& name);
+	void transitionRemoveSelected();
+
 public: // state shared with the docks, editor and source list
 	SlDualConfig config;
 	std::unique_ptr<SlDualCanvas> canvas;
 	std::unique_ptr<SlDualStreamOutput> output;
+	std::unique_ptr<SlDualTransitions> transitions;
 
 	// owned by the frontend once added
 	SlDualDock* dock = nullptr;
 	SlDualScenesDock* scenesDock = nullptr;
 	SlDualSourcesDock* sourcesDock = nullptr;
+	SlDualTransitionsDock* transitionsDock = nullptr;
 
 public: // frontend events (invoked by the registered callbacks)
 	void onFrontendEvent(enum obs_frontend_event event);
@@ -79,6 +88,10 @@ private: // docks
 
 	// Refreshes the scenes dock and rebinds the sources dock after any scene set/canvas change.
 	void refreshSceneUi();
+	void refreshTransitionUi();
+
+	// Applies the selected transition and duration to the canvas channel.
+	void applyTransition();
 
 private:
 	bool m_callbacksRegistered = false;

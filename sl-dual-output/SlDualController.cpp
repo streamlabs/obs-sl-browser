@@ -2,9 +2,11 @@
 #include "SlDualOutput.hpp"
 #include "SlDualCanvas.hpp"
 #include "SlDualStreamOutput.hpp"
+#include "SlDualTransitions.hpp"
 #include "SlDualDock.hpp"
 #include "SlDualScenesDock.hpp"
 #include "SlDualSourcesDock.hpp"
+#include "SlDualTransitionsDock.hpp"
 
 #include <util/platform.h>
 
@@ -20,6 +22,7 @@ static const char* kSaveKey = "sl-dual-output";
 static const char* kPreviewDockId = "sl-dual-output-dock";
 static const char* kScenesDockId = "sl-dual-output-scenes-dock";
 static const char* kSourcesDockId = "sl-dual-output-sources-dock";
+static const char* kTransitionsDockId = "sl-dual-output-transitions-dock";
 
 static void frontendEventThunk(enum obs_frontend_event event, void* data)
 {
@@ -45,7 +48,9 @@ bool SlDualController::init()
 
 	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "initializing (built against OBS %s)", SL_DUAL_OBS_VERSION_RAW);
 
+	transitions = std::make_unique<SlDualTransitions>();
 	restoreFromCollectionFile();
+	transitions->rebuild(config);
 
 	canvas = std::make_unique<SlDualCanvas>();
 
@@ -103,6 +108,7 @@ void SlDualController::ensureCanvas()
 
 		// seeds once or adopts scenes
 		canvas->ensureScenes(config);
+		applyTransition();
 		canvas->verifyChannelIntegrity();
 		config.activeScene = canvas->activeSceneName();
 
@@ -141,6 +147,10 @@ void SlDualController::shutdown()
 		canvas->destroy();
 		canvas.reset();
 	}
+
+	// After the canvas: its channel held the selected instance.
+	if (transitions)
+		transitions.reset();
 }
 
 /**
@@ -261,6 +271,56 @@ bool SlDualController::sceneRenameActive(const std::string& name)
 	return ok;
 }
 
+void SlDualController::transitionSelect(const std::string& name)
+{
+	config.transitionName = name;
+	applyTransition();
+	obs_frontend_save();
+	refreshTransitionUi();
+}
+
+void SlDualController::transitionSetDuration(int ms)
+{
+	config.transitionDurationMs = ms;
+
+	if (canvas)
+		canvas->setTransitionDuration(ms);
+	obs_frontend_save();
+}
+
+bool SlDualController::transitionAdd(const std::string& typeId, const std::string& name)
+{
+	if (!transitions || !transitions->add(typeId, name))
+		return false;
+
+	config.transitionName = name;
+	applyTransition();
+	obs_frontend_save();
+	refreshTransitionUi();
+	return true;
+}
+
+void SlDualController::transitionRemoveSelected()
+{
+	if (!transitions || !transitions->remove(config.transitionName))
+		return;
+
+	// Fall back the same way selection resolution does (Fade, else the first instance).
+	config.transitionName = transitions->selectedName(config);
+	applyTransition();
+	obs_frontend_save();
+	refreshTransitionUi();
+}
+
+void SlDualController::applyTransition()
+{
+	if (!canvas || !transitions)
+		return;
+
+	canvas->setTransitionDuration(config.transitionDurationMs);
+	canvas->setTransition(transitions->selected(config));
+}
+
 /**
 * Events
 */
@@ -371,6 +431,9 @@ void SlDualController::onExit()
 		canvas->destroy();
 		canvas.reset();
 	}
+
+	if (transitions)
+		transitions.reset();
 }
 
 void SlDualController::onOutputState(SlDualStreamState state, const std::string& msg)
@@ -406,7 +469,7 @@ void SlDualController::onSaveLoad(obs_data_t* saveData, bool saving)
 obs_data_t* SlDualController::buildSaveData() const
 {
 	obs_data_t* d = obs_data_create();
-	obs_data_set_int(d, "version", 3);
+	obs_data_set_int(d, "version", 4);
 	obs_data_set_int(d, "canvas_width", config.canvasWidth);
 	obs_data_set_int(d, "canvas_height", config.canvasHeight);
 	obs_data_set_string(d, "active_scene", config.activeScene.c_str());
@@ -423,6 +486,25 @@ obs_data_t* SlDualController::buildSaveData() const
 
 	obs_data_set_array(d, "scene_order", order);
 	obs_data_array_release(order);
+
+	obs_data_set_string(d, "transition", config.transitionName.c_str());
+	obs_data_set_int(d, "transition_duration", config.transitionDurationMs);
+
+	obs_data_array_t* customs = obs_data_array_create();
+	std::vector<SlDualTransitionInfo> infos = transitions ? transitions->customInfos() : config.customTransitions;
+
+	for (const SlDualTransitionInfo& info : infos)
+	{
+		obs_data_t* entry = obs_data_create();
+		obs_data_set_string(entry, "id", info.id.c_str());
+		obs_data_set_string(entry, "name", info.name.c_str());
+		obs_data_set_string(entry, "settings", info.settingsJson.c_str());
+		obs_data_array_push_back(customs, entry);
+		obs_data_release(entry);
+	}
+
+	obs_data_set_array(d, "custom_transitions", customs);
+	obs_data_array_release(customs);
 	obs_data_set_bool(d, "seeded", config.seeded);
 	obs_data_set_string(d, "server", config.server.c_str());
 	obs_data_set_string(d, "key", config.key.c_str());
@@ -480,6 +562,38 @@ void SlDualController::applyLoadedData(obs_data_t* d)
 
 		obs_data_array_release(order);
 	}
+
+	obs_data_set_default_string(d, "transition", config.transitionName.c_str());
+	obs_data_set_default_int(d, "transition_duration", config.transitionDurationMs);
+	config.transitionName = obs_data_get_string(d, "transition");
+	config.transitionDurationMs = (int)obs_data_get_int(d, "transition_duration");
+
+	// Cleared when absent: a save without the key means no custom instances existed.
+	config.customTransitions.clear();
+	obs_data_array_t* customs = obs_data_get_array(d, "custom_transitions");
+
+	if (customs)
+	{
+		size_t count = obs_data_array_count(customs);
+
+		for (size_t i = 0; i < count; i++)
+		{
+			obs_data_t* entry = obs_data_array_item(customs, i);
+			SlDualTransitionInfo info;
+			info.id = obs_data_get_string(entry, "id");
+			info.name = obs_data_get_string(entry, "name");
+			info.settingsJson = obs_data_get_string(entry, "settings");
+
+			if (!info.id.empty() && !info.name.empty())
+				config.customTransitions.push_back(info);
+			obs_data_release(entry);
+		}
+
+		obs_data_array_release(customs);
+	}
+
+	if (transitions)
+		transitions->rebuild(config);
 
 	config.seeded = obs_data_get_bool(d, "seeded");
 	config.server = obs_data_get_string(d, "server");
@@ -561,7 +675,7 @@ void SlDualController::createDocks()
 {
 	dock = new SlDualDock(*this);
 
-	if (!obs_frontend_add_dock_by_id(kPreviewDockId, "Dual Output", dock))
+	if (!obs_frontend_add_dock_by_id(kPreviewDockId, "Vertical", dock))
 	{
 		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add preview dock");
 		delete dock;
@@ -571,7 +685,7 @@ void SlDualController::createDocks()
 
 	scenesDock = new SlDualScenesDock(*this);
 
-	if (!obs_frontend_add_dock_by_id(kScenesDockId, "Dual Output Scenes", scenesDock))
+	if (!obs_frontend_add_dock_by_id(kScenesDockId, "Vertical Scenes", scenesDock))
 	{
 		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add scenes dock");
 		delete scenesDock;
@@ -580,16 +694,31 @@ void SlDualController::createDocks()
 
 	sourcesDock = new SlDualSourcesDock(*this, dock->preview());
 
-	if (!obs_frontend_add_dock_by_id(kSourcesDockId, "Dual Output Sources", sourcesDock))
+	if (!obs_frontend_add_dock_by_id(kSourcesDockId, "Vertical Sources", sourcesDock))
 	{
 		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add sources dock");
 		delete sourcesDock;
 		sourcesDock = nullptr;
 	}
+
+	transitionsDock = new SlDualTransitionsDock(*this);
+
+	if (!obs_frontend_add_dock_by_id(kTransitionsDockId, "Vertical Transitions", transitionsDock))
+	{
+		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add transitions dock");
+		delete transitionsDock;
+		transitionsDock = nullptr;
+	}
 }
 
 void SlDualController::removeDocks()
 {
+	if (transitionsDock)
+	{
+		obs_frontend_remove_dock(kTransitionsDockId);
+		transitionsDock = nullptr;
+	}
+
 	// The frontend deletes each widget on remove; drop the sources dock first, it borrows the preview.
 	if (sourcesDock)
 	{
@@ -617,5 +746,13 @@ void SlDualController::refreshSceneUi()
 
 	if (sourcesDock)
 		sourcesDock->refreshBinding();
+
+	refreshTransitionUi();
+}
+
+void SlDualController::refreshTransitionUi()
+{
+	if (transitionsDock)
+		transitionsDock->refresh();
 }
 
