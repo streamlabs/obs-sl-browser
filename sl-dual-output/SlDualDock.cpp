@@ -60,11 +60,7 @@ void SlDualPreview::createDisplay()
 	info.format = GS_BGRA;
 	info.zsformat = GS_ZS_NONE;
 	info.window.hwnd = (HWND)winId();
-
-	// Letterbox uses the theme's window color, matching the main OBS preview background; renderPreview outlines the canvas bounds.
-	QColor bg = palette().color(QPalette::Window);
-	uint32_t bgColor = 0xFF000000 | ((uint32_t)bg.red() << 16) | ((uint32_t)bg.green() << 8) | (uint32_t)bg.blue();
-	m_display = obs_display_create(&info, bgColor);
+	m_display = obs_display_create(&info, 0xFF1A1413);
 	updateCallbackRegistration();
 }
 
@@ -151,7 +147,7 @@ void SlDualPreview::changeEvent(QEvent* event)
 {
 	QWidget::changeEvent(event);
 
-	if (event->type() == QEvent::PaletteChange && m_display)
+	if ((event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange) && m_display)
 	{
 		// Recreate so the letterbox picks up the new theme color.
 		destroyDisplay();

@@ -44,17 +44,17 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	for (const SizePreset& preset : kPresets)
 		m_sizePreset->addItem(preset.label);
 
-	// Read-only mirrors of the preset; wide enough for four digits.
+	// Disabled mirrors of the preset; wide enough for four digits.
 	m_width = new QSpinBox(this);
 	m_width->setRange(32, 8192);
-	m_width->setReadOnly(true);
+	m_width->setEnabled(false);
 	m_width->setButtonSymbols(QAbstractSpinBox::NoButtons);
 	m_width->setMinimumWidth(80);
 	m_width->setValue((int)current.canvasWidth);
 
 	m_height = new QSpinBox(this);
 	m_height->setRange(32, 8192);
-	m_height->setReadOnly(true);
+	m_height->setEnabled(false);
 	m_height->setButtonSymbols(QAbstractSpinBox::NoButtons);
 	m_height->setMinimumWidth(80);
 	m_height->setValue((int)current.canvasHeight);
@@ -150,8 +150,6 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	if (streamActive)
 	{
 		m_sizePreset->setEnabled(false);
-		m_width->setEnabled(false);
-		m_height->setEnabled(false);
 		auto* note = new QLabel("Canvas size is locked while the vertical stream is live.", this);
 		note->setWordWrap(true);
 		layout->addWidget(note);
