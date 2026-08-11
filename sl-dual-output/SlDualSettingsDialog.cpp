@@ -29,8 +29,6 @@ static const SizePreset kPresets[] = {
 	{"540 x 960 (9:16 vertical)", 540, 960},
 };
 
-static const int kCustomIndex = 3;
-
 SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool streamActive, QWidget* parent)
 	: QDialog(parent),
 	  m_base(current)
@@ -46,16 +44,19 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	for (const SizePreset& preset : kPresets)
 		m_sizePreset->addItem(preset.label);
 
-	m_sizePreset->addItem("Custom");
-
+	// Read-only mirrors of the preset; wide enough for four digits.
 	m_width = new QSpinBox(this);
 	m_width->setRange(32, 8192);
-	m_width->setSingleStep(2);
+	m_width->setReadOnly(true);
+	m_width->setButtonSymbols(QAbstractSpinBox::NoButtons);
+	m_width->setMinimumWidth(80);
 	m_width->setValue((int)current.canvasWidth);
 
 	m_height = new QSpinBox(this);
 	m_height->setRange(32, 8192);
-	m_height->setSingleStep(2);
+	m_height->setReadOnly(true);
+	m_height->setButtonSymbols(QAbstractSpinBox::NoButtons);
+	m_height->setMinimumWidth(80);
 	m_height->setValue((int)current.canvasHeight);
 
 	auto* sizeRow = new QHBoxLayout();
@@ -170,20 +171,17 @@ int SlDualSettingsDialog::presetIndexFor(uint32_t width, uint32_t height) const
 			return i;
 	}
 
-	return kCustomIndex;
+	// Sizes saved by older builds (custom preset) snap to 1080x1920.
+	return 0;
 }
 
 void SlDualSettingsDialog::onPresetChanged(int index)
 {
-	bool custom = index == kCustomIndex;
-	m_width->setEnabled(custom && m_sizePreset->isEnabled());
-	m_height->setEnabled(custom && m_sizePreset->isEnabled());
+	if (index < 0 || index >= (int)(sizeof(kPresets) / sizeof(kPresets[0])))
+		return;
 
-	if (!custom && index >= 0 && index < kCustomIndex)
-	{
-		m_width->setValue((int)kPresets[index].width);
-		m_height->setValue((int)kPresets[index].height);
-	}
+	m_width->setValue((int)kPresets[index].width);
+	m_height->setValue((int)kPresets[index].height);
 }
 
 void SlDualSettingsDialog::populateEncoders(const std::string& currentId)
