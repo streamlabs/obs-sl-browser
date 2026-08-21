@@ -117,6 +117,7 @@ private:
 	void JS_SOURCE_FILTER_ADD(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_QT_GET_COOKIE_VALUE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_BROWSERSOURCE_SEND_MESSAGE(const json11::Json &params, std::string &out_jsonReturn);
 
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;

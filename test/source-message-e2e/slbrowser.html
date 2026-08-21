@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>source message sender</title>
+<body style="background:#102030;color:#9cf;font:13px monospace;margin:8px">
+<h3>browsersource_sendMessage harness</h3>
+<div id="log"></div>
+<script>
+const OBSERVER = 'http://127.0.0.1:28951/report';
+const TARGETS = ['MsgSourceA', 'MsgSourceB'];
+const ROUNDS = 20;
+const ROUND_MS = 2000;
+
+// The plugin builds {"message": "<this string>"} itself, so every round carries characters
+// that must survive JSON escaping. Broken escaping shows up as UNPARSEABLE on the receiver
+// rather than as a silent pass. The apostrophe matters on its own: obs-browser splices the
+// envelope into a new CustomEvent('name', <json>) expression it hands to context->Eval.
+const TRICKY = 'quote " apostrophe \' backslash \\ newline \n tab \t unicode ✓';
+
+function report(event, data) {
+	document.getElementById('log').insertAdjacentHTML(
+		'beforeend', '<div>' + event + ': ' + JSON.stringify(data) + '</div>');
+	return fetch(OBSERVER, {
+		method: 'POST',
+		headers: {'content-type': 'application/json'},
+		body: JSON.stringify({who: 'slbrowser', event: event, data: data})
+	}).catch(function (e) { return null; });
+}
+
+report('LOADED', {
+	slabsGlobal: typeof window.slabsGlobal,
+	hasSendMessage: !!(window.slabsGlobal && window.slabsGlobal.browsersource_sendMessage)
+});
+
+// PRIMING CALL. GrpcBrowser::com_grpc_run_javascriptOnBrowser targets
+// GetMostRecentRenderKnown(), which is only ever set by RegisterCallback. Until this page
+// invokes some slabsGlobal function that target is null and callbacks never arrive.
+if (window.slabsGlobal && window.slabsGlobal.sl_getVersionInfo) {
+	window.slabsGlobal.sl_getVersionInfo(function (v) { report('priming-call-returned', v); });
+} else {
+	report('priming-call-unavailable', {});
+}
+
+// Third arg is the message string, exactly what Desktop passes as sendMessage({message}).
+// Desktop stringifies JSON into it, so the harness does the same.
+function send(target, payload, tag) {
+	window.slabsGlobal.browsersource_sendMessage(
+		function (result) { report(tag, {target: target, result: result}); },
+		target,
+		JSON.stringify(payload)
+	);
+}
+
+// A browser source can take anywhere from ~10s to ~70s to load its page after OBS starts,
+// and the channel has no ack, so repeat rather than send once and hope.
+let round = 0;
+
+const timer = setInterval(function () {
+	if (!(window.slabsGlobal && window.slabsGlobal.browsersource_sendMessage)) {
+		report('SEND-UNAVAILABLE', {});
+		clearInterval(timer);
+		return;
+	}
+
+	round++;
+
+	// Each payload names its own target, so a page that receives one addressed to the
+	// other source proves javascript_event routed to the wrong browser.
+	TARGETS.forEach(function (target) {
+		send(target, {target: target, round: round, tricky: TRICKY}, 'SENT');
+	});
+
+	if (round >= ROUNDS) clearInterval(timer);
+}, ROUND_MS);
+
+// Error and warning paths, once the API is up. There is no malformed-payload case to probe:
+// the message is an opaque string and the plugin builds the json envelope around it.
+setTimeout(function () {
+	var g = window.slabsGlobal;
+	if (!g || !g.browsersource_sendMessage) return;
+
+	g.browsersource_sendMessage(function (r) { report('ERRPATH-unknown-source', r); }, 'NoSuchSource', '{}');
+	g.browsersource_sendMessage(function (r) { report('ERRPATH-not-browser-source', r); }, 'Scene', '{}');
+	g.browsersource_sendMessage(function (r) { report('ERRPATH-empty-name', r); }, '', '{}');
+	g.browsersource_sendMessage(function (r) { report('WARNPATH-hidden-source', r); }, 'MsgSourceHidden', '{}');
+}, 3000);
+</script>
