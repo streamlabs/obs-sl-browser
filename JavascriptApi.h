@@ -93,6 +93,16 @@ public:
 		JS_QT_GET_COOKIE_VALUE,
 		JS_BROWSER_SET_HIDDEN_STATE,
 		JS_RUN_STREAMLABS_EXE,
+		JS_PATH_JOIN,
+		JS_GET_ENV_VAR,
+		JS_MKDIR,
+		JS_PATH_EXISTS,
+		JS_REMOVE_PATH,
+		JS_MOVE_PATH,
+		JS_SHA256_FILE,
+		JS_WRITE_FILE,
+		JS_IS_PROCESS_RUNNING,
+		JS_STOP_PROCESS,
 	};
 
 public:
@@ -218,14 +228,15 @@ public:
 			* Filesystem
 			*/
 
-			// .(@function(arg1), @url)
-			//	Downloads and unpacks the zip, returning a list of full file paths to the files that were in it.
+			// .(@function(arg1), @url, @sha256_optional)
+			//	Downloads and unpacks the zip, returning a list of full file paths to the files that were in it. If sha256 is provided, the zip must match it.
 			//		Example arg1 = [{ "path": "..." },]
 			{"fs_downloadZip", JS_DOWNLOAD_ZIP},
 
 			// .(@function(arg1), @url)
 			//	Runs an exe that exists in the streamlabs downloads folder.
 			//		Example arg1 = [{ "path": "..." },]
+			//	The returned output includes the PID that can be used to stop the process 
 			{"fs_runSlExe", JS_RUN_STREAMLABS_EXE},
 			
 			// .(@function(arg1), @url, @filename)
@@ -259,6 +270,67 @@ public:
 			//	Returns a string that is a combination of log files
 			//		Example arg1 = { "content": "about 1-5mb of text" }
 			{"fs_getLogsReportString", JS_GET_LOGS_REPORT_STRING},
+
+			// .(@function(arg1), @pathA, @pathB)
+			//	Joins two path segments using the OS path separator. Pure string helper, touches no files.
+			//	(No containment check here by design; the operations below re-validate before touching disk.)
+			//		Example arg1 = { "path": "A\\B" }
+			{"fs_pathJoin", JS_PATH_JOIN},
+
+			// .(@function(arg1), @path)
+			//	Creates a directory, including any missing parent directories (like 'mkdir -p').
+			//	An already-existing directory is treated as success.
+			//		Example arg1 = { "success": true }
+			{"fs_mkdir", JS_MKDIR},
+
+			// .(@function(arg1), @path)
+			//	Reports whether a path exists, and whether it is a directory.
+			//		Example arg1 = { "exists": true, "isDirectory": false }
+			{"fs_exists", JS_PATH_EXISTS},
+
+			// .(@function(arg1), @path, @bool_recursive, @bool_force)
+			//	Removes a file or directory.
+			//		recursive (default false) allows removing a non-empty directory   ('rm -r')
+			//		force     (default false) treats a missing path as success         ('rm -f')
+			//		both true == 'rm -rf'
+			//		Example arg1 = { "success": true }
+			{"fs_remove", JS_REMOVE_PATH},
+
+			// .(@function(arg1), @srcPath, @dstPath)
+			//	Moves/renames a file or directory. BOTH paths must resolve inside the Streamlabs folder.
+			//	Will NOT overwrite an existing destination (remove it first) so an atomic swap stays predictable.
+			//	Falls back to copy+delete automatically if the move would cross volumes.
+			//		Example arg1 = { "success": true }
+			{"fs_move", JS_MOVE_PATH},
+
+			// .(@function(arg1), @filepath)
+			//	Returns the lowercase hex SHA-256 of a file's contents (streamed, so large files are fine).
+			//		Example arg1 = { "sha256": "e3b0c442..." }
+			{"fs_sha256", JS_SHA256_FILE},
+
+			// .(@function(arg1), @filepath, @contents, @bool_append)
+			//	Writes 'contents' to a file as raw bytes (exact, no newline translation) - intended for the manifest.
+			//		append (default false): when false the file is created/overwritten, when true contents are appended.
+			//	The parent directory must already exist (call fs_mkdir first).
+			//		Example arg1 = { "success": true, "bytesWritten": 123 }
+			{"fs_writeFile", JS_WRITE_FILE},
+
+			/***
+			* System
+			*/
+
+			// .(@function(arg1), @varName)
+			//	Returns the value of a single environment variable, or an error if it is not set.
+			//		Example arg1 = { "value": "C:\\Users\\me\\AppData\\Roaming" }
+			{"sys_getEnvVar", JS_GET_ENV_VAR},
+
+			// .(@function(arg1), @pid)
+			//	Whether a process WE started (via fs_runSlExe) is still running, looked up by the pid it returned.
+			{"sys_isProcessRunning", JS_IS_PROCESS_RUNNING},
+
+			// .(@function(arg1), @pid)
+			//	Stops (terminates) a process WE started via fs_runSlExe, identified by the pid it returned.
+			{"sys_stopProcess", JS_STOP_PROCESS},
 
 
 			/***
