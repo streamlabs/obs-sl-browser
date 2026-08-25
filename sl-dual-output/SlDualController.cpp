@@ -8,6 +8,7 @@
 #include "SlDualSourcesDock.hpp"
 #include "SlDualTransitionsDock.hpp"
 
+#include <util/config-file.h>
 #include <util/platform.h>
 
 #include <QApplication>
@@ -80,7 +81,8 @@ bool SlDualController::init()
 			Qt::QueuedConnection);
 	});
 
-	createDocks();
+	if (config.enabled)
+		createDocks();
 
 	obs_frontend_add_event_callback(frontendEventThunk, this);
 	obs_frontend_add_save_callback(saveThunk, this);
@@ -119,6 +121,9 @@ void SlDualController::ensureCanvas()
 			// persist the seed marker promptly
 			obs_frontend_save();
 		}
+
+		// The UUID only exists once attached, so the multitrack handoff has to be (re)written here.
+		applyOutputModeSetting();
 
 		if (dock)
 			dock->setPreviewActive(true);
@@ -159,8 +164,15 @@ void SlDualController::shutdown()
 
 void SlDualController::startStream()
 {
-	if (!canvas || !canvas->valid() || !output)
+	if (!canvas || !canvas->valid() || !output || !config.enabled)
 		return;
+
+	// OBS's multitrack path already sends this canvas; a second encode would double it.
+	if (config.outputMode == SlDualOutputMode::EnhancedBroadcasting)
+	{
+		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "start ignored: output mode is enhanced_broadcasting");
+		return;
+	}
 
 	output->start(config, canvas->video());
 }
@@ -180,6 +192,7 @@ void SlDualController::applySettings(const SlDualConfig& next)
 {
 	// Scene state is owned by the dock/editor; preserve it.
 	std::string activeScene = config.activeScene;
+	bool wasEnabled = config.enabled;
 
 	config = next;
 	config.activeScene = activeScene;
@@ -191,8 +204,91 @@ void SlDualController::applySettings(const SlDualConfig& next)
 		config.canvasHeight = canvas->height();
 	}
 
+	applyOutputModeSetting();
+
+	if (config.enabled != wasEnabled)
+	{
+		bool want = config.enabled;
+
+		// setEnabled saves; let it run against the already-applied config.
+		config.enabled = wasEnabled;
+		setEnabled(want);
+		return;
+	}
+
 	// persist promptly via the save callback
 	obs_frontend_save();
+}
+
+void SlDualController::setEnabled(bool enabled)
+{
+	if (config.enabled == enabled)
+		return;
+
+	config.enabled = enabled;
+
+	if (!enabled)
+	{
+		if (output)
+			output->hardStop();
+
+		removeDocks();
+	}
+	else
+	{
+		createDocks();
+		refreshSceneUi();
+		refreshTransitionUi();
+	}
+
+	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "%s", enabled ? "enabled" : "disabled");
+	obs_frontend_save();
+}
+
+void SlDualController::setOutputMode(SlDualOutputMode mode)
+{
+	if (config.outputMode == mode)
+		return;
+
+	// Never leave our own encode running while handing the canvas to the multitrack path.
+	if (mode == SlDualOutputMode::EnhancedBroadcasting && output)
+		output->requestStop();
+
+	config.outputMode = mode;
+	applyOutputModeSetting();
+	obs_frontend_save();
+}
+
+void SlDualController::applyOutputModeSetting()
+{
+	config_t* profile = obs_frontend_get_profile_config();
+
+	if (!profile || !canvas || !canvas->valid())
+		return;
+
+	const char* ours = obs_canvas_get_uuid(canvas->canvasHandle());
+
+	if (!ours)
+		return;
+
+	const char* current = config_get_string(profile, "Stream1", "MultitrackExtraCanvas");
+	std::string want;
+
+	if (config.outputMode == SlDualOutputMode::EnhancedBroadcasting)
+		want = ours;
+	else if (current && strcmp(current, ours) == 0)
+		want.clear();
+	else
+		// Unset, or pointing at a canvas that isn't ours. Not ours to clear.
+		return;
+
+	if (current && want == current)
+		return;
+
+	config_set_string(profile, "Stream1", "MultitrackExtraCanvas", want.c_str());
+	config_save(profile);
+
+	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "output mode '%s', multitrack canvas %s", slDualOutputModeToString(config.outputMode), want.empty() ? "released" : "claimed");
 }
 
 void SlDualController::sceneSetActive(const std::string& name)
@@ -253,6 +349,24 @@ void SlDualController::sceneRemoveActive()
 		dock->setPreviewActive(true);
 
 	refreshSceneUi();
+}
+
+bool SlDualController::sceneRemove(const std::string& name)
+{
+	if (!canvas || name.empty())
+		return false;
+
+	std::vector<std::string> names = canvas->sceneNames();
+
+	if (std::find(names.begin(), names.end(), name) == names.end())
+		return false;
+
+	// Removal is defined on the active scene; select it first.
+	if (canvas->activeSceneName() != name && !canvas->setActiveScene(name))
+		return false;
+
+	sceneRemoveActive();
+	return canvas->activeSceneName() != name;
 }
 
 bool SlDualController::sceneRenameActive(const std::string& name)
@@ -469,7 +583,7 @@ void SlDualController::onSaveLoad(obs_data_t* saveData, bool saving)
 obs_data_t* SlDualController::buildSaveData() const
 {
 	obs_data_t* d = obs_data_create();
-	obs_data_set_int(d, "version", 4);
+	obs_data_set_int(d, "version", 5);
 	obs_data_set_int(d, "canvas_width", config.canvasWidth);
 	obs_data_set_int(d, "canvas_height", config.canvasHeight);
 	obs_data_set_string(d, "active_scene", config.activeScene.c_str());
@@ -516,6 +630,8 @@ obs_data_t* SlDualController::buildSaveData() const
 	obs_data_set_int(d, "audio_bitrate", config.audioBitrateKbps);
 	obs_data_set_int(d, "audio_track", config.audioTrack);
 	obs_data_set_bool(d, "auto_start", config.autoStart);
+	obs_data_set_string(d, "output_mode", slDualOutputModeToString(config.outputMode));
+	obs_data_set_bool(d, "enabled", config.enabled);
 	return d;
 }
 
@@ -537,6 +653,8 @@ void SlDualController::applyLoadedData(obs_data_t* d)
 	obs_data_set_default_int(d, "audio_bitrate", config.audioBitrateKbps);
 	obs_data_set_default_int(d, "audio_track", config.audioTrack);
 	obs_data_set_default_bool(d, "auto_start", config.autoStart);
+	obs_data_set_default_string(d, "output_mode", slDualOutputModeToString(config.outputMode));
+	obs_data_set_default_bool(d, "enabled", config.enabled);
 
 	config.canvasWidth = (uint32_t)obs_data_get_int(d, "canvas_width");
 	config.canvasHeight = (uint32_t)obs_data_get_int(d, "canvas_height");
@@ -606,6 +724,8 @@ void SlDualController::applyLoadedData(obs_data_t* d)
 	config.audioBitrateKbps = (int)obs_data_get_int(d, "audio_bitrate");
 	config.audioTrack = (int)obs_data_get_int(d, "audio_track");
 	config.autoStart = obs_data_get_bool(d, "auto_start");
+	config.outputMode = slDualOutputModeFromString(obs_data_get_string(d, "output_mode"));
+	config.enabled = obs_data_get_bool(d, "enabled");
 }
 
 void SlDualController::restoreFromCollectionFile()
@@ -673,6 +793,9 @@ void SlDualController::restoreFromCollectionFile()
 
 void SlDualController::createDocks()
 {
+	if (dock)
+		return;
+
 	dock = new SlDualDock(*this);
 
 	if (!obs_frontend_add_dock_by_id(kPreviewDockId, "Vertical", dock))

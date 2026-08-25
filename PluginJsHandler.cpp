@@ -16,13 +16,24 @@
 // Stl
 #include <chrono>
 #include <functional>
+#include <utility>
 #include <codecvt>
 
 // Obs
 #include <obs.hpp>
 #include <obs-frontend-api.h>
+#include <util/config-file.h>
 
 #include "../obs-browser/panel/browser-panel-internal.hpp"
+
+// Dual output
+#include "SlDualOutput.hpp"
+
+// Mirrors SlDualOutput.cpp: below the canvas API floor libobs has no obs_canvas_* at all, and this file is
+//	compiled on those branches too. The facade stays callable there; the raw canvas calls have to be compiled out.
+#ifndef SL_DUAL_ENABLED
+#define SL_DUAL_ENABLED 1
+#endif
 
 // Qt
 #include <QMainWindow>
@@ -35,6 +46,70 @@
 #include <QProcess>
 
 using namespace json11;
+
+/**
+* Canvas targeting
+*
+* Sources live in one global namespace, but scenes belong to the canvas that created them:
+*	obs_get_source_by_name only searches public sources plus the main canvas, so a scene on the dual
+*	canvas is unreachable through it. Every scene-addressing api call therefore takes a trailing,
+*	optional canvas name, and resolves through here.
+*/
+
+static const char* kCanvasVertical = "vertical";
+
+static bool isVerticalCanvas(const std::string& canvasName)
+{
+	return canvasName == kCanvasVertical;
+}
+
+// New reference, or null. Empty canvas keeps the historical main-canvas behaviour.
+// An unrecognised name resolves nothing rather than falling back to main: a typo must not silently edit the wrong canvas.
+static obs_source_t* resolveSceneSource(const std::string& canvasName, const std::string& sceneName)
+{
+	if (canvasName.empty())
+		return obs_get_source_by_name(sceneName.c_str());
+
+	if (!isVerticalCanvas(canvasName))
+	{
+		blog(LOG_WARNING, "[sl-browser] unknown canvas '%s', expected \"\" or \"vertical\"", canvasName.c_str());
+		return nullptr;
+	}
+
+#if !SL_DUAL_ENABLED
+	return nullptr;
+#else
+	obs_canvas_t* canvas = SlDualOutput::instance().canvas();
+
+	if (!canvas)
+		return nullptr;
+
+	struct Ctx
+	{
+		const std::string& want;
+		obs_source_t* found;
+	} ctx{sceneName, nullptr};
+
+	obs_canvas_enum_scenes(
+		canvas,
+		[](void* param, obs_source_t* source)
+		{
+			Ctx* c = static_cast<Ctx*>(param);
+			const char* name = obs_source_get_name(source);
+
+			if (name && c->want == name)
+			{
+				c->found = obs_source_get_ref(source);
+				return false;
+			}
+
+			return true;
+		},
+		&ctx);
+
+	return ctx.found;
+#endif
+}
 
 PluginJsHandler::PluginJsHandler() {}
 
@@ -204,6 +279,15 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_DOCK_SETURL: JS_DOCK_SETURL(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_DOWNLOAD_ZIP: JS_DOWNLOAD_ZIP(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_RUN_STREAMLABS_EXE: JS_RUN_STREAMLABS_EXE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_DUALOUTPUT_GET_STATE: JS_DUALOUTPUT_GET_STATE(jsonParams,jsonReturnStr); break;
+		case JavascriptApi::JS_DUALOUTPUT_SET_ENABLED: JS_DUALOUTPUT_SET_ENABLED(jsonParams,jsonReturnStr); break;
+		case JavascriptApi::JS_DUALOUTPUT_SET_CANVAS_SIZE: JS_DUALOUTPUT_SET_CANVAS_SIZE(jsonParams,jsonReturnStr); break;
+		case JavascriptApi::JS_DUALOUTPUT_SET_OUTPUT_MODE: JS_DUALOUTPUT_SET_OUTPUT_MODE(jsonParams,jsonReturnStr); break;
+		case JavascriptApi::JS_DUALOUTPUT_SET_STREAM_SETTINGS: JS_DUALOUTPUT_SET_STREAM_SETTINGS(jsonParams,jsonReturnStr); break;
+		case JavascriptApi::JS_DUALOUTPUT_GET_STREAM_SETTINGS: JS_DUALOUTPUT_GET_STREAM_SETTINGS(jsonParams,jsonReturnStr); break;
+		case JavascriptApi::JS_DUALOUTPUT_START_STREAM: JS_DUALOUTPUT_START_STREAM(jsonParams,jsonReturnStr); break;
+		case JavascriptApi::JS_DUALOUTPUT_STOP_STREAM: JS_DUALOUTPUT_STOP_STREAM(jsonParams,jsonReturnStr); break;
+		case JavascriptApi::JS_DUALOUTPUT_REMOVE_SCENE: JS_DUALOUTPUT_REMOVE_SCENE(jsonParams,jsonReturnStr); break;
 		case JavascriptApi::JS_DOWNLOAD_FILE: JS_DOWNLOAD_FILE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_READ_FILE: JS_READ_FILE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_DELETE_FILES: JS_DELETE_FILES(jsonParams, jsonReturnStr); break;
@@ -1477,10 +1561,23 @@ void PluginJsHandler::JS_GET_CURRENT_SCENE(const json11::Json &params, std::stri
 {
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param2"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[mainWindow, &out_jsonReturn]() {
+		[canvas_name, mainWindow, &out_jsonReturn]() {
+			if (isVerticalCanvas(canvas_name))
+			{
+				std::string name = SlDualOutput::instance().activeSceneName();
+
+				if (name.empty())
+					out_jsonReturn = Json(Json::object({{"error", "Empty current scene."}})).dump();
+				else
+					out_jsonReturn = Json(Json::object({{"name", name}})).dump();
+				return;
+			}
+
 			OBSSourceAutoRelease current_scene_source = obs_frontend_get_current_scene();
 
 			if (current_scene_source == nullptr)
@@ -1502,15 +1599,25 @@ void PluginJsHandler::JS_SET_CURRENT_SCENE(const json11::Json &params, std::stri
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param3"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[mainWindow, scene_name, &out_jsonReturn]() {
-			OBSSourceAutoRelease source = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, mainWindow, scene_name, &out_jsonReturn]() {
+			if (isVerticalCanvas(canvas_name))
+			{
+				// Goes through the controller: it also drives the transition, the docks and persistence.
+				if (!SlDualOutput::instance().sceneSetActive(scene_name))
+					out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+				return;
+			}
+
+			OBSSourceAutoRelease source = resolveSceneSource(canvas_name, scene_name);
 			if (!source)
-				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();			
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(source))
-				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();			
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
 			else
 				obs_frontend_set_current_scene(source);
 		},
@@ -1533,11 +1640,13 @@ void PluginJsHandler::JS_SCENE_ADD(const json11::Json& params, std::string& out_
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param4"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[mainWindow, scene_name, source_name, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, mainWindow, scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			OBSSourceAutoRelease source = obs_get_source_by_name(source_name.c_str());
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
@@ -1801,11 +1910,22 @@ void PluginJsHandler::JS_CREATE_SCENE(const json11::Json &params, std::string &o
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param3"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[mainWindow, scene_name, &out_jsonReturn]() {
-			OBSSourceAutoRelease existing = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, mainWindow, scene_name, &out_jsonReturn]() {
+			if (isVerticalCanvas(canvas_name))
+			{
+				if (!SlDualOutput::instance().available())
+					out_jsonReturn = Json(Json::object({{"error", "Dual output canvas unavailable"}})).dump();
+				else if (!SlDualOutput::instance().sceneCreate(scene_name))
+					out_jsonReturn = Json(Json::object({{"error", "Failed to create scene."}})).dump();
+				return;
+			}
+
+			OBSSourceAutoRelease existing = resolveSceneSource(canvas_name, scene_name);
 
 			if (existing != nullptr)
 			{
@@ -2526,11 +2646,13 @@ void PluginJsHandler::JS_SET_SCENEITEM_POS(const json11::Json &params, std::stri
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param6"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[mainWindow, scene_name, source_name, x, y, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, mainWindow, scene_name, source_name, x, y, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -2573,11 +2695,13 @@ void PluginJsHandler::JS_SET_SCENEITEM_VISIBILITY(const json11::Json &params, st
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param5"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, is_visible, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, is_visible, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -2617,11 +2741,13 @@ void PluginJsHandler::JS_SET_SCENEITEM_ROT(const json11::Json &params, std::stri
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param5"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, rotation, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, rotation, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -2667,11 +2793,13 @@ void PluginJsHandler::JS_SET_SCENEITEM_CROP(const json11::Json &params, std::str
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param8"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, left, top, right, bottom, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, left, top, right, bottom, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -2712,11 +2840,13 @@ void PluginJsHandler::JS_SET_SCENEITEM_SCALE_FILTER(const json11::Json &params, 
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param5"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, scale_type, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, scale_type, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -2756,11 +2886,13 @@ void PluginJsHandler::JS_SET_SCENEITEM_BLENDING_MODE(const json11::Json &params,
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param5"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, blending_type, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, blending_type, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -2800,11 +2932,13 @@ void PluginJsHandler::JS_SET_SCENEITEM_BLENDING_METHOD(const json11::Json &param
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param5"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, blending_method, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, blending_method, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -2847,11 +2981,13 @@ void PluginJsHandler::JS_SET_SCALE(const json11::Json &params, std::string &out_
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param6"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, x_scale, y_scale, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, x_scale, y_scale, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -2891,11 +3027,13 @@ void PluginJsHandler::JS_GET_SCENEITEM_POS(const json11::Json &params, std::stri
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param4"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -2936,11 +3074,13 @@ void PluginJsHandler::JS_GET_SCENEITEM_ROT(const json11::Json &params, std::stri
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param4"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -2980,11 +3120,13 @@ void PluginJsHandler::JS_GET_SCENEITEM_CROP(const json11::Json &params, std::str
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param4"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -3052,11 +3194,13 @@ void PluginJsHandler::JS_GET_SCALE(const json11::Json &params, std::string &out_
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param4"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -3098,11 +3242,13 @@ void PluginJsHandler::JS_GET_SCENEITEM_SCALE_FILTER(const json11::Json &params, 
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param4"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -3142,11 +3288,13 @@ void PluginJsHandler::JS_GET_SCENEITEM_BLENDING_MODE(const json11::Json &params,
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param4"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -3186,11 +3334,13 @@ void PluginJsHandler::JS_GET_SCENEITEM_BLENDING_METHOD(const json11::Json &param
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param4"].string_value();
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, source_name, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
 			else if (!obs_source_is_scene(scene))
@@ -3221,10 +3371,12 @@ void PluginJsHandler::JS_SCENE_GET_SOURCES(const json11::Json &params, std::stri
 
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param3"].string_value();
+
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[scene_name, &out_jsonReturn]() {
-			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+		[canvas_name, scene_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = resolveSceneSource(canvas_name, scene_name);
 			if (!scene)
 			{
 				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
@@ -3273,32 +3425,53 @@ void PluginJsHandler::JS_RESTART_OBS(const json11::Json& params, std::string& ou
 	}
 }
 
+static bool enumScenesProc(void *param, obs_source_t *source)
+{
+	std::vector<json11::Json> *sourcesList = reinterpret_cast<std::vector<json11::Json> *>(param);
+
+	auto rawName = obs_source_get_name(source);
+	auto rawId = obs_source_get_id(source);
+
+	json11::Json sourceInfo = json11::Json::object({
+		{"name", rawName ? rawName : ""},
+		{"type", static_cast<int>(obs_source_get_type(source))},
+		{"id", rawId ? rawId : ""},
+	});
+
+	sourcesList->push_back(sourceInfo);
+
+	// Continue enumeration
+	return true;
+}
+
 void PluginJsHandler::JS_ENUM_SCENES(const json11::Json &params, std::string &out_jsonReturn)
 {
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param2"].string_value();
+
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[&out_jsonReturn]() {
+		[canvas_name, &out_jsonReturn]() {
 			std::vector<json11::Json> sourcesList;
 
-			obs_enum_scenes(
-				[](void *param, obs_source_t *source) -> bool {
-					std::vector<json11::Json> *sourcesList = reinterpret_cast<std::vector<json11::Json> *>(param);
+#if SL_DUAL_ENABLED
+			// obs_enum_scenes is hardcoded to the main canvas, so go through the canvas explicitly to reach "vertical" too.
+			// Both branches own their reference.
+			OBSCanvasAutoRelease canvas = isVerticalCanvas(canvas_name) ? obs_canvas_get_ref(SlDualOutput::instance().canvas())
+										    : obs_get_main_canvas();
 
-					auto rawName = obs_source_get_name(source);
-					auto rawId = obs_source_get_id(source);
+			if (!canvas)
+			{
+				out_jsonReturn = Json(Json::array()).dump();
+				return;
+			}
 
-					json11::Json sourceInfo = json11::Json::object({
-						{"name", rawName ? rawName : ""},
-						{"type", static_cast<int>(obs_source_get_type(source))},
-						{"id", rawId ? rawId : ""},
-					});
-
-					sourcesList->push_back(sourceInfo);
-					return true; // Continue enumeration
-				},
-				&sourcesList);
+			obs_canvas_enum_scenes(canvas, enumScenesProc, &sourcesList);
+#else
+			(void)canvas_name;
+			obs_enum_scenes(enumScenesProc, &sourcesList);
+#endif
 
 			out_jsonReturn = json11::Json(sourcesList).dump();
 		},
@@ -3341,9 +3514,18 @@ void PluginJsHandler::JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::
 {
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
+	std::string canvas_name = params["param2"].string_value();
+
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[&out_jsonReturn]() {
+		[canvas_name, &out_jsonReturn]() {
+			if (isVerticalCanvas(canvas_name))
+			{
+				SlDualConfig cfg = SlDualOutput::instance().config();
+				out_jsonReturn = Json(Json::object({{"width", static_cast<int>(cfg.canvasWidth)}, {"height", static_cast<int>(cfg.canvasHeight)}})).dump();
+				return;
+			}
+
 			obs_video_info ovi;
 			if (obs_get_video_info(&ovi))
 			{
@@ -3550,4 +3732,243 @@ void PluginJsHandler::loadFonts()
 	}
 	catch (const std::filesystem::filesystem_error &)
 	{}
+}
+
+/**
+* Dual output
+*
+* Everything here runs on the UI thread, like the rest of the api: SlDualController is UI-thread only.
+* Calls degrade to an "unavailable" error rather than failing silently, since the canvas is detached while
+*	a scene collection loads or switches and the frontend can easily call in during that window.
+*/
+
+static std::string dualUnavailableError()
+{
+	return Json(Json::object({{"error", "Dual output unavailable"}})).dump();
+}
+
+static std::string dualSuccess()
+{
+	return Json(Json::object({{"status", "success"}})).dump();
+}
+
+// Marshals to the UI thread and runs fn there, like every other handler in this file.
+template<typename Fn> static void onUiThread(Fn &&fn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+	QMetaObject::invokeMethod(mainWindow, std::forward<Fn>(fn), Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_DUALOUTPUT_GET_STATE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	onUiThread([&out_jsonReturn]() {
+		SlDualOutput &dual = SlDualOutput::instance();
+		SlDualConfig cfg = dual.config();
+
+		std::vector<Json> scenes;
+
+		for (const std::string &name : dual.sceneNames())
+			scenes.push_back(Json(name));
+
+		// Handing the canvas to the multitrack path does nothing unless the main stream is actually using it.
+		bool ebAvailable = false;
+
+		if (config_t *profile = obs_frontend_get_profile_config())
+			ebAvailable = config_get_bool(profile, "Stream1", "EnableMultitrackVideo");
+
+		out_jsonReturn = Json(Json::object({
+			{"available", dual.available()},
+			{"enabled", cfg.enabled},
+			{"canvas", Json::object({{"width", static_cast<int>(cfg.canvasWidth)}, {"height", static_cast<int>(cfg.canvasHeight)}})},
+			{"active_scene", dual.activeSceneName()},
+			{"scenes", scenes},
+			{"stream_state", dual.streamState()},
+			{"output_mode", slDualOutputModeToString(cfg.outputMode)},
+			{"eb_available", ebAvailable},
+		})).dump();
+	});
+}
+
+void PluginJsHandler::JS_DUALOUTPUT_SET_ENABLED(const json11::Json &params, std::string &out_jsonReturn)
+{
+	bool enabled = params["param2"].bool_value();
+
+	onUiThread([enabled, &out_jsonReturn]() {
+		out_jsonReturn = SlDualOutput::instance().setEnabled(enabled) ? dualSuccess() : dualUnavailableError();
+	});
+}
+
+void PluginJsHandler::JS_DUALOUTPUT_SET_CANVAS_SIZE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	int width = params["param2"].int_value();
+	int height = params["param3"].int_value();
+
+	if (width < 32 || height < 32 || width > 8192 || height > 8192)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Canvas size out of range (32..8192)"}})).dump();
+		return;
+	}
+
+	onUiThread([width, height, &out_jsonReturn]() {
+		SlDualOutput &dual = SlDualOutput::instance();
+		SlDualConfig cfg = dual.config();
+		cfg.canvasWidth = static_cast<uint32_t>(width);
+		cfg.canvasHeight = static_cast<uint32_t>(height);
+
+		if (!dual.applyConfig(cfg))
+		{
+			out_jsonReturn = dualUnavailableError();
+			return;
+		}
+
+		// The canvas aligns and clamps what it was given; report back what actually took.
+		SlDualConfig applied = dual.config();
+		out_jsonReturn = Json(Json::object({{"width", static_cast<int>(applied.canvasWidth)}, {"height", static_cast<int>(applied.canvasHeight)}})).dump();
+	});
+}
+
+void PluginJsHandler::JS_DUALOUTPUT_SET_OUTPUT_MODE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	std::string mode = params["param2"].string_value();
+
+	if (mode != "rtmp" && mode != "enhanced_broadcasting")
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Expected rtmp or enhanced_broadcasting"}})).dump();
+		return;
+	}
+
+	onUiThread([mode, &out_jsonReturn]() {
+		out_jsonReturn = SlDualOutput::instance().setOutputMode(slDualOutputModeFromString(mode)) ? dualSuccess() : dualUnavailableError();
+	});
+}
+
+void PluginJsHandler::JS_DUALOUTPUT_SET_STREAM_SETTINGS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	std::string server = params["param2"].string_value();
+	std::string key = params["param3"].string_value();
+	bool use_auth = params["param4"].bool_value();
+	std::string username = params["param5"].string_value();
+	std::string password = params["param6"].string_value();
+	std::string encoder_id = params["param7"].string_value();
+	int video_bitrate = params["param8"].int_value();
+	int audio_bitrate = params["param9"].int_value();
+	int audio_track = params["param10"].int_value();
+	bool auto_start = params["param11"].bool_value();
+
+	onUiThread([server, key, use_auth, username, password, encoder_id, video_bitrate, audio_bitrate, audio_track, auto_start, &out_jsonReturn]() {
+		SlDualOutput &dual = SlDualOutput::instance();
+		SlDualConfig cfg = dual.config();
+
+		cfg.server = server;
+		cfg.key = key;
+		cfg.useAuth = use_auth;
+		cfg.authUsername = username;
+		cfg.authPassword = password;
+		cfg.autoStart = auto_start;
+
+		// Absent numerics and strings arrive empty/zero; keep the stored value rather than writing a broken one.
+		if (!encoder_id.empty())
+			cfg.encoderId = encoder_id;
+
+		if (video_bitrate > 0)
+			cfg.videoBitrateKbps = video_bitrate;
+
+		if (audio_bitrate > 0)
+			cfg.audioBitrateKbps = audio_bitrate;
+
+		if (audio_track > 0)
+			cfg.audioTrack = audio_track;
+
+		out_jsonReturn = dual.applyConfig(cfg) ? dualSuccess() : dualUnavailableError();
+	});
+}
+
+void PluginJsHandler::JS_DUALOUTPUT_GET_STREAM_SETTINGS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	onUiThread([&out_jsonReturn]() {
+		SlDualConfig cfg = SlDualOutput::instance().config();
+
+		out_jsonReturn = Json(Json::object({
+			{"server", cfg.server},
+			{"key", cfg.key},
+			{"use_auth", cfg.useAuth},
+			{"username", cfg.authUsername},
+			{"password", cfg.authPassword},
+			{"encoder_id", cfg.encoderId},
+			{"video_bitrate", cfg.videoBitrateKbps},
+			{"audio_bitrate", cfg.audioBitrateKbps},
+			{"audio_track", cfg.audioTrack},
+			{"auto_start", cfg.autoStart},
+		})).dump();
+	});
+}
+
+void PluginJsHandler::JS_DUALOUTPUT_START_STREAM(const json11::Json &params, std::string &out_jsonReturn)
+{
+	onUiThread([&out_jsonReturn]() {
+		SlDualOutput &dual = SlDualOutput::instance();
+
+		if (!dual.available())
+		{
+			out_jsonReturn = dualUnavailableError();
+			return;
+		}
+
+		SlDualConfig cfg = dual.config();
+
+		if (!cfg.enabled)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Dual output is disabled"}})).dump();
+			return;
+		}
+
+		if (cfg.outputMode == SlDualOutputMode::EnhancedBroadcasting)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Output mode is enhanced_broadcasting, OBS streams this canvas"}})).dump();
+			return;
+		}
+
+		if (cfg.server.empty())
+		{
+			out_jsonReturn = Json(Json::object({{"error", "No stream server configured"}})).dump();
+			return;
+		}
+
+		// Reports only that the output was accepted; the connection result arrives asynchronously.
+		dual.startStream();
+		out_jsonReturn = Json(Json::object({{"stream_state", dual.streamState()}})).dump();
+	});
+}
+
+void PluginJsHandler::JS_DUALOUTPUT_STOP_STREAM(const json11::Json &params, std::string &out_jsonReturn)
+{
+	onUiThread([&out_jsonReturn]() {
+		SlDualOutput &dual = SlDualOutput::instance();
+
+		if (!dual.stopStream())
+		{
+			out_jsonReturn = dualUnavailableError();
+			return;
+		}
+
+		out_jsonReturn = Json(Json::object({{"stream_state", dual.streamState()}})).dump();
+	});
+}
+
+void PluginJsHandler::JS_DUALOUTPUT_REMOVE_SCENE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	std::string scene_name = params["param2"].string_value();
+
+	onUiThread([scene_name, &out_jsonReturn]() {
+		SlDualOutput &dual = SlDualOutput::instance();
+
+		if (!dual.available())
+		{
+			out_jsonReturn = dualUnavailableError();
+			return;
+		}
+
+		// The canvas refuses to drop its last scene, which is the usual reason this fails.
+		out_jsonReturn = dual.sceneRemove(scene_name) ? dualSuccess() : Json(Json::object({{"error", "Failed to remove scene " + scene_name}})).dump();
+	});
 }

@@ -44,7 +44,13 @@ public: // actions, UI thread (dock / editor / settings dialog)
 	void sceneSetActive(const std::string& name);
 	bool sceneCreate(const std::string& name);
 	void sceneRemoveActive();
+	bool sceneRemove(const std::string& name);
 	bool sceneRenameActive(const std::string& name);
+
+	// Gates the docks and streaming; the canvas stays registered so its scenes persist.
+	void setEnabled(bool enabled);
+
+	void setOutputMode(SlDualOutputMode mode);
 
 	void transitionSelect(const std::string& name);
 	void transitionSetDuration(int ms);
@@ -92,6 +98,9 @@ private: // docks
 
 	// Applies the selected transition and duration to the canvas channel.
 	void applyTransition();
+
+	// Hands the canvas UUID to OBS's multitrack path, or clears it. Read live at stream start, so no restart is needed.
+	void applyOutputModeSetting();
 
 private:
 	bool m_callbacksRegistered = false;
