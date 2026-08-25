@@ -103,6 +103,7 @@ public:
 		JS_WRITE_FILE,
 		JS_IS_PROCESS_RUNNING,
 		JS_STOP_PROCESS,
+		JS_BROWSERSOURCE_SEND_MESSAGE,
 	};
 
 public:
@@ -568,6 +569,17 @@ public:
 			//		Example arg1 = { "branch": '29.1.0', "git_sha": 'abcdefg...', "rev": '10' }
 			//	DEV NOTE: THIS FUNCTION CAN NEVER BE RENAMED !!
 			{"sl_getVersionInfo", JS_SL_VERSION_INFO},
+
+			/***
+			* Browser sources
+			*/
+
+			// .(@function(arg1), @sourceName, @messageStr)
+			//	Sends messageStr one way to a page in an OBS browser source, arriving as a
+			//	messageFromApp CustomEvent with detail {"message": messageStr}, the same shape
+			//	Streamlabs Desktop sends. No reply path, dropped if the source has no live page.
+			//		Example arg1 = { "success": true } or { "success": true, "warning": "." } or { "error": "." }
+			{"browsersource_sendMessage", JS_BROWSERSOURCE_SEND_MESSAGE},
 
 		};
 

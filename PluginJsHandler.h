@@ -131,6 +131,7 @@ private:
 	void JS_WRITE_FILE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_IS_PROCESS_RUNNING(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_STOP_PROCESS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_BROWSERSOURCE_SEND_MESSAGE(const json11::Json &params, std::string &out_jsonReturn);
 
 	// Internal helpers
 	std::string ws_to_utf8(const std::wstring &str);
