@@ -22,15 +22,13 @@ if(NOT SL_DUAL_OBS_VERSION)
   message(FATAL_ERROR "sl-dual-output: could not parse obs.ver ('${SL_DUAL_OBS_VER_RAW}')")
 endif()
 
-# OBS 32.1.0 is the functional floor: earlier versions never save
-# plugin-canvas scenes to the scene collection (the save loop over frontend
-# canvases first shipped in 32.1.0), so dual output cannot persist on them.
-# Below the floor the build still succeeds, but only the facade is compiled,
+# OBS 31.1.0 is the floor: the canvas API first shipped there (PRs 11823/11832).
+# Below it the build still succeeds, but only the facade is compiled,
 # as a no-op stub (SL_DUAL_ENABLED=0); initialize()/shutdown() do nothing.
-if(SL_DUAL_OBS_VERSION VERSION_LESS "32.1.0")
+if(SL_DUAL_OBS_VERSION VERSION_LESS "31.1.0")
   set(SL_DUAL_ENABLED 0)
-  message(STATUS "sl-dual-output: OBS ${SL_DUAL_OBS_VER_RAW} < 32.1 cannot persist "
-                 "plugin-canvas scenes; compiling dual output as a no-op stub")
+  message(STATUS "sl-dual-output: OBS ${SL_DUAL_OBS_VER_RAW} < 31.1 has no canvas API; "
+                 "compiling dual output as a no-op stub")
 else()
   set(SL_DUAL_ENABLED 1)
   message(STATUS "sl-dual-output: building against OBS ${SL_DUAL_OBS_VER_RAW}")
