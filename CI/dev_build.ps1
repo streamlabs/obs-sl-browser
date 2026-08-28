@@ -31,6 +31,9 @@
 .PARAMETER Config
     RelWithDebInfo (default) or Debug.
 
+.PARAMETER GrpcVersion
+    gRPC release tag to install. Each version uses its own dependency cache.
+
 .PARAMETER PluginOnly
     Build only the three sl-browser targets. This is the normal inner-loop switch - a full OBS
     build takes many minutes, the plugin alone takes a fraction of that.
@@ -82,12 +85,30 @@ function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Info($msg) { Write-Host "    $msg" -ForegroundColor DarkGray }
 
 function ConvertTo-ObsVersion($value) {
-    $match = [regex]::Match($value, '^(?:v)?(?<version>\d+\.\d+\.\d+)(?:[-+].*)?$')
+    $match = [regex]::Match($value, '^(?:v)?(?<version>\d+\.\d+\.\d+)(?:-(?:beta|rc)\d+)?(?:-\d+-g[0-9a-f]+)?$', 'IgnoreCase')
     if (-not $match.Success) {
-        throw "OBS version '$value' is invalid. Expected a tag such as '31.1.2' or '32.0.0-rc1'."
+        throw "OBS version '$value' is invalid. Expected a tag such as '31.1.2', '32.0.0-rc1', or a value produced by git describe."
     }
 
     return [version]$match.Groups['version'].Value
+}
+
+function Get-ReparseTarget($item) {
+    # LinkTarget is PowerShell 7; Windows PowerShell 5.1 exposes Target as a collection.
+    $target = if ($item.PSObject.Properties.Name -contains 'LinkTarget' -and $item.LinkTarget) {
+        $item.LinkTarget
+    }
+    elseif ($item.PSObject.Properties.Name -contains 'Target' -and $item.Target) {
+        @($item.Target)[0]
+    }
+    else {
+        return $null
+    }
+
+    if (-not [System.IO.Path]::IsPathRooted($target)) {
+        $target = Join-Path $item.Parent.FullName $target
+    }
+    return [System.IO.Path]::GetFullPath($target)
 }
 
 # --- Locate the working copy -------------------------------------------------
@@ -110,6 +131,10 @@ if ($parsedObsVersion -lt $minimumObsVersion) {
     throw "OBS $ObsVersion is not supported by this script. OBS 30.0.0 or newer is required because older versions use CI\build-windows.ps1 instead of the windows-x64 CMake preset."
 }
 
+if ($GrpcVersion -notmatch '^v\d+\.\d+\.\d+$') {
+    throw "gRPC version '$GrpcVersion' is invalid. Expected a release tag such as 'v1.58.0'."
+}
+
 if (-not $ObsDir) {
     $ObsDir = Join-Path $PluginDir "builds\obs-studio-$ObsVersion"
 }
@@ -117,7 +142,7 @@ if (-not $ObsDir) {
 $obsFull = [System.IO.Path]::GetFullPath($ObsDir)
 $pluginFull = [System.IO.Path]::GetFullPath($PluginDir)
 
-$DepsDir = Join-Path (Split-Path $obsFull -Parent) 'sl-browser-deps'
+$DepsDir = Join-Path (Split-Path $obsFull -Parent) "sl-browser-deps\$GrpcVersion"
 $BuildDir = Join-Path $obsFull 'build_x64'
 
 Step "Configuration"
@@ -195,7 +220,18 @@ $syncManifest = Join-Path $pluginSourceDir '.dev_build_files'
 if (Test-Path $pluginSourceDir) {
     $item = Get-Item $pluginSourceDir -Force
     if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-        # Remove only the old junction left by an earlier version of this script.
+        $linkTarget = Get-ReparseTarget $item
+        $isOldDevLink = $linkTarget -and $linkTarget.TrimEnd('\') -ieq $pluginFull.TrimEnd('\')
+        if (-not $isOldDevLink -and -not $Force) {
+            throw @"
+'$pluginSourceDir' is a reparse point targeting '$linkTarget', not the plugin working copy.
+Re-run with -Force only if replacing that user-managed link is intentional.
+"@
+        }
+        if (-not $isOldDevLink) {
+            Write-Warning "Replacing reparse point at $pluginSourceDir (target: $linkTarget)"
+        }
+        # Remove the reparse point itself, never its target.
         [System.IO.Directory]::Delete($pluginSourceDir, $false)
         New-Item -ItemType Directory -Path $pluginSourceDir | Out-Null
     }
@@ -243,6 +279,15 @@ if (Test-Path $syncManifest) {
         }
         if (Test-Path -LiteralPath $stalePath -PathType Leaf) {
             Remove-Item -LiteralPath $stalePath -Force
+
+            # A source path can change from a directory into a file. Remove empty parents left
+            # by stale files so the new file can be copied to that same path.
+            $emptyParent = Split-Path $stalePath -Parent
+            while ($emptyParent.StartsWith($sourceRoot, [StringComparison]::OrdinalIgnoreCase)) {
+                if (@(Get-ChildItem -LiteralPath $emptyParent -Force).Count) { break }
+                [System.IO.Directory]::Delete($emptyParent, $false)
+                $emptyParent = Split-Path $emptyParent -Parent
+            }
         }
     }
 }
@@ -256,6 +301,12 @@ foreach ($relativePath in $sourceFiles) {
     }
 
     $sourceItem = Get-Item -LiteralPath $sourcePath
+    if (Test-Path -LiteralPath $destinationPath -PathType Container) {
+        if (@(Get-ChildItem -LiteralPath $destinationPath -Force).Count) {
+            throw "Cannot replace non-empty destination directory '$destinationPath' with a file."
+        }
+        [System.IO.Directory]::Delete($destinationPath, $false)
+    }
     $needsCopy = -not (Test-Path -LiteralPath $destinationPath -PathType Leaf)
     if (-not $needsCopy) {
         $destinationItem = Get-Item -LiteralPath $destinationPath
@@ -299,20 +350,18 @@ $cacheFile = Join-Path $BuildDir 'CMakeCache.txt'
 if ($Reconfigure -or -not (Test-Path $cacheFile)) {
     Step "Configuring"
 
-    # The preset pins a Windows SDK that is not installed everywhere; fall back to the newest present.
+    # Presets pin different SDKs across OBS releases. Consistently select the newest installed SDK
+    # instead of guessing which version the current checkout requests.
     $configureArgs = @('--preset', 'windows-x64', '-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF')
 
-    $presetSdk = '10.0.22621.0'
     $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10\Include'
-    if (Test-Path $sdkRoot) {
-        $installed = Get-ChildItem $sdkRoot -Directory | Select-Object -ExpandProperty Name
-        if ($installed -notcontains $presetSdk) {
-            $newest = $installed | Where-Object { $_ -match '^10\.' } | Sort-Object { [version]$_ } | Select-Object -Last 1
-            if (-not $newest) { throw "No Windows 10/11 SDK found under $sdkRoot" }
-            Write-Warning "Preset wants SDK $presetSdk, which is not installed. Using $newest."
-            $configureArgs += @('-A', "x64,version=$newest")
-        }
-    }
+    if (-not (Test-Path $sdkRoot)) { throw "Windows 10/11 SDK directory not found at $sdkRoot" }
+    $newestSdk = Get-ChildItem $sdkRoot -Directory | Select-Object -ExpandProperty Name |
+        Where-Object { $_ -match '^10\.\d+\.\d+\.\d+$' } |
+        Sort-Object { [version]$_ } | Select-Object -Last 1
+    if (-not $newestSdk) { throw "No Windows 10/11 SDK found under $sdkRoot" }
+    Info "Windows SDK $newestSdk"
+    $configureArgs += @('-A', "x64,version=$newestSdk")
 
     Push-Location $obsFull
     try {
@@ -367,16 +416,16 @@ if ($Run) {
     if ($LASTEXITCODE -ne 0) { throw "cmake --install failed ($LASTEXITCODE)" }
 }
 
-$obsExe = Get-ChildItem (Join-Path $BuildDir 'rundir') -Filter 'obs64.exe' -Recurse -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-if ($obsExe) {
-    Write-Host "`nOBS executable:`n  $($obsExe.FullName)" -ForegroundColor Green
+$obsExePath = Join-Path $BuildDir "rundir\$Config\bin\64bit\obs64.exe"
+if (Test-Path -LiteralPath $obsExePath -PathType Leaf) {
+    $obsExe = Get-Item -LiteralPath $obsExePath
+    Write-Host "`nOBS executable:`n  $obsExePath" -ForegroundColor Green
 }
 elseif ($Run) {
-    throw "obs64.exe not found under $BuildDir\rundir after install."
+    throw "obs64.exe not found at $obsExePath after install."
 }
 else {
-    Write-Warning "obs64.exe was not found under $BuildDir\rundir. Run a full build without -PluginOnly first."
+    Write-Warning "obs64.exe was not found at $obsExePath. Run a full build without -PluginOnly first."
 }
 
 if ($Run) {
