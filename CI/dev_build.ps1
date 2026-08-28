@@ -9,8 +9,8 @@
 
     This script instead:
       * uses the working copy this script lives in, never a clone of it
-      * junctions that working copy into <ObsDir>\plugins\obs-sl-browser, so edits are picked up
-        with no copy step (the plugin needs to sit under plugins/ because its sources include
+      * incrementally syncs this working copy into <ObsDir>\plugins\obs-sl-browser, so edits are
+        picked up on every run (the plugin needs to sit under plugins/ because its sources include
         ..\obs-browser\panel\browser-panel-internal.hpp from OBS's own bundled browser plugin)
       * clones OBS once, then reuses it
       * configures once, then only rebuilds - re-running is incremental and fast
@@ -22,9 +22,8 @@
 
 .PARAMETER ObsDir
     Where the obsproject/obs-studio checkout lives. Cloned on first run, reused after.
-    Must NOT be inside the plugin repo: the junction would then contain its own parent and
-    any recursive tool (git, cleanup, indexers) would loop forever.
-    Defaults to a sibling of the plugin repo, named for the OBS version.
+    Defaults to builds\obs-studio-<version> inside the plugin repo. The builds directory is
+    already gitignored, keeping temporary clones and dependencies out of the parent repos folder.
 
 .PARAMETER ObsVersion
     OBS tag to build against. Defaults to the contents of obs.ver, which is what CI uses.
@@ -50,7 +49,7 @@
     Shallow-clone OBS on first run. Faster, but leaves no history to bisect against.
 
 .PARAMETER Force
-    Replace a real directory sitting where the junction belongs. Read what it is first.
+    Replace an unmanaged directory sitting where the synced plugin sources belong.
 
 .EXAMPLE
     .\CI\dev_build.ps1
@@ -112,20 +111,11 @@ if ($parsedObsVersion -lt $minimumObsVersion) {
 }
 
 if (-not $ObsDir) {
-    $ObsDir = Join-Path (Split-Path $PluginDir -Parent) "obs-studio-$ObsVersion"
+    $ObsDir = Join-Path $PluginDir "builds\obs-studio-$ObsVersion"
 }
 
-# The junction points at $PluginDir, so an $ObsDir underneath it makes the tree contain itself.
 $obsFull = [System.IO.Path]::GetFullPath($ObsDir)
 $pluginFull = [System.IO.Path]::GetFullPath($PluginDir)
-if ($obsFull.StartsWith($pluginFull, [StringComparison]::OrdinalIgnoreCase)) {
-    throw @"
-ObsDir '$obsFull' is inside the plugin repo '$pluginFull'.
-The plugin gets junctioned into <ObsDir>\plugins\obs-sl-browser, so that would nest the OBS tree
-inside itself without end. Pick a location outside the repo, e.g.
-  -ObsDir "$(Join-Path (Split-Path $pluginFull -Parent) "obs-studio-$ObsVersion")"
-"@
-}
 
 $DepsDir = Join-Path (Split-Path $obsFull -Parent) 'sl-browser-deps'
 $BuildDir = Join-Path $obsFull 'build_x64'
@@ -149,6 +139,7 @@ if (-not (Get-Command '7z' -ErrorAction SilentlyContinue)) {
 
 if (-not (Test-Path (Join-Path $obsFull '.git'))) {
     Step "Cloning OBS $ObsVersion (once; later runs reuse it)"
+    New-Item -ItemType Directory -Path (Split-Path $obsFull -Parent) -Force | Out-Null
     $cloneArgs = @('clone', '--recursive', '--branch', $ObsVersion)
     if ($Shallow) { $cloneArgs += @('--depth', '1', '--shallow-submodules') }
     $cloneArgs += @('https://github.com/obsproject/obs-studio.git', $obsFull)
@@ -194,48 +185,93 @@ $env:absl_DIR = Join-Path $grpcDist 'lib\cmake\absl'
 $env:gRPC_DIR = Join-Path $grpcDist 'lib\cmake\grpc'
 $env:utf8_range_DIR = Join-Path $grpcDist 'lib\cmake\utf8_range'
 
-# --- Junction the working copy into plugins/ ---------------------------------
+# --- Sync the working copy into plugins/ -------------------------------------
 
-Step "Linking the working copy into plugins/"
-$linkPath = Join-Path $obsFull 'plugins\obs-sl-browser'
+Step "Syncing the working copy into plugins/"
+$pluginSourceDir = Join-Path $obsFull 'plugins\obs-sl-browser'
+$syncMarker = Join-Path $pluginSourceDir '.dev_build_managed'
+$syncManifest = Join-Path $pluginSourceDir '.dev_build_files'
 
-function Get-LinkTarget($item) {
-    # LinkTarget is PS7; PS5.1 exposes Target as a collection.
-    if ($item.PSObject.Properties.Name -contains 'LinkTarget' -and $item.LinkTarget) { return $item.LinkTarget }
-    if ($item.PSObject.Properties.Name -contains 'Target' -and $item.Target) { return @($item.Target)[0] }
-    return $null
-}
-
-if (Test-Path $linkPath) {
-    $item = Get-Item $linkPath -Force
-    $isLink = $item.Attributes -band [IO.FileAttributes]::ReparsePoint
-    $target = if ($isLink) { Get-LinkTarget $item } else { $null }
-
-    if ($isLink -and $target -and ([System.IO.Path]::GetFullPath($target).TrimEnd('\')) -ieq $pluginFull.TrimEnd('\')) {
-        Info "already linked"
+if (Test-Path $pluginSourceDir) {
+    $item = Get-Item $pluginSourceDir -Force
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        # Remove only the old junction left by an earlier version of this script.
+        [System.IO.Directory]::Delete($pluginSourceDir, $false)
+        New-Item -ItemType Directory -Path $pluginSourceDir | Out-Null
     }
-    elseif ($isLink) {
-        Info "relinking (was -> $target)"
-        # Remove the reparse point itself, never its contents.
-        [System.IO.Directory]::Delete($linkPath, $false)
-        New-Item -ItemType Junction -Path $linkPath -Target $pluginFull | Out-Null
-    }
-    elseif ($Force) {
-        Write-Warning "Replacing real directory at $linkPath"
-        Remove-Item $linkPath -Recurse -Force
-        New-Item -ItemType Junction -Path $linkPath -Target $pluginFull | Out-Null
-    }
-    else {
-        throw @"
-'$linkPath' is a real directory, not a link - most likely a leftover copy from local_build.ps1.
-Check what is in it, then re-run with -Force to replace it with a link to the working copy.
+    elseif (-not (Test-Path $syncMarker)) {
+        if (-not $Force) {
+            throw @"
+'$pluginSourceDir' is an unmanaged directory, most likely a leftover copy from local_build.ps1.
+Check what is in it, then re-run with -Force to replace it with a managed source copy.
 "@
+        }
+
+        Write-Warning "Replacing unmanaged directory at $pluginSourceDir"
+        $expectedParent = [System.IO.Path]::GetFullPath((Join-Path $obsFull 'plugins')).TrimEnd('\') + '\'
+        $resolvedSourceDir = [System.IO.Path]::GetFullPath($pluginSourceDir)
+        if (-not $resolvedSourceDir.StartsWith($expectedParent, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to remove unexpected plugin directory '$resolvedSourceDir'."
+        }
+        Remove-Item -LiteralPath $resolvedSourceDir -Recurse -Force
+        New-Item -ItemType Directory -Path $pluginSourceDir | Out-Null
     }
 }
 else {
-    New-Item -ItemType Junction -Path $linkPath -Target $pluginFull | Out-Null
-    Info "linked -> $pluginFull"
+    New-Item -ItemType Directory -Path $pluginSourceDir | Out-Null
 }
+
+Set-Content -LiteralPath $syncMarker -Value 'Managed by CI\dev_build.ps1.'
+
+# Git supplies the working set so ignored build output and nested repositories are not copied.
+$sourceFiles = @(git -C $pluginFull ls-files --cached --others --exclude-standard)
+if ($LASTEXITCODE -ne 0) { throw "git ls-files failed ($LASTEXITCODE)" }
+$sourceFiles = @($sourceFiles | Where-Object {
+    $_ -and (Test-Path -LiteralPath (Join-Path $pluginFull $_) -PathType Leaf)
+} | Sort-Object -Unique)
+
+$sourceRoot = [System.IO.Path]::GetFullPath($pluginSourceDir).TrimEnd('\') + '\'
+$currentFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($relativePath in $sourceFiles) { [void]$currentFiles.Add($relativePath) }
+
+if (Test-Path $syncManifest) {
+    foreach ($relativePath in Get-Content $syncManifest) {
+        if (-not $relativePath -or $currentFiles.Contains($relativePath)) { continue }
+        $stalePath = [System.IO.Path]::GetFullPath((Join-Path $pluginSourceDir $relativePath))
+        if (-not $stalePath.StartsWith($sourceRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to remove unexpected stale path '$stalePath'."
+        }
+        if (Test-Path -LiteralPath $stalePath -PathType Leaf) {
+            Remove-Item -LiteralPath $stalePath -Force
+        }
+    }
+}
+
+$copied = 0
+foreach ($relativePath in $sourceFiles) {
+    $sourcePath = Join-Path $pluginFull $relativePath
+    $destinationPath = [System.IO.Path]::GetFullPath((Join-Path $pluginSourceDir $relativePath))
+    if (-not $destinationPath.StartsWith($sourceRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to copy to unexpected path '$destinationPath'."
+    }
+
+    $sourceItem = Get-Item -LiteralPath $sourcePath
+    $needsCopy = -not (Test-Path -LiteralPath $destinationPath -PathType Leaf)
+    if (-not $needsCopy) {
+        $destinationItem = Get-Item -LiteralPath $destinationPath
+        $needsCopy = $sourceItem.Length -ne $destinationItem.Length -or
+            $sourceItem.LastWriteTimeUtc -ne $destinationItem.LastWriteTimeUtc
+    }
+
+    if ($needsCopy) {
+        New-Item -ItemType Directory -Path (Split-Path $destinationPath -Parent) -Force | Out-Null
+        Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force
+        $copied++
+    }
+}
+
+Set-Content -LiteralPath $syncManifest -Value $sourceFiles
+Info "$copied changed file(s) copied; $($sourceFiles.Count) file(s) tracked"
 
 # --- Register the plugin with OBS's build ------------------------------------
 
