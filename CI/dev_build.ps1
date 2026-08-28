@@ -354,7 +354,7 @@ foreach ($f in $required) {
 if ($missing.Count) { throw "Build reported success but these are missing:`n  $($missing -join "`n  ")" }
 
 Info ""
-Info "in $outDir"
+Info "plugin output  $outDir"
 Write-Host "`nBuilt in $([math]::Round($sw.Elapsed.TotalSeconds, 1))s" -ForegroundColor Green
 
 # --- Run ---------------------------------------------------------------------
@@ -365,11 +365,21 @@ if ($Run) {
     # this the default prefix is C:\Program Files and the install would need elevation.
     cmake --install $BuildDir --config $Config --prefix (Join-Path $BuildDir 'install')
     if ($LASTEXITCODE -ne 0) { throw "cmake --install failed ($LASTEXITCODE)" }
+}
 
-    $obsExe = Get-ChildItem (Join-Path $BuildDir 'rundir') -Filter 'obs64.exe' -Recurse -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if (-not $obsExe) { throw "obs64.exe not found under $BuildDir\rundir after install." }
+$obsExe = Get-ChildItem (Join-Path $BuildDir 'rundir') -Filter 'obs64.exe' -Recurse -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+if ($obsExe) {
+    Write-Host "`nOBS executable:`n  $($obsExe.FullName)" -ForegroundColor Green
+}
+elseif ($Run) {
+    throw "obs64.exe not found under $BuildDir\rundir after install."
+}
+else {
+    Write-Warning "obs64.exe was not found under $BuildDir\rundir. Run a full build without -PluginOnly first."
+}
 
+if ($Run) {
     Step "Launching $($obsExe.FullName)"
     # OBS resolves its data relative to the working directory.
     Start-Process -FilePath $obsExe.FullName -WorkingDirectory $obsExe.DirectoryName
