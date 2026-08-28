@@ -93,6 +93,16 @@ function ConvertTo-ObsVersion($value) {
     return [version]$match.Groups['version'].Value
 }
 
+function Test-ObsVersionAtLeast($value, [version]$minimum) {
+    $version = ConvertTo-ObsVersion $value
+    if ($version -lt $minimum) { return $false }
+    if ($version -gt $minimum) { return $true }
+
+    # A beta or release candidate of the exact floor still predates the stable floor. A plain
+    # git-describe suffix on the stable tag represents commits after it and remains supported.
+    return $value -notmatch '-(?:beta|rc)\d+(?:-|$)'
+}
+
 function Get-ReparseTarget($item) {
     # LinkTarget is PowerShell 7; Windows PowerShell 5.1 exposes Target as a collection.
     $target = if ($item.PSObject.Properties.Name -contains 'LinkTarget' -and $item.LinkTarget) {
@@ -111,6 +121,22 @@ function Get-ReparseTarget($item) {
     return [System.IO.Path]::GetFullPath($target)
 }
 
+function Assert-ObsCheckout($path) {
+    $pluginsFile = Join-Path $path 'plugins\CMakeLists.txt'
+    if (-not (Test-Path -LiteralPath $pluginsFile -PathType Leaf)) {
+        throw "'$path' is not a supported OBS checkout: plugins\CMakeLists.txt is missing."
+    }
+
+    Push-Location $path
+    try {
+        $presetOutput = (& cmake --list-presets 2>&1) -join "`n"
+        if ($LASTEXITCODE -ne 0 -or $presetOutput -notmatch '(?m)^\s*"windows-x64"') {
+            throw "'$path' is not a supported OBS checkout: the windows-x64 configure preset is missing."
+        }
+    }
+    finally { Pop-Location }
+}
+
 # --- Locate the working copy -------------------------------------------------
 
 $PluginDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -126,8 +152,7 @@ if (-not $ObsVersion) {
 }
 
 $minimumObsVersion = [version]'30.0.0'
-$parsedObsVersion = ConvertTo-ObsVersion $ObsVersion
-if ($parsedObsVersion -lt $minimumObsVersion) {
+if (-not (Test-ObsVersionAtLeast $ObsVersion $minimumObsVersion)) {
     throw "OBS $ObsVersion is not supported by this script. OBS 30.0.0 or newer is required because older versions use CI\build-windows.ps1 instead of the windows-x64 CMake preset."
 }
 
@@ -171,14 +196,16 @@ if (-not (Test-Path (Join-Path $obsFull '.git'))) {
 
     git @cloneArgs
     if ($LASTEXITCODE -ne 0) { throw "git clone failed ($LASTEXITCODE)" }
+    Assert-ObsCheckout $obsFull
 }
 else {
     Step "Reusing OBS checkout"
+    Assert-ObsCheckout $obsFull
     Push-Location $obsFull
     try {
         $described = (git describe --tags --always 2>$null)
         Info "at $described"
-        if ($described -and (ConvertTo-ObsVersion $described) -lt $minimumObsVersion) {
+        if ($described -and -not (Test-ObsVersionAtLeast $described $minimumObsVersion)) {
             throw "The OBS checkout at '$obsFull' is $described. OBS 30.0.0 or newer is required by this script."
         }
         if ($described -and $described -ne $ObsVersion) {
@@ -194,16 +221,49 @@ else {
 
 Step "gRPC dependency"
 New-Item -ItemType Directory -Path $DepsDir -Force | Out-Null
-Push-Location $DepsDir
-try {
-    $env:GRPC_VERSION = $GrpcVersion
-    & (Join-Path $PluginDir 'ci\install_deps.cmd')
-    if ($LASTEXITCODE -ne 0) { throw "install_deps.cmd failed ($LASTEXITCODE)" }
-}
-finally { Pop-Location }
-
 $grpcDist = Join-Path $DepsDir 'grpc_dist'
-if (-not (Test-Path $grpcDist)) { throw "grpc_dist missing at $grpcDist after install_deps." }
+$requiredGrpcFiles = @(
+    'bin\protoc.exe',
+    'bin\grpc_cpp_plugin.exe',
+    'cmake\protobuf-config.cmake',
+    'lib\cmake\absl\abslConfig.cmake',
+    'lib\cmake\grpc\gRPCConfig.cmake',
+    'lib\cmake\utf8_range\utf8_range-config.cmake',
+    'lib\grpc++.lib',
+    'lib\libprotobuf.lib'
+)
+$missingGrpcFiles = @($requiredGrpcFiles | Where-Object {
+    -not (Test-Path -LiteralPath (Join-Path $grpcDist $_) -PathType Leaf)
+})
+
+if ($missingGrpcFiles.Count) {
+    if (Test-Path -LiteralPath $grpcDist) {
+        Write-Warning "Removing incomplete gRPC cache at $grpcDist"
+        Remove-Item -LiteralPath $grpcDist -Recurse -Force
+    }
+    $grpcArchive = Join-Path $DepsDir "grpc-release-static-$GrpcVersion.7z"
+    if (Test-Path -LiteralPath $grpcArchive -PathType Leaf) {
+        Remove-Item -LiteralPath $grpcArchive -Force
+    }
+
+    Push-Location $DepsDir
+    try {
+        $env:GRPC_VERSION = $GrpcVersion
+        & (Join-Path $PluginDir 'ci\install_deps.cmd')
+        if ($LASTEXITCODE -ne 0) { throw "install_deps.cmd failed ($LASTEXITCODE)" }
+    }
+    finally { Pop-Location }
+
+    $missingGrpcFiles = @($requiredGrpcFiles | Where-Object {
+        -not (Test-Path -LiteralPath (Join-Path $grpcDist $_) -PathType Leaf)
+    })
+    if ($missingGrpcFiles.Count) {
+        throw "gRPC installation at '$grpcDist' is incomplete. Missing:`n  $($missingGrpcFiles -join "`n  ")"
+    }
+}
+else {
+    Info "using complete cache"
+}
 
 $env:Protobuf_DIR = Join-Path $grpcDist 'cmake'
 $env:absl_DIR = Join-Path $grpcDist 'lib\cmake\absl'
@@ -328,8 +388,9 @@ Info "$copied changed file(s) copied; $($sourceFiles.Count) file(s) tracked"
 
 $pluginsCMake = Join-Path $obsFull 'plugins\CMakeLists.txt'
 $addLine = 'add_subdirectory(obs-sl-browser)'
+$activeAddPattern = '^\s*add_subdirectory\s*\(\s*obs-sl-browser\s*\)\s*(?:#.*)?$'
 
-if (-not (Select-String -Path $pluginsCMake -SimpleMatch -Pattern $addLine -Quiet)) {
+if (-not (Select-String -Path $pluginsCMake -Pattern $activeAddPattern -Quiet)) {
     Add-Content -Path $pluginsCMake -Value $addLine
     Info "registered in plugins/CMakeLists.txt"
     # A new subdirectory is invisible to an existing cache.
@@ -347,12 +408,33 @@ if ($Clean -and (Test-Path $BuildDir)) {
 }
 
 $cacheFile = Join-Path $BuildDir 'CMakeCache.txt'
+$grpcConfigureMarker = Join-Path $BuildDir '.dev_build_grpc_dir'
+$expectedGrpcDir = [System.IO.Path]::GetFullPath($env:gRPC_DIR)
+if (Test-Path -LiteralPath $cacheFile -PathType Leaf) {
+    $configuredGrpcDir = if (Test-Path -LiteralPath $grpcConfigureMarker -PathType Leaf) {
+        (Get-Content -LiteralPath $grpcConfigureMarker -Raw).Trim()
+    }
+    else { $null }
+
+    if (-not $configuredGrpcDir -or $configuredGrpcDir -ine $expectedGrpcDir) {
+        Info "gRPC dependency changed; forcing configure"
+        $Reconfigure = $true
+    }
+}
+
 if ($Reconfigure -or -not (Test-Path $cacheFile)) {
     Step "Configuring"
 
     # Presets pin different SDKs across OBS releases. Consistently select the newest installed SDK
     # instead of guessing which version the current checkout requests.
-    $configureArgs = @('--preset', 'windows-x64', '-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF')
+    $configureArgs = @(
+        '--preset', 'windows-x64',
+        '-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF',
+        "-DProtobuf_DIR=$env:Protobuf_DIR",
+        "-Dabsl_DIR=$env:absl_DIR",
+        "-DgRPC_DIR=$env:gRPC_DIR",
+        "-Dutf8_range_DIR=$env:utf8_range_DIR"
+    )
 
     $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10\Include'
     if (-not (Test-Path $sdkRoot)) { throw "Windows 10/11 SDK directory not found at $sdkRoot" }
@@ -367,6 +449,7 @@ if ($Reconfigure -or -not (Test-Path $cacheFile)) {
     try {
         cmake @configureArgs
         if ($LASTEXITCODE -ne 0) { throw "cmake configure failed ($LASTEXITCODE)" }
+        Set-Content -LiteralPath $grpcConfigureMarker -Value $expectedGrpcDir
     }
     finally { Pop-Location }
 }
