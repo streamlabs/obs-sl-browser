@@ -365,8 +365,10 @@ void SlDualCanvas::setTransition(obs_source_t* transition)
 	{
 		obs_transition_set_size(m_transition, m_width, m_height);
 
-		// Same live swap the main dock's SetTransition does; plain set when nothing was showing yet or a transition is running.
-		if (old && m_canvas && !obs_transition_is_active(old))
+		// Same live swap the main dock's SetTransition does; plain set when nothing was showing yet.
+		// Unguarded by design: swap_begin/swap_end is what hands a running transition over, and the frontend
+		//	swaps this way too. obs_transition_is_active would let us skip it, but that is 32.1+ only.
+		if (old && m_canvas)
 		{
 			obs_transition_swap_begin(m_transition, old);
 			obs_canvas_set_channel(m_canvas, 0, m_transition);
