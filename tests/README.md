@@ -5,7 +5,25 @@ plugin. It is an integration test, not a unit test: the API only exists inside
 the Streamlabs browser process, and the behaviour worth checking (canvas
 namespacing, persistence, output arbitration) only exists with libobs up.
 
-## Running
+## Running from a console
+
+The suite lives in `dual-output-tests.js`; the console runner injects it into the
+live page over CEF's DevTools port (`SlBrowser.cpp` already sets
+`remote_debugging_port = 9123`) and reads the results back. Zero dependencies,
+needs Node 22+ for the built-in WebSocket.
+
+```
+node tests/run-api-tests.mjs                # report to stdout, exit 1 on failure
+node tests/run-api-tests.mjs --json         # machine-readable
+node tests/run-api-tests.mjs --cleanup-only # drop leftover __slt_ scenes
+node tests/run-api-tests.mjs --list         # show attachable pages
+```
+
+OBS with the plugin must be running. The Streamlabs window does not need to be
+visible, only started, so a page exists to attach to. If more than one page is
+open, pick one with `--target <text>`.
+
+## Running in the browser
 
 The plugin injects the api onto `window.slabsGlobal` in its own CEF process, so
 the page has to be loaded by *that* browser — not an OBS browser dock, and not

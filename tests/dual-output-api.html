@@ -26,9 +26,9 @@
   li .tag { font-weight: 700; font-size: 11px; letter-spacing: .08em; padding-top: 2px; }
   .pass .tag { color: #4ec9a0; }
   .fail .tag { color: #f2777a; }
-  .skip .tag { color: #838c9a; }
-  .why { display: block; color: #a8b0bd; font-size: 12.5px; margin-top: 2px; word-break: break-word; }
-  .fail .why { color: #f2a5a7; }
+  .info .tag { color: #838c9a; }
+  .why { display: block; color: #f2a5a7; font-size: 12.5px; margin-top: 2px; word-break: break-word; }
+  .info .why { color: #a8b0bd; }
   code { font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; }
   .warn { border: 1px solid #5c4620; background: #2e2415; color: #e0a64a; padding: 10px 12px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
 </style>
@@ -36,7 +36,7 @@
 <body>
 
 <h1>Dual Output API tests</h1>
-<p class="sub">Exercises the vertical-canvas JS API against the running plugin. Creates temporary scenes prefixed <code>__slt_</code> and removes them afterwards.</p>
+<p class="sub">Exercises the vertical-canvas JS API against the running plugin. Creates temporary scenes prefixed <code>__slt_</code> and removes them afterwards. The same suite runs headless via <code>node tests/run-api-tests.mjs</code>.</p>
 
 <div class="warn" id="env" hidden></div>
 
@@ -48,294 +48,62 @@
 
 <ol id="results"></ol>
 
+<script src="dual-output-tests.js"></script>
 <script>
 "use strict";
 
-const V = "vertical";
-const PREFIX = "__slt_";
-const CALL_TIMEOUT_MS = 5000;
+var resultsEl = document.getElementById("results");
+var summaryEl = document.getElementById("summary");
+var runBtn = document.getElementById("run");
+var cleanupBtn = document.getElementById("cleanup");
 
-const resultsEl = document.getElementById("results");
-const summaryEl = document.getElementById("summary");
-const runBtn = document.getElementById("run");
-const cleanupBtn = document.getElementById("cleanup");
+function row(r) {
+  var li = document.createElement("li");
+  li.className = r.status;
 
-/* The plugin injects every api function onto window.slabsGlobal. Each takes a
-   callback as its first argument and hands it a JSON string; setters answer
-   with an empty string on success, so "no error key" is the success signal. */
-function call(fn, ...args) {
-  return new Promise((resolve) => {
-    const g = window.slabsGlobal;
-    if (!g || typeof g[fn] !== "function") {
-      resolve({ __missing: fn });
-      return;
-    }
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (!settled) { settled = true; resolve({ __timeout: fn }); }
-    }, CALL_TIMEOUT_MS);
-
-    g[fn]((json) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (!json) { resolve({}); return; }
-      try { resolve(JSON.parse(json)); }
-      catch (e) { resolve({ __raw: String(json) }); }
-    }, ...args);
-  });
-}
-
-const names = (arr) => Array.isArray(arr) ? arr.map((s) => s && s.name).filter(Boolean) : [];
-
-class Fail extends Error {}
-function check(cond, msg) { if (!cond) throw new Fail(msg); }
-function checkOk(res, what) {
-  if (res.__missing) throw new Fail(what + ": function not exposed (" + res.__missing + ")");
-  if (res.__timeout) throw new Fail(what + ": callback never fired");
-  if (res.error) throw new Fail(what + ": " + res.error);
-  return res;
-}
-
-const tests = [];
-const test = (name, fn) => tests.push({ name, fn });
-
-/* ---------------------------------------------------------------- tests --- */
-
-test("api surface is exposed", async () => {
-  const expected = [
-    "dualoutput_getState", "dualoutput_setEnabled", "dualoutput_setCanvasSize",
-    "dualoutput_setOutputMode", "dualoutput_setStreamSettings",
-    "dualoutput_getStreamSettings", "dualoutput_startStream",
-    "dualoutput_stopStream", "dualoutput_removeScene",
-  ];
-  const missing = expected.filter((n) => typeof window.slabsGlobal[n] !== "function");
-  check(missing.length === 0, "not exposed: " + missing.join(", "));
-});
-
-test("getState reports the documented shape", async (ctx) => {
-  const s = checkOk(await call("dualoutput_getState"), "getState");
-  for (const k of ["available", "enabled", "canvas", "active_scene", "scenes", "stream_state", "output_mode", "eb_available"]) {
-    check(k in s, "missing key: " + k);
-  }
-  check(typeof s.canvas.width === "number" && typeof s.canvas.height === "number", "canvas dimensions are not numbers");
-  check(Array.isArray(s.scenes), "scenes is not an array");
-  ctx.state = s;
-  check(s.available === true, "canvas is not attached (available=false) - the rest will fail; wait for the scene collection to finish loading");
-});
-
-test("main canvas enumeration is unchanged without a canvas argument", async (ctx) => {
-  const before = await call("obs_enum_scenes");
-  check(Array.isArray(before), "obs_enum_scenes did not return an array");
-  check(before.length > 0, "no horizontal scenes found - cannot judge isolation");
-  ctx.mainScenesBefore = names(before);
-});
-
-test("creates a scene on the vertical canvas", async (ctx) => {
-  ctx.sceneA = PREFIX + "a";
-  checkOk(await call("obs_create_scene", ctx.sceneA, V), "create vertical scene");
-  const listed = names(await call("obs_enum_scenes", V));
-  check(listed.includes(ctx.sceneA), "created scene is not in the vertical enumeration");
-});
-
-test("vertical scenes stay invisible to the main canvas", async (ctx) => {
-  const after = names(await call("obs_enum_scenes"));
-  check(!after.includes(ctx.sceneA), "vertical scene leaked into the main scene list");
-  check(after.length === ctx.mainScenesBefore.length, "main scene count changed: " + ctx.mainScenesBefore.length + " -> " + after.length);
-});
-
-test("the same scene name may exist on both canvases", async (ctx) => {
-  const borrowed = ctx.mainScenesBefore[0];
-  const res = await call("obs_create_scene", borrowed, V);
-  checkOk(res, "create '" + borrowed + "' on vertical");
-  ctx.sceneCollide = borrowed;
-  check(names(await call("obs_enum_scenes", V)).includes(borrowed), "collided name missing from vertical");
-});
-
-test("an unrecognised canvas name is refused, not redirected", async (ctx) => {
-  const bogus = PREFIX + "bogus";
-  const res = await call("obs_create_scene", bogus, "verticle");
-  check(!!res.error, "expected an error for canvas 'verticle', got: " + JSON.stringify(res));
-  const main = names(await call("obs_enum_scenes"));
-  check(!main.includes(bogus), "typo fell through and created the scene on the MAIN canvas");
-  check(!names(await call("obs_enum_scenes", V)).includes(bogus), "typo created the scene on the vertical canvas");
-});
-
-test("adds a source to a vertical scene and round-trips its position", async (ctx) => {
-  ctx.sourceName = PREFIX + "src";
-  let made = null;
-  for (const id of ["color_source_v3", "color_source_v2", "color_source"]) {
-    const r = await call("obs_source_create", id, ctx.sourceName, "", "");
-    if (!r.error && !r.__missing) { made = id; break; }
-  }
-  check(made, "could not create a color source of any known id");
-
-  checkOk(await call("obs_scene_add", ctx.sceneA, ctx.sourceName, V), "scene_add on vertical");
-  checkOk(await call("obs_sceneitem_set_pos", ctx.sceneA, ctx.sourceName, 111, 222, V), "set_pos on vertical");
-
-  const pos = checkOk(await call("obs_sceneitem_get_pos", ctx.sceneA, ctx.sourceName, V), "get_pos on vertical");
-  check(Math.round(pos.x) === 111 && Math.round(pos.y) === 222, "position round-trip gave " + pos.x + "," + pos.y);
-});
-
-test("the same source is not added to the main canvas", async (ctx) => {
-  const items = await call("obs_scene_get_sources", ctx.mainScenesBefore[0]);
-  const listed = Array.isArray(items) ? items.map((i) => i && (i.name || i.sourceName)) : [];
-  check(!listed.includes(ctx.sourceName), "the vertical item also appeared in a main scene");
-});
-
-test("reports vertical canvas dimensions, not the main ones", async () => {
-  const v = checkOk(await call("obs_canvas_get_dimensions", V), "vertical dimensions");
-  const m = checkOk(await call("obs_canvas_get_dimensions"), "main dimensions");
-  check(v.width > 0 && v.height > 0, "vertical dimensions are zero");
-  check(!(v.width === m.width && v.height === m.height), "vertical dimensions match main exactly (" + v.width + "x" + v.height + ") - suspicious");
-});
-
-test("stream settings round-trip", async (ctx) => {
-  ctx.settingsBefore = checkOk(await call("dualoutput_getStreamSettings"), "getStreamSettings");
-  checkOk(await call("dualoutput_setStreamSettings",
-    "rtmp://127.0.0.1/slt", "slt-key", false, "", "", "obs_x264", 3210, 96, 1, false), "setStreamSettings");
-
-  const got = checkOk(await call("dualoutput_getStreamSettings"), "getStreamSettings after set");
-  check(got.server === "rtmp://127.0.0.1/slt", "server not stored, got: " + got.server);
-  check(got.key === "slt-key", "key not stored");
-  check(got.video_bitrate === 3210, "video_bitrate not stored, got: " + got.video_bitrate);
-  check(got.audio_bitrate === 96, "audio_bitrate not stored");
-});
-
-test("a partial update keeps the values it omits", async () => {
-  // Empty strings and non-positive numbers are documented as "keep stored value".
-  checkOk(await call("dualoutput_setStreamSettings",
-    "rtmp://127.0.0.1/changed", "slt-key", false, "", "", "", 0, 0, 0, false), "partial setStreamSettings");
-
-  const got = checkOk(await call("dualoutput_getStreamSettings"), "getStreamSettings after partial");
-  check(got.server === "rtmp://127.0.0.1/changed", "server did not update");
-  check(got.video_bitrate === 3210, "video_bitrate was clobbered by 0, got: " + got.video_bitrate);
-  check(got.audio_bitrate === 96, "audio_bitrate was clobbered by 0");
-  check(got.encoder_id && got.encoder_id.length > 0, "encoder_id was cleared by an empty string");
-});
-
-test("enhanced_broadcasting mode refuses to start our own output", async (ctx) => {
-  const s0 = checkOk(await call("dualoutput_getState"), "getState");
-  ctx.modeBefore = s0.output_mode;
-
-  checkOk(await call("dualoutput_setOutputMode", "enhanced_broadcasting"), "setOutputMode(eb)");
-  const s1 = checkOk(await call("dualoutput_getState"), "getState after mode change");
-  check(s1.output_mode === "enhanced_broadcasting", "mode did not change, got: " + s1.output_mode);
-
-  const started = await call("dualoutput_startStream");
-  check(!!started.error, "startStream was allowed in enhanced_broadcasting mode");
-
-  checkOk(await call("dualoutput_setOutputMode", "rtmp"), "setOutputMode(rtmp)");
-  check((await call("dualoutput_getState")).output_mode === "rtmp", "mode did not revert to rtmp");
-});
-
-test("an invalid output mode is rejected", async () => {
-  const res = await call("dualoutput_setOutputMode", "sideways");
-  check(!!res.error, "expected an error for an unknown mode");
-  check((await call("dualoutput_getState")).output_mode === "rtmp", "an invalid mode changed the stored mode");
-});
-
-test("canvas size reports what was actually applied", async (ctx) => {
-  const s = checkOk(await call("dualoutput_getState"), "getState");
-  ctx.sizeBefore = s.canvas;
-  // 1079 is not 4-aligned; width should come back aligned down to 1076.
-  const applied = checkOk(await call("dualoutput_setCanvasSize", 1079, 1920), "setCanvasSize");
-  check(typeof applied.width === "number", "no width returned");
-  check(applied.width % 4 === 0, "returned width is not 4-aligned: " + applied.width);
-  check(applied.height % 2 === 0, "returned height is not 2-aligned: " + applied.height);
-});
-
-/* -------------------------------------------------------------- cleanup --- */
-
-async function cleanup(ctx) {
-  const removed = [];
-  const verticalScenes = names(await call("obs_enum_scenes", V));
-
-  for (const n of verticalScenes) {
-    if (n.startsWith(PREFIX) || (ctx && n === ctx.sceneCollide)) {
-      const r = await call("dualoutput_removeScene", n);
-      if (!r.error) removed.push(n);
-    }
-  }
-
-  if (ctx && ctx.sourceName) await call("obs_source_destroy", ctx.sourceName);
-
-  if (ctx && ctx.sizeBefore) {
-    await call("dualoutput_setCanvasSize", ctx.sizeBefore.width, ctx.sizeBefore.height);
-  }
-  if (ctx && ctx.modeBefore) {
-    await call("dualoutput_setOutputMode", ctx.modeBefore);
-  }
-  if (ctx && ctx.settingsBefore) {
-    const b = ctx.settingsBefore;
-    await call("dualoutput_setStreamSettings", b.server || "", b.key || "", !!b.use_auth,
-      b.username || "", b.password || "", b.encoder_id || "",
-      b.video_bitrate || 0, b.audio_bitrate || 0, b.audio_track || 0, !!b.auto_start);
-  }
-  return removed;
-}
-
-/* --------------------------------------------------------------- runner --- */
-
-function row(status, name, why) {
-  const li = document.createElement("li");
-  li.className = status;
-  const tag = document.createElement("span");
+  var tag = document.createElement("span");
   tag.className = "tag";
-  tag.textContent = status.toUpperCase();
-  const body = document.createElement("span");
-  body.textContent = name;
-  if (why) {
-    const w = document.createElement("span");
+  tag.textContent = r.status === "info" ? "····" : r.status.toUpperCase();
+
+  var body = document.createElement("span");
+  body.textContent = r.name;
+
+  if (r.why) {
+    var w = document.createElement("span");
     w.className = "why";
-    w.textContent = why;
+    w.textContent = r.why;
     body.appendChild(w);
   }
-  li.append(tag, body);
+
+  li.appendChild(tag);
+  li.appendChild(body);
   resultsEl.appendChild(li);
 }
 
-async function run() {
+runBtn.addEventListener("click", function () {
   runBtn.disabled = cleanupBtn.disabled = true;
   resultsEl.textContent = "";
+  summaryEl.style.color = "";
   summaryEl.textContent = "running...";
 
-  const ctx = {};
-  let pass = 0, fail = 0, skip = 0;
-
-  for (const t of tests) {
-    try {
-      await t.fn(ctx);
-      row("pass", t.name); pass++;
-    } catch (e) {
-      if (e instanceof Fail) { row("fail", t.name, e.message); }
-      else { row("fail", t.name, e && e.stack ? e.stack.split("\n")[0] : String(e)); }
-      fail++;
-    }
-  }
-
-  try {
-    const removed = await cleanup(ctx);
-    row("skip", "cleanup", removed.length ? "removed: " + removed.join(", ") : "nothing to remove");
-  } catch (e) {
-    row("fail", "cleanup", String(e)); fail++;
-  }
-
-  summaryEl.textContent = pass + " passed, " + fail + " failed" + (skip ? ", " + skip + " skipped" : "");
-  summaryEl.style.color = fail ? "#f2777a" : "#4ec9a0";
-  runBtn.disabled = cleanupBtn.disabled = false;
-}
-
-runBtn.addEventListener("click", run);
-cleanupBtn.addEventListener("click", async () => {
-  cleanupBtn.disabled = true;
-  const removed = await cleanup(null);
-  row("skip", "cleanup", removed.length ? "removed: " + removed.join(", ") : "nothing to remove");
-  cleanupBtn.disabled = false;
+  // Rows land as each test finishes rather than all at the end.
+  __slDualTests.run(row).then(function (s) {
+    summaryEl.textContent = s.pass + " passed, " + s.fail + " failed";
+    summaryEl.style.color = s.fail ? "#f2777a" : "#4ec9a0";
+    runBtn.disabled = cleanupBtn.disabled = false;
+  });
 });
 
-if (!window.slabsGlobal) {
-  const env = document.getElementById("env");
+cleanupBtn.addEventListener("click", function () {
+  cleanupBtn.disabled = true;
+  __slDualTests.cleanup().then(function (removed) {
+    row({ status: "info", name: "cleanup", why: removed.length ? "removed: " + removed.join(", ") : "nothing to remove" });
+    cleanupBtn.disabled = false;
+  });
+});
+
+if (!__slDualTests.available()) {
+  var env = document.getElementById("env");
   env.hidden = false;
   env.textContent = "window.slabsGlobal is not present. This page only works inside the Streamlabs browser window, "
     + "which injects the api. Launch OBS with SL_PLUGIN_DEFAULT_URL pointing at this file.";
