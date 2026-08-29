@@ -118,13 +118,23 @@
   });
 
   test("the same scene name may exist on both canvases", function (ctx) {
-    var borrowed = ctx.mainScenesBefore[0];
-    return call("obs_create_scene", borrowed, V).then(function (r) {
-      checkOk(r, "create '" + borrowed + "' on vertical");
-      ctx.sceneCollide = borrowed;
+    /* Creates the name on both rather than borrowing an existing main scene: the vertical canvas
+       seeds itself with a scene called "Scene" (SlDualCanvas kDefaultSceneName), which is also the
+       usual first main scene, so borrowing would collide within the vertical canvas instead. */
+    var shared = PREFIX + "shared";
+    ctx.sceneSharedMain = shared;
+
+    return call("obs_create_scene", shared).then(function (r) {
+      checkOk(r, "create '" + shared + "' on main");
+      return call("obs_create_scene", shared, V);
+    }).then(function (r) {
+      checkOk(r, "create '" + shared + "' on vertical");
+      return call("obs_enum_scenes");
+    }).then(function (m) {
+      check(names(m).indexOf(shared) !== -1, "shared name missing from main");
       return call("obs_enum_scenes", V);
-    }).then(function (listed) {
-      check(names(listed).indexOf(ctx.sceneCollide) !== -1, "collided name missing from vertical");
+    }).then(function (v) {
+      check(names(v).indexOf(shared) !== -1, "shared name missing from vertical");
     });
   });
 
@@ -274,15 +284,28 @@
     var removed = [];
     ctx = ctx || {};
 
+    // Scans both canvases for the prefix rather than trusting ctx, so an interrupted
+    // run can be tidied up by calling cleanup on its own.
     return call("obs_enum_scenes", V).then(function (list) {
-      var doomed = names(list).filter(function (n) {
-        return n.indexOf(PREFIX) === 0 || n === ctx.sceneCollide;
-      });
+      var doomed = names(list).filter(function (n) { return n.indexOf(PREFIX) === 0; });
 
       return doomed.reduce(function (chain, n) {
         return chain.then(function () {
           return call("dualoutput_removeScene", n).then(function (r) {
-            if (!r.error) removed.push(n);
+            if (!r.error) removed.push("vertical:" + n);
+          });
+        });
+      }, Promise.resolve());
+    }).then(function () {
+      return call("obs_enum_scenes");
+    }).then(function (list) {
+      // Main-canvas scenes go through obs_source_destroy; scenes are sources.
+      var doomed = names(list).filter(function (n) { return n.indexOf(PREFIX) === 0; });
+
+      return doomed.reduce(function (chain, n) {
+        return chain.then(function () {
+          return call("obs_source_destroy", n).then(function (r) {
+            if (!r.error) removed.push("main:" + n);
           });
         });
       }, Promise.resolve());

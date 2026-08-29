@@ -63,6 +63,16 @@ static bool isVerticalCanvas(const std::string& canvasName)
 	return canvasName == kCanvasVertical;
 }
 
+static bool isKnownCanvas(const std::string& canvasName)
+{
+	return canvasName.empty() || isVerticalCanvas(canvasName);
+}
+
+static std::string unknownCanvasError(const std::string& canvasName)
+{
+	return Json(Json::object({{"error", "Unknown canvas '" + canvasName + "', expected \"\" or \"vertical\""}})).dump();
+}
+
 // New reference, or null. Empty canvas keeps the historical main-canvas behaviour.
 // An unrecognised name resolves nothing rather than falling back to main: a typo must not silently edit the wrong canvas.
 static obs_source_t* resolveSceneSource(const std::string& canvasName, const std::string& sceneName)
@@ -1911,6 +1921,14 @@ void PluginJsHandler::JS_CREATE_SCENE(const json11::Json &params, std::string &o
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
 	std::string canvas_name = params["param3"].string_value();
+
+	// Creation is the one path where an unresolved scene means "the name is free, go ahead", so an
+	//	unknown canvas must be rejected outright: resolveSceneSource returning null is not enough here.
+	if (!isKnownCanvas(canvas_name))
+	{
+		out_jsonReturn = unknownCanvasError(canvas_name);
+		return;
+	}
 
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
