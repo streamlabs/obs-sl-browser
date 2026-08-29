@@ -13,15 +13,25 @@ live page over CEF's DevTools port (`SlBrowser.cpp` already sets
 needs Node 22+ for the built-in WebSocket.
 
 ```
-node tests/run-api-tests.mjs                # report to stdout, exit 1 on failure
+node tests/run-api-tests.mjs                # start OBS, run, close it; exit 1 on failure
+node tests/run-api-tests.mjs --keep-open    # leave OBS running afterwards
 node tests/run-api-tests.mjs --json         # machine-readable
 node tests/run-api-tests.mjs --cleanup-only # drop leftover __slt_ scenes
-node tests/run-api-tests.mjs --list         # show attachable pages
+node tests/run-api-tests.mjs --no-launch    # require an OBS that is already up
 ```
 
-OBS with the plugin must be running. The Streamlabs window does not need to be
-visible, only started, so a page exists to attach to. If more than one page is
-open, pick one with `--target <text>`.
+It starts OBS itself if nothing is on the port, waits for DevTools, and closes
+it again when done. An OBS that is already running is attached to and left
+alone, so this is safe to run beside a session you are working in.
+
+The OBS it starts comes from the `CI\dev_build.ps1` rundir, resolved through
+`obs.ver`; override with `--obs <path>` or `--config <name>`. It is launched
+with `--disable-shutdown-check` (the run ends by terminating OBS, and without
+this the next start stops at the safe-mode prompt) and `--multi`.
+
+The suite creates and deletes scenes in whatever collection is loaded, and one
+test borrows the name of your first horizontal scene, so `--collection <name>`
+is worth pointing at a scratch collection.
 
 ## Running in the browser
 
