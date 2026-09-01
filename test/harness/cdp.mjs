@@ -132,11 +132,23 @@ export class Cdp {
 		const state = () =>
 			this.evaluate("({ready: document.readyState, href: location.href})").catch(() => null);
 
+		// Falling through when this expires would inject into exactly the loading or
+		// mid-navigation document the wait exists to avoid, and the helpers could then be
+		// wiped after the check below said they were there. Fail instead of guessing.
 		let deadline = Date.now() + timeoutMs;
+		let ready = null;
 		while (Date.now() < deadline) {
-			const s = await state();
-			if (s?.ready === "complete" && (!expectUrl || s.href === expectUrl)) break;
+			ready = await state();
+			if (ready?.ready === "complete" && (!expectUrl || ready.href === expectUrl)) break;
+			ready = null;
 			await sleep(250);
+		}
+		if (!ready) {
+			const s = await state();
+			throw new Error(
+				`the page was not ready within ${timeoutMs / 1000}s ` +
+				`(readyState ${s?.ready ?? "unknown"}, url ${s?.href ?? "unknown"}` +
+				`${expectUrl ? `, expected ${expectUrl}` : ""}).`);
 		}
 
 		deadline = Date.now() + timeoutMs;

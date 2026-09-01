@@ -126,15 +126,36 @@ export async function startServer({ dir, port = 0, onEvent = () => {} }) {
 			return events.filter((e) => e.who !== "server" && pred(e));
 		},
 
-		/** Wait until `pred(events)` is true, or give up. Resolves to true/false, never throws. */
+		/**
+		 * Wait until `pred(events)` is true. Resolves true, or false on timeout.
+		 *
+		 * Rejects if the predicate throws. It is suite code called from a timer and from the
+		 * request path, so an unguarded throw there is an uncaught event-loop exception that
+		 * ends the harness - the awaiting step should fail instead.
+		 */
 		waitFor(pred, { timeoutMs = 60000 } = {}) {
-			if (pred(events)) return Promise.resolve(true);
-			return new Promise((resolve_) => {
-				const done = (v) => { waiters.delete(check); clearTimeout(timer); clearInterval(tick); resolve_(v); };
-				const check = () => { if (pred(events)) done(true); };
-				const timer = setTimeout(() => done(false), timeoutMs);
+			return new Promise((resolve_, reject_) => {
+				let settled = false;
+				const done = (fn, v) => {
+					if (settled) return;
+					settled = true;
+					waiters.delete(check);
+					clearTimeout(timer);
+					clearInterval(tick);
+					fn(v);
+				};
+				const check = () => {
+					try {
+						if (pred(events)) done(resolve_, true);
+					} catch (e) {
+						done(reject_, new Error(`the waitFor predicate threw: ${e?.message || e}`));
+					}
+				};
+
+				const timer = setTimeout(() => done(resolve_, false), timeoutMs);
 				const tick = setInterval(check, 250); // for predicates over elapsed time, not just arrivals
 				waiters.add(check);
+				check(); // it may already be true
 			});
 		},
 

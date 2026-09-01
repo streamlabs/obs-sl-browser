@@ -34,7 +34,7 @@ const ini = (sections) =>
  *                             is how a browser source in it reaches the harness server without
  *                             the collection having to hardcode a port
  * @param {boolean} [force]    overwrite a config tree the harness does not own
- * @returns {{configDir: string, logsDir: string, collectionName: string}}
+ * @returns {{configDir: string, logsDir: string, collectionName: string, collectionFile: string}}
  */
 export function seedProfile({ rundir, collection, replace = {}, force = false }) {
 	const configDir = join(rundir, "config", "obs-studio");
@@ -62,17 +62,31 @@ export function seedProfile({ rundir, collection, replace = {}, force = false })
 	for (const d of [scenes, profile, logsDir]) mkdirSync(d, { recursive: true });
 	writeFileSync(join(configDir, MARKER), "");
 
+	let collectionFile = "SLTest";
 	let collectionName = "SLTest";
+
 	if (collection) {
 		if (!existsSync(collection)) throw new Error(`scene collection not found: ${collection}`);
-		collectionName = basename(collection, extname(collection));
+		collectionFile = basename(collection, extname(collection));
+
 		let json = readFileSync(collection, "utf8");
 		for (const [k, v] of Object.entries(replace)) json = json.split(`{{${k}}}`).join(v);
 		const unresolved = json.match(/\{\{[A-Z_]+\}\}/g);
 		if (unresolved) throw new Error(`${collection} has unsubstituted placeholders: ${[...new Set(unresolved)].join(", ")}`);
-		writeFileSync(join(scenes, `${collectionName}.json`), json, "utf8");
+
+		// The display name is the document's own "name", not the file stem. OBS keys its
+		// collection cache by that field and only falls back to the stem when it is absent
+		// (RefreshSceneCollectionCache in OBSBasic_SceneCollections.cpp), and --collection
+		// looks the name up in that cache. Using the stem for a file whose name differs
+		// resolves nothing, and OBS quietly loads something else instead.
+		let parsed;
+		try { parsed = JSON.parse(json); }
+		catch (e) { throw new Error(`${collection} is not valid JSON: ${e.message}`); }
+		collectionName = typeof parsed?.name === "string" && parsed.name ? parsed.name : collectionFile;
+
+		writeFileSync(join(scenes, `${collectionFile}.json`), json, "utf8");
 	} else {
-		writeFileSync(join(scenes, `${collectionName}.json`), JSON.stringify(emptyCollection(collectionName), null, 2));
+		writeFileSync(join(scenes, `${collectionFile}.json`), JSON.stringify(emptyCollection(collectionName), null, 2));
 	}
 
 	const user = ini({
@@ -85,8 +99,8 @@ export function seedProfile({ rundir, collection, replace = {}, force = false })
 		Basic: {
 			Profile: PROFILE,
 			ProfileDir: PROFILE,
-			SceneCollection: collectionName,
-			SceneCollectionFile: collectionName,
+			SceneCollection: collectionName,   // the document's "name"
+			SceneCollectionFile: collectionFile, // the file stem
 		},
 	});
 	// OBS 30+ reads user.ini; older builds read global.ini. Writing both costs nothing.
@@ -98,7 +112,7 @@ export function seedProfile({ rundir, collection, replace = {}, force = false })
 		Video: { BaseCX: 1280, BaseCY: 720, OutputCX: 1280, OutputCY: 720, FPSCommon: 30 },
 	}), "utf8");
 
-	return { configDir, logsDir, collectionName };
+	return { configDir, logsDir, collectionName, collectionFile };
 }
 
 /**
