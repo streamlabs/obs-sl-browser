@@ -233,8 +233,9 @@ public:
 			//		Example arg1 = [{ "path": "..." },]
 			{"fs_downloadZip", JS_DOWNLOAD_ZIP},
 
-			// .(@function(arg1), @url)
+			// .(@function(arg1), @filename, @bool_hideWindow)
 			//	Runs an exe that exists in the streamlabs downloads folder.
+			//		hideWindow (default false): the process is started with no visible window and no console.
 			//		Example arg1 = [{ "path": "..." },]
 			//	The returned output includes the PID that can be used to stop the process 
 			{"fs_runSlExe", JS_RUN_STREAMLABS_EXE},
