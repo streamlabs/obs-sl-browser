@@ -50,6 +50,9 @@ PluginJsHandler::~PluginJsHandler()
 {
 	stop();
 
+	if (m_childJob)
+		CloseHandle(m_childJob);
+
 	if (m_restartApp)
 		QProcess::startDetached(*m_restartProgramStr, *m_restartArguments);
 }
@@ -1839,6 +1842,32 @@ void PluginJsHandler::JS_CREATE_SCENE(const json11::Json &params, std::string &o
 		Qt::BlockingQueuedConnection);
 }
 
+// One job object shared by every exe we launch. KILL_ON_JOB_CLOSE ties them all to our lifetime,
+// so this handle is created once and released in the destructor rather than per launch.
+HANDLE PluginJsHandler::getChildJob()
+{
+	if (m_childJob)
+		return m_childJob;
+
+	HANDLE job = CreateJobObjectW(nullptr, nullptr);
+
+	if (!job)
+		return nullptr;
+
+	JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobInfo = {};
+	jobInfo.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+	if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &jobInfo, sizeof(jobInfo)))
+	{
+		// Without the limit the job buys us nothing, so don't hold a handle to it.
+		CloseHandle(job);
+		return nullptr;
+	}
+
+	m_childJob = job;
+	return m_childJob;
+}
+
 void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::string &out_jsonReturn)
 {
 	const auto &param2Value = params["param2"];
@@ -1849,16 +1878,8 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 	std::wstring wFileName(fileName.begin(), fileName.end());
 	std::wstring fullPath = folderPath + L"\\" + wFileName;
 
-	// Tie the child's lifetime to ours: a job object with KILL_ON_JOB_CLOSE means the launched exe
-	// is terminated if this (parent) process goes away.
-	HANDLE hJob = CreateJobObjectW(nullptr, nullptr);
-
-	if (hJob)
-	{
-		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobInfo = {};
-		jobInfo.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-		SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jobInfo, sizeof(jobInfo));
-	}
+	// Tie the child's lifetime to ours: the launched exe is terminated if this (parent) process goes away.
+	HANDLE hJob = getChildJob();
 
 	STARTUPINFOW si = {sizeof(si)};
 	PROCESS_INFORMATION pi = {};
@@ -1887,9 +1908,6 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 	}
 	else
 	{
-		if (hJob)
-			CloseHandle(hJob);
-
 		out_jsonReturn = Json(Json::object({{"success", false}, {"error", "CreateProcess failed with error " + std::to_string(GetLastError())}})).dump();
 	}
 }
