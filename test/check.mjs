@@ -77,10 +77,14 @@ for (const name of suiteNames) {
 		continue;
 	}
 
-	for (const p of validate(suite, name)) note(rel(entry), p);
-	if (!existsSync(join(dir, suite.page))) note(rel(entry), `page "${suite.page}" does not exist`);
-	if (suite.collection && !existsSync(join(dir, suite.collection))) {
-		note(rel(entry), `collection "${suite.collection}" does not exist`);
+	const problems = validate(suite, name);
+	for (const p of problems) note(rel(entry), p);
+	// Only look for the files once the fields naming them are known to be strings.
+	if (!problems.length) {
+		if (!existsSync(join(dir, suite.page))) note(rel(entry), `page "${suite.page}" does not exist`);
+		if (suite.collection && !existsSync(join(dir, suite.collection))) {
+			note(rel(entry), `collection "${suite.collection}" does not exist`);
+		}
 	}
 	suites.push(suite);
 }
@@ -109,17 +113,21 @@ const NOT_API = new Set(["pluginVersion"]);
 
 const known = apiNames();
 if (known) {
-	const exempt = new Set([...suites.flatMap((s) => s.expectMissing || []), ...NOT_API]);
-
 	// Suites only. The harness deals in api names it is handed, not ones it writes down.
-	const suiteFiles = walk(SUITES_DIR).filter((f) => [".mjs", ".js", ".html"].includes(extname(f)));
-	for (const f of suiteFiles) {
-		const src = readFileSync(f, "utf8");
-		const found = new Set();
-		for (const re of CALL_PATTERNS) for (const m of src.matchAll(re)) found.add(m[1]);
-		for (const name of found) {
-			if (known.has(name) || exempt.has(name)) continue;
-			note(rel(f), `calls "${name}", which is not in JavascriptApi.h`);
+	for (const suite of suites) {
+		// Resolved per suite, not pooled: expectMissing is a suite-local statement about that
+		// suite's own calls, and pooling it would let one suite's deliberate exemption hide the
+		// same name misspelled in another.
+		const exempt = new Set([...(Array.isArray(suite.expectMissing) ? suite.expectMissing : []), ...NOT_API]);
+
+		for (const f of walk(suite.dir).filter((f) => [".mjs", ".js", ".html"].includes(extname(f)))) {
+			const src = readFileSync(f, "utf8");
+			const found = new Set();
+			for (const re of CALL_PATTERNS) for (const m of src.matchAll(re)) found.add(m[1]);
+			for (const name of found) {
+				if (known.has(name) || exempt.has(name)) continue;
+				note(rel(f), `calls "${name}", which is not in JavascriptApi.h`);
+			}
 		}
 	}
 }

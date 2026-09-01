@@ -13,7 +13,7 @@
  *   BrowserHWAccel   CEF's shared-texture path, which a CI runner has no hardware for
  */
 
-import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 
 const MARKER = ".written-by-the-test-harness";
@@ -26,7 +26,7 @@ const ini = (sections) =>
 		.join("\n") + "\n";
 
 /**
- * Write a clean profile into a rundir, replacing whatever the harness put there last time.
+ * Write a clean profile into a rundir, removing whatever the harness put there last time.
  *
  * @param {string} rundir      directory holding bin\, data\ and obs-plugins\
  * @param {string} [collection] path to a scene collection .json to install and select
@@ -43,6 +43,17 @@ export function seedProfile({ rundir, collection, replace = {}, force = false })
 		throw new Error(
 			`${configDir}\nalready holds a portable OBS config that this harness did not create. ` +
 			`Move it aside, or pass --force to overwrite it.`);
+	}
+
+	// Overwriting the files we write is not the same as a clean profile: the previous suite's
+	// scene collections, its .bak files and whatever else OBS saved on the way out would all
+	// survive, and a later suite could see them. Clear everything except the logs, which the
+	// failure diagnostics and the CI artifact both want to keep.
+	if (existsSync(configDir)) {
+		for (const entry of readdirSync(configDir)) {
+			if (entry === "logs") continue;
+			rmSync(join(configDir, entry), { recursive: true, force: true });
+		}
 	}
 
 	const scenes = join(configDir, "basic", "scenes");

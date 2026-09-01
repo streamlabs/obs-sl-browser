@@ -46,6 +46,21 @@ export function rundirOf(exe) {
 	return join(dirname(exe), "..", "..");
 }
 
+/**
+ * Check the path before anyone derives a rundir from it. A mistyped --obs would otherwise
+ * have a config tree seeded next to it, somewhere the harness has no business writing,
+ * before anything noticed the executable was not there.
+ */
+export function assertObsExe(exe) {
+	if (!exe) throw new Error("could not work out where obs64.exe is. Pass --obs <path>.");
+	if (!existsSync(exe)) {
+		throw new Error(
+			`obs64.exe not found at\n    ${exe}\n` +
+			`Build it with  .\\CI\\dev_build.ps1 -Run  (once, so the rundir is populated), ` +
+			`or pass --obs <path>.`);
+	}
+}
+
 export async function devtoolsUp(port) {
 	try {
 		const r = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1200) });
@@ -65,13 +80,8 @@ export async function devtoolsUp(port) {
  *   --multi               don't argue with an OBS the developer already has open
  *   --disable-updater     no network on the critical path
  */
-export async function launchObs({ exe, pageUrl, collection, port, timeoutMs = 120000, say = () => {} }) {
-	if (!existsSync(exe)) {
-		throw new Error(
-			`obs64.exe not found at\n    ${exe}\n` +
-			`Build it with  .\\CI\\dev_build.ps1 -Run  (once, so the rundir is populated), ` +
-			`or pass --obs <path>.`);
-	}
+export async function launchObs({ exe, pageUrl, collection, port, timeoutMs = 120000, say = () => {}, onSpawn = () => {} }) {
+	assertObsExe(exe);
 
 	const args = ["--portable", "--disable-shutdown-check", "--multi", "--disable-updater"];
 	if (collection) args.push("--collection", collection);
@@ -100,6 +110,10 @@ export async function launchObs({ exe, pageUrl, collection, port, timeoutMs = 12
 			}
 		},
 	};
+
+	// Hand the caller a stoppable handle before the wait below, not after it. The child is
+	// detached, so a Ctrl-C during the startup window would otherwise leave OBS running.
+	onSpawn(obs);
 
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {

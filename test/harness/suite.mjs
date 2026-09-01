@@ -22,12 +22,30 @@ export const DEFAULTS = { page: "page.html", cdp: true, timeoutMs: 180000, expec
 
 const REQUIRED = ["name", "run"];
 
+/**
+ * Every field is checked, not just the required ones. A suite that is wrong should say so
+ * here, where the message names the field - not later, where a bad `page` surfaces as a
+ * path-join TypeError from somewhere in the harness.
+ */
 export function validate(suite, dirName) {
 	const problems = [];
+	const bad = (k, want) => problems.push(`"${k}" must be ${want}`);
+
 	for (const k of REQUIRED) if (!suite?.[k]) problems.push(`missing "${k}"`);
-	if (suite?.name && suite.name !== dirName) problems.push(`name "${suite.name}" does not match directory "${dirName}"`);
-	if (suite?.run && typeof suite.run !== "function") problems.push(`"run" is not a function`);
-	if (suite?.timeoutMs && typeof suite.timeoutMs !== "number") problems.push(`"timeoutMs" is not a number`);
+	if (!suite) return problems;
+
+	if (suite.name && suite.name !== dirName) problems.push(`name "${suite.name}" does not match directory "${dirName}"`);
+	if (suite.run && typeof suite.run !== "function") bad("run", "a function");
+	if (suite.description !== undefined && typeof suite.description !== "string") bad("description", "a string");
+	if (typeof suite.page !== "string" || !suite.page) bad("page", "a non-empty string");
+	if (suite.collection !== undefined && suite.collection !== null && typeof suite.collection !== "string") {
+		bad("collection", "a string, or absent");
+	}
+	if (typeof suite.cdp !== "boolean") bad("cdp", "a boolean");
+	if (!Number.isFinite(suite.timeoutMs) || suite.timeoutMs <= 0) bad("timeoutMs", "a positive number of milliseconds");
+	if (!Array.isArray(suite.expectMissing) || suite.expectMissing.some((n) => typeof n !== "string")) {
+		bad("expectMissing", "an array of strings");
+	}
 	return problems;
 }
 

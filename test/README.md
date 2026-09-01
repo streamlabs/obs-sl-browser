@@ -53,9 +53,13 @@ normally.
 
 ### One OBS at a time
 
-Only one process can hold the CEF DevTools port (9123, set in `SlBrowser.cpp`). If something
-is already on it the harness refuses to start a second OBS, because it would have no way to
-tell which one it had attached to. Close it, or use `--no-launch` to run against it.
+Only one process can hold the CEF DevTools port (9123, hardcoded in `SlBrowser.cpp`, which is
+why there is no flag for it). If something is already on it the harness refuses to start a
+second OBS, because it would have no way to tell which one it had attached to. Close it, or
+use `--no-launch` to run against it.
+
+That is also why `--keep-open` applies to the last suite of a run: an OBS left open by an
+earlier suite would block every later one.
 
 ## Adding a suite
 

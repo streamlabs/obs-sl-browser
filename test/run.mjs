@@ -20,7 +20,7 @@ import { readdirSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
-import { resolveObsExe, rundirOf, launchObs, devtoolsUp, sleep } from "./harness/obs.mjs";
+import { resolveObsExe, rundirOf, launchObs, assertObsExe, devtoolsUp, sleep } from "./harness/obs.mjs";
 import { seedProfile, latestLog } from "./harness/profile.mjs";
 import { Cdp, waitForPage } from "./harness/cdp.mjs";
 import { startServer } from "./harness/observer.mjs";
@@ -32,7 +32,7 @@ const REPO = resolve(HERE, "..");
 const SUITES_DIR = join(HERE, "suites");
 const WORK = join(HERE, ".work");
 
-const TAKES_VALUE = new Set(["--obs", "--config", "--port", "--observer-port", "--junit"]);
+const TAKES_VALUE = new Set(["--obs", "--config", "--observer-port", "--junit"]);
 
 const argv = process.argv.slice(2);
 const has = (f) => argv.includes(f);
@@ -50,10 +50,9 @@ then closes it again.
 
   --obs <path>          obs64.exe to use (default: the CI\\dev_build.ps1 rundir, or $OBS_EXE)
   --config <name>       build config for that default path (default RelWithDebInfo)
-  --port <n>            CEF DevTools port (default 9123, set by SlBrowser.cpp)
   --observer-port <n>   pin the harness web server's port (default: an ephemeral one)
   --no-launch           use an OBS that is already running instead of starting one
-  --keep-open           leave OBS running afterwards
+  --keep-open           leave OBS running afterwards (the last suite's, if several run)
   --force               overwrite a portable config in the rundir that we did not write
   --json                machine-readable output
   --junit <path>        also write a JUnit xml report
@@ -65,7 +64,9 @@ not your real OBS profile.`);
 	process.exit(0);
 }
 
-const PORT = Number(opt("--port", "9123"));
+// Not configurable: SlBrowser.cpp:227 hardcodes remote_debugging_port, so a flag here could
+// only ever point the poller at a port nothing was going to open.
+const PORT = 9123;
 const JSON_OUT = has("--json");
 const say = (m) => { if (!JSON_OUT) console.log(grey("  " + m)); };
 
@@ -110,9 +111,10 @@ if (!selected.length) {
 
 /* ------------------------------------------------------------------- run --- */
 
-let current = null; // the OBS this process started, so a signal can still kill it
+let current = null;          // the OBS this process started, so a signal can still kill it
+let keepCurrentOpen = false; // --keep-open, but only for the suite it can apply to
 
-const shutdown = (code) => () => { if (!has("--keep-open")) current?.stop(); process.exit(code); };
+const shutdown = (code) => () => { if (!keepCurrentOpen) current?.stop(); process.exit(code); };
 process.on("SIGINT", shutdown(130));
 process.on("SIGTERM", shutdown(143));
 
@@ -120,6 +122,10 @@ const exe = resolveObsExe({ repoRoot: REPO, explicit: opt("--obs", null), config
 
 async function runSuite(name) {
 	const started = Date.now();
+	// Only one process can hold the DevTools port, so an OBS left open by an earlier suite
+	// would block every later one. --keep-open therefore applies to the last suite that runs.
+	const keepOpen = has("--keep-open") && name === selected.at(-1);
+	keepCurrentOpen = keepOpen;
 	const suite = await load(name);
 	const workDir = join(WORK, name);
 	rmSync(workDir, { recursive: true, force: true });
@@ -144,7 +150,8 @@ async function runSuite(name) {
 			nav.close();
 			await sleep(1000);
 		} else {
-			if (!exe) throw new Error("could not work out where obs64.exe is. Pass --obs <path>.");
+			// Before seedProfile, which derives a rundir from this path and writes into it.
+			assertObsExe(exe);
 			// --multi means a second OBS would start happily, but only one process can hold
 			// the DevTools port - so we would attach to the wrong one and report its answers.
 			if (await devtoolsUp(PORT)) {
@@ -158,7 +165,10 @@ async function runSuite(name) {
 				replace: { BASE_URL: server.origin },
 				force: has("--force"),
 			});
-			obs = current = await launchObs({ exe, pageUrl, collection: collectionName, port: PORT, say });
+			obs = await launchObs({
+				exe, pageUrl, collection: collectionName, port: PORT, say,
+				onSpawn: (handle) => { current = handle; },
+			});
 		}
 
 		if (suite.cdp) {
@@ -181,7 +191,12 @@ async function runSuite(name) {
 		cdp?.close();
 		try { server?.dump(join(workDir, "events.json")); } catch { /* nothing worth failing over */ }
 		await server?.close();
-		if (!has("--keep-open")) obs?.stop();
+		if (!keepOpen && obs) {
+			obs.stop();
+			// Wait for the port to actually free before the next suite's guard looks at it:
+			// the CEF child processes can outlive the taskkill by a moment and keep 9123 bound.
+			for (let i = 0; i < 40 && (await devtoolsUp(PORT)); i++) await sleep(250);
+		}
 		current = null;
 
 		// The OBS log is the first thing anyone wants when a run goes wrong.
