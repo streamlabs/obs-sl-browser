@@ -44,6 +44,7 @@ export class Cdp {
 	#ws;
 	#id = 0;
 	#pending = new Map();
+	#dead = null;
 
 	static connect(url) {
 		return new Promise((resolve, reject) => {
@@ -58,6 +59,20 @@ export class Cdp {
 			ws.addEventListener("open", () => {
 				ws.removeEventListener("error", onFail);
 				ws.removeEventListener("close", onFail);
+
+				// The connect-time handlers are gone, so without these a socket that dies
+				// mid-call leaves its promise pending forever. Nothing above this settles it:
+				// prepare() runs before the suite timeout starts, so the hang would only end
+				// at the workflow's 90-minute limit.
+				const dead = (why) => {
+					c.#dead = why;
+					for (const p of c.#pending.values()) p.reject(new Error(why));
+					c.#pending.clear();
+				};
+				ws.addEventListener("error", () => dead("devtools websocket errored"), { once: true });
+				ws.addEventListener("close", (ev) =>
+					dead(`devtools websocket closed${ev?.code ? ` (${ev.code})` : ""} - did OBS exit?`), { once: true });
+
 				ws.addEventListener("message", (ev) => {
 					let msg;
 					try { msg = JSON.parse(ev.data); } catch { return; }
@@ -72,10 +87,16 @@ export class Cdp {
 	}
 
 	#send(method, params = {}) {
+		if (this.#dead) return Promise.reject(new Error(this.#dead));
 		const id = ++this.#id;
 		return new Promise((resolve, reject) => {
 			this.#pending.set(id, { resolve, reject });
-			this.#ws.send(JSON.stringify({ id, method, params }));
+			try {
+				this.#ws.send(JSON.stringify({ id, method, params }));
+			} catch (e) {
+				this.#pending.delete(id);
+				reject(e);
+			}
 		});
 	}
 

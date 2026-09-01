@@ -49,6 +49,34 @@ export function validate(suite, dirName) {
 	return problems;
 }
 
+export const STATUSES = ["pass", "fail", "skip", "info"];
+
+/**
+ * Check what a suite returned before any of it is counted or reported.
+ *
+ * An unrecognised status is the dangerous case, not a cosmetic one: counts() and failed()
+ * both match on the exact strings, so a result carrying status "failed" is counted as
+ * neither a pass nor a failure, and the JUnit writer emits it as a passing testcase. A suite
+ * reporting a genuine failure that way would produce a green run.
+ */
+export function validateResults(list) {
+	if (!Array.isArray(list)) {
+		return [`run() must return an array of results, got ${list === undefined ? "undefined" : JSON.stringify(list)?.slice(0, 120)}`];
+	}
+	const problems = [];
+	list.forEach((r, i) => {
+		if (!r || typeof r !== "object" || Array.isArray(r)) {
+			problems.push(`result ${i} is not an object: ${JSON.stringify(r)?.slice(0, 80)}`);
+			return;
+		}
+		if (typeof r.name !== "string" || !r.name.trim()) problems.push(`result ${i} has no name`);
+		if (!STATUSES.includes(r.status)) {
+			problems.push(`result ${i} ("${r.name}") has status ${JSON.stringify(r.status)}, expected one of ${STATUSES.join(", ")}`);
+		}
+	});
+	return problems;
+}
+
 /**
  * Collects results. A suite builds one and returns its .list.
  *

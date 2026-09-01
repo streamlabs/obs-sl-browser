@@ -49,15 +49,19 @@ export async function startServer({ dir, port = 0, onEvent = () => {} }) {
 		return e;
 	}
 
-	const server = createServer((req, res) => {
+	// Nothing a page sends may end the run. Wraps the deferred callbacks too, not just the
+	// synchronous path: a throw inside req.on("end") lands on the event loop long after any
+	// try/catch around handle() has returned, and would be an uncaught exception.
+	const guard = (req, res) => (fn) => {
 		try {
-			handle(req, res);
+			fn();
 		} catch (e) {
-			// A page asking for something unexpected must not take the run down with it.
-			record("server", "handler-threw", { url: req.url, error: String(e?.message || e) });
+			record("server", "handler-threw", { url: req?.url, error: String(e?.message || e) });
 			try { res.writeHead(500, { "Content-Type": "text/plain" }).end("harness server error"); } catch { /* already sent */ }
 		}
-	});
+	};
+
+	const server = createServer((req, res) => guard(req, res)(() => handle(req, res)));
 
 	function handle(req, res) {
 		const url = new URL(req.url, `http://${req.headers.host}`);
@@ -77,13 +81,18 @@ export async function startServer({ dir, port = 0, onEvent = () => {} }) {
 		if (req.method === "POST" && url.pathname === "/report") {
 			let body = "";
 			req.on("data", (c) => (body += c));
-			req.on("end", () => {
+			req.on("end", () => guard(req, res)(() => {
+				// Parsing is not enough: "null", "42" and "[]" are all valid JSON, and reading
+				// .who off any of them throws. Only an object is a report.
 				let parsed;
-				try { parsed = JSON.parse(body); }
-				catch { record("?", "report-unparseable", body.slice(0, 500)); return send(200, "application/json", "{}"); }
-				record(parsed.who || "?", parsed.event || "?", parsed.data);
+				try { parsed = JSON.parse(body); } catch { parsed = undefined; }
+				if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+					record("?", "report-unusable", String(body).slice(0, 500));
+					return send(200, "application/json", '{"ok":false}');
+				}
+				record(String(parsed.who ?? "?"), String(parsed.event ?? "?"), parsed.data);
 				send(200, "application/json", '{"ok":true}');
-			});
+			}));
 			return;
 		}
 

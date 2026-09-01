@@ -24,7 +24,7 @@ import { resolveObsExe, rundirOf, launchObs, assertObsExe, devtoolsUp, sleep } f
 import { seedProfile, latestLog } from "./harness/profile.mjs";
 import { Cdp, waitForPage } from "./harness/cdp.mjs";
 import { startServer } from "./harness/observer.mjs";
-import { DEFAULTS, validate } from "./harness/suite.mjs";
+import { DEFAULTS, validate, validateResults } from "./harness/suite.mjs";
 import { renderConsole, toJson, writeJUnit, failed, grey, red, bold } from "./harness/report.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -184,13 +184,13 @@ async function runSuite(name) {
 		const timeout = new Promise((_, rej) =>
 			setTimeout(() => rej(new Error(`suite exceeded its ${suite.timeoutMs / 1000}s budget`)), suite.timeoutMs));
 
-		// Enforced rather than coerced: `|| []` turned a suite that returned nothing into a
-		// green run with no tests in it, and a truthy non-array reached the reporting code and
-		// threw from finally, losing the run instead of failing the suite.
+		// Enforced rather than coerced. `|| []` turned a suite that returned nothing into a
+		// green run with no tests in it; a truthy non-array reached the reporting code and
+		// threw from finally, losing the run instead of failing the suite; and a result with
+		// an unrecognised status is emitted by the JUnit writer as a pass.
 		const returned = await Promise.race([suite.run(ctx), timeout]);
-		if (!Array.isArray(returned)) {
-			throw new Error(`run() must return an array of results, got ${returned === undefined ? "undefined" : JSON.stringify(returned)?.slice(0, 120)}`);
-		}
+		const problems = validateResults(returned);
+		if (problems.length) throw new Error(problems.join("; "));
 		run.results = returned;
 	} catch (e) {
 		run.error = String(e?.message || e);
