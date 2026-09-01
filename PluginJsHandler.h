@@ -141,6 +141,7 @@ private:
 
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;
+	HANDLE getChildJob();
 
 	static QDockWidget *findDock(const std::string &objectName);
 
@@ -151,6 +152,7 @@ private:
 	std::thread m_freezeCheckThread;
 
 	std::map<uint32_t, HANDLE> m_childProcesses;
+	HANDLE m_childJob = nullptr;
 
 	bool m_restartApp = false;
 
