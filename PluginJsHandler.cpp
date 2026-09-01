@@ -1844,6 +1844,7 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 {
 	const auto &param2Value = params["param2"];
 	std::string fileName = param2Value.string_value();
+	const bool hideWindow = params["param3"].bool_value();
 
 	std::wstring folderPath = getDownloadsDir();
 	std::wstring wFileName(fileName.begin(), fileName.end());
@@ -1862,8 +1863,17 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 
 	STARTUPINFOW si = {sizeof(si)};
 	PROCESS_INFORMATION pi = {};
+	DWORD creationFlags = CREATE_SUSPENDED;
 
-	BOOL success = CreateProcessW(fullPath.c_str(), nullptr, nullptr, nullptr, FALSE, CREATE_SUSPENDED, nullptr, folderPath.c_str(), &si, &pi);
+	if (hideWindow)
+	{
+		// SW_HIDE hides a GUI window; CREATE_NO_WINDOW suppresses the console a console app would otherwise get.
+		si.dwFlags |= STARTF_USESHOWWINDOW;
+		si.wShowWindow = SW_HIDE;
+		creationFlags |= CREATE_NO_WINDOW;
+	}
+
+	BOOL success = CreateProcessW(fullPath.c_str(), nullptr, nullptr, nullptr, FALSE, creationFlags, nullptr, folderPath.c_str(), &si, &pi);
 
 	if (success)
 	{
