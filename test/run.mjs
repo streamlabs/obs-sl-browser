@@ -184,7 +184,14 @@ async function runSuite(name) {
 		const timeout = new Promise((_, rej) =>
 			setTimeout(() => rej(new Error(`suite exceeded its ${suite.timeoutMs / 1000}s budget`)), suite.timeoutMs));
 
-		run.results = (await Promise.race([suite.run(ctx), timeout])) || [];
+		// Enforced rather than coerced: `|| []` turned a suite that returned nothing into a
+		// green run with no tests in it, and a truthy non-array reached the reporting code and
+		// threw from finally, losing the run instead of failing the suite.
+		const returned = await Promise.race([suite.run(ctx), timeout]);
+		if (!Array.isArray(returned)) {
+			throw new Error(`run() must return an array of results, got ${returned === undefined ? "undefined" : JSON.stringify(returned)?.slice(0, 120)}`);
+		}
+		run.results = returned;
 	} catch (e) {
 		run.error = String(e?.message || e);
 	} finally {

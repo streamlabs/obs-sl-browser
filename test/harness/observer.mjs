@@ -16,7 +16,7 @@
  */
 
 import { createServer } from "node:http";
-import { readFileSync, existsSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, statSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join, resolve, sep } from "node:path";
 
@@ -50,6 +50,16 @@ export async function startServer({ dir, port = 0, onEvent = () => {} }) {
 	}
 
 	const server = createServer((req, res) => {
+		try {
+			handle(req, res);
+		} catch (e) {
+			// A page asking for something unexpected must not take the run down with it.
+			record("server", "handler-threw", { url: req.url, error: String(e?.message || e) });
+			try { res.writeHead(500, { "Content-Type": "text/plain" }).end("harness server error"); } catch { /* already sent */ }
+		}
+	});
+
+	function handle(req, res) {
 		const url = new URL(req.url, `http://${req.headers.host}`);
 
 		const send = (code, type, body) => {
@@ -85,12 +95,14 @@ export async function startServer({ dir, port = 0, onEvent = () => {} }) {
 			? resolve(join(HARNESS_DIR, url.pathname.slice("/_harness/".length)))
 			: resolve(join(root, url.pathname === "/" ? "page.html" : url.pathname.slice(1)));
 
-		if (!(under(root, file) || under(HARNESS_DIR, file)) || !existsSync(file)) {
+		// isFile, not just exists: reading a directory throws EISDIR from inside this handler,
+		// which would take the whole run down rather than answering the request.
+		if (!(under(root, file) || under(HARNESS_DIR, file)) || !existsSync(file) || !statSync(file).isFile()) {
 			return send(404, "text/plain", "not found");
 		}
 		record("server", "served", url.pathname + url.search);
 		send(200, TYPES[extname(file)] || "application/octet-stream", readFileSync(file));
-	});
+	}
 
 	await new Promise((r) => server.listen(port, "127.0.0.1", r));
 	const origin = `http://127.0.0.1:${server.address().port}`;

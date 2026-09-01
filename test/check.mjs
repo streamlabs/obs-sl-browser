@@ -16,10 +16,10 @@
  *   node test/check.mjs        exit 1 if anything is wrong
  */
 
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, join, relative, resolve, extname } from "node:path";
+import { dirname, join, relative, resolve, extname, sep } from "node:path";
 
 import { DEFAULTS, validate } from "./harness/suite.mjs";
 
@@ -44,6 +44,19 @@ function walk(dir, out = []) {
 }
 
 const files = walk(HERE);
+
+/*
+ * A suite's page and collection must each be a regular file inside the suite directory.
+ * existsSync alone lets a directory through - which then reaches readFileSync in the server -
+ * and lets a ../ path through here only to be refused later by the server's root check.
+ */
+function suiteFile(dir, name, label) {
+	const full = resolve(join(dir, name));
+	if (!full.startsWith(resolve(dir) + sep)) return `${label} "${name}" is outside the suite directory`;
+	if (!existsSync(full)) return `${label} "${name}" does not exist`;
+	if (!statSync(full).isFile()) return `${label} "${name}" is not a file`;
+	return null;
+}
 
 /* ------------------------------------------------------- 1. does it parse --- */
 
@@ -81,9 +94,9 @@ for (const name of suiteNames) {
 	for (const p of problems) note(rel(entry), p);
 	// Only look for the files once the fields naming them are known to be strings.
 	if (!problems.length) {
-		if (!existsSync(join(dir, suite.page))) note(rel(entry), `page "${suite.page}" does not exist`);
-		if (suite.collection && !existsSync(join(dir, suite.collection))) {
-			note(rel(entry), `collection "${suite.collection}" does not exist`);
+		for (const bad of [suiteFile(dir, suite.page, "page"),
+			suite.collection ? suiteFile(dir, suite.collection, "collection") : null]) {
+			if (bad) note(rel(entry), bad);
 		}
 	}
 	suites.push(suite);
