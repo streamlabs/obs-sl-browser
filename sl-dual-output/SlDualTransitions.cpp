@@ -7,28 +7,28 @@ SlDualTransitions::~SlDualTransitions()
 
 void SlDualTransitions::clear()
 {
-	for (Entry& entry : m_entries)
+	for (Entry &entry : m_entries)
 		obs_source_release(entry.source);
 
 	m_entries.clear();
 }
 
-void SlDualTransitions::rebuild(const SlDualConfig& config)
+void SlDualTransitions::rebuild(const SlDualConfig &config)
 {
 	clear();
 
 	// Non-configurable types get one fixed instance each, like the main dock's defaults (Cut, Fade).
 	size_t idx = 0;
-	const char* id = nullptr;
+	const char *id = nullptr;
 
 	while (obs_enum_transition_types(idx++, &id))
 	{
 		if (obs_is_source_configurable(id))
 			continue;
 
-		const char* display = obs_source_get_display_name(id);
-		const char* name = display ? display : id;
-		obs_source_t* source = obs_source_create_private(id, name, nullptr);
+		const char *display = obs_source_get_display_name(id);
+		const char *name = display ? display : id;
+		obs_source_t *source = obs_source_create_private(id, name, nullptr);
 
 		if (!source)
 			continue;
@@ -40,13 +40,13 @@ void SlDualTransitions::rebuild(const SlDualConfig& config)
 		m_entries.push_back(entry);
 	}
 
-	for (const SlDualTransitionInfo& info : config.customTransitions)
+	for (const SlDualTransitionInfo &info : config.customTransitions)
 	{
 		if (find(info.name))
 			continue;
 
-		obs_data_t* settings = info.settingsJson.empty() ? nullptr : obs_data_create_from_json(info.settingsJson.c_str());
-		obs_source_t* source = obs_source_create_private(info.id.c_str(), info.name.c_str(), settings);
+		obs_data_t *settings = info.settingsJson.empty() ? nullptr : obs_data_create_from_json(info.settingsJson.c_str());
+		obs_source_t *source = obs_source_create_private(info.id.c_str(), info.name.c_str(), settings);
 
 		if (settings)
 			obs_data_release(settings);
@@ -66,9 +66,9 @@ void SlDualTransitions::rebuild(const SlDualConfig& config)
 	}
 }
 
-const SlDualTransitions::Entry* SlDualTransitions::entryByName(const std::string& name) const
+const SlDualTransitions::Entry *SlDualTransitions::entryByName(const std::string &name) const
 {
-	for (const Entry& entry : m_entries)
+	for (const Entry &entry : m_entries)
 	{
 		if (entry.name == name)
 			return &entry;
@@ -77,18 +77,18 @@ const SlDualTransitions::Entry* SlDualTransitions::entryByName(const std::string
 	return nullptr;
 }
 
-obs_source_t* SlDualTransitions::find(const std::string& name) const
+obs_source_t *SlDualTransitions::find(const std::string &name) const
 {
-	const Entry* entry = entryByName(name);
+	const Entry *entry = entryByName(name);
 	return entry ? entry->source : nullptr;
 }
 
-obs_source_t* SlDualTransitions::selected(const SlDualConfig& config) const
+obs_source_t *SlDualTransitions::selected(const SlDualConfig &config) const
 {
-	if (const Entry* entry = entryByName(config.transitionName))
+	if (const Entry *entry = entryByName(config.transitionName))
 		return entry->source;
 
-	for (const Entry& entry : m_entries)
+	for (const Entry &entry : m_entries)
 	{
 		if (entry.id == "fade_transition")
 			return entry.source;
@@ -97,11 +97,11 @@ obs_source_t* SlDualTransitions::selected(const SlDualConfig& config) const
 	return m_entries.empty() ? nullptr : m_entries.front().source;
 }
 
-std::string SlDualTransitions::selectedName(const SlDualConfig& config) const
+std::string SlDualTransitions::selectedName(const SlDualConfig &config) const
 {
-	obs_source_t* source = selected(config);
+	obs_source_t *source = selected(config);
 
-	for (const Entry& entry : m_entries)
+	for (const Entry &entry : m_entries)
 	{
 		if (entry.source == source)
 			return entry.name;
@@ -114,24 +114,24 @@ std::vector<std::string> SlDualTransitions::names() const
 {
 	std::vector<std::string> result;
 
-	for (const Entry& entry : m_entries)
+	for (const Entry &entry : m_entries)
 		result.push_back(entry.name);
 
 	return result;
 }
 
-bool SlDualTransitions::configurable(const std::string& name) const
+bool SlDualTransitions::configurable(const std::string &name) const
 {
-	const Entry* entry = entryByName(name);
+	const Entry *entry = entryByName(name);
 	return entry && entry->configurable;
 }
 
-bool SlDualTransitions::add(const std::string& typeId, const std::string& name)
+bool SlDualTransitions::add(const std::string &typeId, const std::string &name)
 {
 	if (name.empty() || find(name))
 		return false;
 
-	obs_source_t* source = obs_source_create_private(typeId.c_str(), name.c_str(), nullptr);
+	obs_source_t *source = obs_source_create_private(typeId.c_str(), name.c_str(), nullptr);
 
 	if (!source)
 		return false;
@@ -145,7 +145,7 @@ bool SlDualTransitions::add(const std::string& typeId, const std::string& name)
 	return true;
 }
 
-bool SlDualTransitions::remove(const std::string& name)
+bool SlDualTransitions::remove(const std::string &name)
 {
 	for (auto it = m_entries.begin(); it != m_entries.end(); ++it)
 	{
@@ -167,7 +167,7 @@ std::vector<SlDualTransitionInfo> SlDualTransitions::customInfos() const
 {
 	std::vector<SlDualTransitionInfo> result;
 
-	for (const Entry& entry : m_entries)
+	for (const Entry &entry : m_entries)
 	{
 		if (!entry.configurable)
 			continue;
@@ -176,11 +176,11 @@ std::vector<SlDualTransitionInfo> SlDualTransitions::customInfos() const
 		info.id = entry.id;
 		info.name = entry.name;
 
-		obs_data_t* settings = obs_source_get_settings(entry.source);
+		obs_data_t *settings = obs_source_get_settings(entry.source);
 
 		if (settings)
 		{
-			const char* json = obs_data_get_json(settings);
+			const char *json = obs_data_get_json(settings);
 			info.settingsJson = json ? json : "";
 			obs_data_release(settings);
 		}

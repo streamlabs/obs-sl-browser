@@ -28,12 +28,12 @@ enum class SlDualOutputMode
 	EnhancedBroadcasting,
 };
 
-inline const char* slDualOutputModeToString(SlDualOutputMode mode)
+inline const char *slDualOutputModeToString(SlDualOutputMode mode)
 {
 	return mode == SlDualOutputMode::EnhancedBroadcasting ? "enhanced_broadcasting" : "rtmp";
 }
 
-inline SlDualOutputMode slDualOutputModeFromString(const std::string& text)
+inline SlDualOutputMode slDualOutputModeFromString(const std::string &text)
 {
 	return text == "enhanced_broadcasting" ? SlDualOutputMode::EnhancedBroadcasting : SlDualOutputMode::Rtmp;
 }

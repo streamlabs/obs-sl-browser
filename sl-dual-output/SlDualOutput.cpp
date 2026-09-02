@@ -11,13 +11,12 @@
 
 // never instantiated
 class SlDualController
-{
-};
+{};
 
 SlDualOutput::SlDualOutput() = default;
 SlDualOutput::~SlDualOutput() = default;
 
-SlDualOutput& SlDualOutput::instance()
+SlDualOutput &SlDualOutput::instance()
 {
 	static SlDualOutput s_instance;
 	return s_instance;
@@ -30,20 +29,62 @@ void SlDualOutput::initialize()
 
 void SlDualOutput::shutdown() {}
 
-bool SlDualOutput::available() const { return false; }
-struct obs_canvas* SlDualOutput::canvas() const { return nullptr; }
-bool SlDualOutput::sceneCreate(const std::string&) { return false; }
-bool SlDualOutput::sceneRemove(const std::string&) { return false; }
-bool SlDualOutput::sceneSetActive(const std::string&) { return false; }
-std::string SlDualOutput::activeSceneName() const { return std::string(); }
-std::vector<std::string> SlDualOutput::sceneNames() const { return std::vector<std::string>(); }
-SlDualConfig SlDualOutput::config() const { return SlDualConfig(); }
-bool SlDualOutput::applyConfig(const SlDualConfig&) { return false; }
-bool SlDualOutput::setEnabled(bool) { return false; }
-bool SlDualOutput::setOutputMode(SlDualOutputMode) { return false; }
-bool SlDualOutput::startStream() { return false; }
-bool SlDualOutput::stopStream() { return false; }
-std::string SlDualOutput::streamState() const { return "idle"; }
+bool SlDualOutput::available() const
+{
+	return false;
+}
+struct obs_canvas *SlDualOutput::canvas() const
+{
+	return nullptr;
+}
+bool SlDualOutput::sceneCreate(const std::string &)
+{
+	return false;
+}
+bool SlDualOutput::sceneRemove(const std::string &)
+{
+	return false;
+}
+bool SlDualOutput::sceneSetActive(const std::string &)
+{
+	return false;
+}
+std::string SlDualOutput::activeSceneName() const
+{
+	return std::string();
+}
+std::vector<std::string> SlDualOutput::sceneNames() const
+{
+	return std::vector<std::string>();
+}
+SlDualConfig SlDualOutput::config() const
+{
+	return SlDualConfig();
+}
+bool SlDualOutput::applyConfig(const SlDualConfig &)
+{
+	return false;
+}
+bool SlDualOutput::setEnabled(bool)
+{
+	return false;
+}
+bool SlDualOutput::setOutputMode(SlDualOutputMode)
+{
+	return false;
+}
+bool SlDualOutput::startStream()
+{
+	return false;
+}
+bool SlDualOutput::stopStream()
+{
+	return false;
+}
+std::string SlDualOutput::streamState() const
+{
+	return "idle";
+}
 
 #else // SL_DUAL_ENABLED
 
@@ -58,7 +99,7 @@ std::string SlDualOutput::streamState() const { return "idle"; }
 SlDualOutput::SlDualOutput() = default;
 SlDualOutput::~SlDualOutput() = default;
 
-SlDualOutput& SlDualOutput::instance()
+SlDualOutput &SlDualOutput::instance()
 {
 	static SlDualOutput s_instance;
 	return s_instance;
@@ -112,22 +153,22 @@ bool SlDualOutput::available() const
 	return m_controller && m_controller->canvas && m_controller->canvas->valid();
 }
 
-struct obs_canvas* SlDualOutput::canvas() const
+struct obs_canvas *SlDualOutput::canvas() const
 {
 	return available() ? m_controller->canvas->canvasHandle() : nullptr;
 }
 
-bool SlDualOutput::sceneCreate(const std::string& name)
+bool SlDualOutput::sceneCreate(const std::string &name)
 {
 	return available() && m_controller->sceneCreate(name);
 }
 
-bool SlDualOutput::sceneRemove(const std::string& name)
+bool SlDualOutput::sceneRemove(const std::string &name)
 {
 	return available() && m_controller->sceneRemove(name);
 }
 
-bool SlDualOutput::sceneSetActive(const std::string& name)
+bool SlDualOutput::sceneSetActive(const std::string &name)
 {
 	if (!available())
 		return false;
@@ -152,7 +193,7 @@ SlDualConfig SlDualOutput::config() const
 	return m_controller ? m_controller->config : SlDualConfig();
 }
 
-bool SlDualOutput::applyConfig(const SlDualConfig& next)
+bool SlDualOutput::applyConfig(const SlDualConfig &next)
 {
 	if (!m_controller)
 		return false;
@@ -206,12 +247,17 @@ std::string SlDualOutput::streamState() const
 
 	switch (m_controller->output->state())
 	{
-	case SlDualStreamState::Starting: return "starting";
-	case SlDualStreamState::Live: return "live";
-	case SlDualStreamState::Reconnecting: return "reconnecting";
-	case SlDualStreamState::Stopping: return "stopping";
+	case SlDualStreamState::Starting:
+		return "starting";
+	case SlDualStreamState::Live:
+		return "live";
+	case SlDualStreamState::Reconnecting:
+		return "reconnecting";
+	case SlDualStreamState::Stopping:
+		return "stopping";
 	case SlDualStreamState::Idle:
-	default: return "idle";
+	default:
+		return "idle";
 	}
 }
 

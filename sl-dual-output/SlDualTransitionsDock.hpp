@@ -16,7 +16,7 @@ class QSpinBox;
 class SlDualTransitionsDock : public QWidget
 {
 public:
-	explicit SlDualTransitionsDock(SlDualController& controller);
+	explicit SlDualTransitionsDock(SlDualController &controller);
 
 	// Rebuilds the combo from the transitions model and syncs duration/buttons.
 	void refresh();
@@ -27,12 +27,12 @@ private:
 	void onRemove();
 	void onProperties();
 
-	SlDualController& m_controller;
-	QComboBox* m_combo = nullptr;
-	QLabel* m_durationLabel = nullptr;
-	QSpinBox* m_duration = nullptr;
-	QPushButton* m_addButton = nullptr;
-	QPushButton* m_removeButton = nullptr;
-	QPushButton* m_propertiesButton = nullptr;
+	SlDualController &m_controller;
+	QComboBox *m_combo = nullptr;
+	QLabel *m_durationLabel = nullptr;
+	QSpinBox *m_duration = nullptr;
+	QPushButton *m_addButton = nullptr;
+	QPushButton *m_removeButton = nullptr;
+	QPushButton *m_propertiesButton = nullptr;
 	bool m_updating = false;
 };

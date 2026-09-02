@@ -3,45 +3,36 @@
 #include <algorithm>
 #include <cstring>
 
-static const char* stopCodeText(int code)
+static const char *stopCodeText(int code)
 {
 	switch (code)
 	{
-	case OBS_OUTPUT_SUCCESS:
-	{
+	case OBS_OUTPUT_SUCCESS: {
 		return "Stopped";
 	}
-	case OBS_OUTPUT_BAD_PATH:
-	{
+	case OBS_OUTPUT_BAD_PATH: {
 		return "Invalid stream path or URL";
 	}
-	case OBS_OUTPUT_CONNECT_FAILED:
-	{
+	case OBS_OUTPUT_CONNECT_FAILED: {
 		return "Failed to connect to server";
 	}
-	case OBS_OUTPUT_INVALID_STREAM:
-	{
+	case OBS_OUTPUT_INVALID_STREAM: {
 		return "Invalid stream key or channel";
 	}
-	case OBS_OUTPUT_DISCONNECTED:
-	{
+	case OBS_OUTPUT_DISCONNECTED: {
 		return "Disconnected from server";
 	}
-	case OBS_OUTPUT_UNSUPPORTED:
-	{
+	case OBS_OUTPUT_UNSUPPORTED: {
 		return "Output format unsupported";
 	}
-	case OBS_OUTPUT_NO_SPACE:
-	{
+	case OBS_OUTPUT_NO_SPACE: {
 		return "Out of disk space";
 	}
-	case OBS_OUTPUT_ENCODE_ERROR:
-	{
+	case OBS_OUTPUT_ENCODE_ERROR: {
 		return "Encoder error";
 	}
 	case OBS_OUTPUT_ERROR:
-	default:
-	{
+	default: {
 		return "Output error";
 	}
 	}
@@ -63,7 +54,7 @@ bool SlDualStreamOutput::active() const
 	return m_output && obs_output_active(m_output);
 }
 
-bool SlDualStreamOutput::start(const SlDualConfig& config, video_t* canvasVideo)
+bool SlDualStreamOutput::start(const SlDualConfig &config, video_t *canvasVideo)
 {
 	const SlDualStreamState state = m_state.load();
 
@@ -91,7 +82,7 @@ bool SlDualStreamOutput::start(const SlDualConfig& config, video_t* canvasVideo)
 
 	releaseAll();
 
-	obs_data_t* serviceSettings = obs_data_create();
+	obs_data_t *serviceSettings = obs_data_create();
 	obs_data_set_string(serviceSettings, "server", config.server.c_str());
 	obs_data_set_string(serviceSettings, "key", config.key.c_str());
 	obs_data_set_bool(serviceSettings, "use_auth", config.useAuth);
@@ -105,12 +96,12 @@ bool SlDualStreamOutput::start(const SlDualConfig& config, video_t* canvasVideo)
 	m_service = obs_service_create("rtmp_custom", "sl-dual-service", serviceSettings, nullptr);
 	obs_data_release(serviceSettings);
 
-	obs_data_t* videoSettings = obs_data_create();
+	obs_data_t *videoSettings = obs_data_create();
 	obs_data_set_int(videoSettings, "bitrate", config.videoBitrateKbps);
 	obs_data_set_string(videoSettings, "rate_control", "CBR");
 	obs_data_set_int(videoSettings, "keyint_sec", 2);
 
-	const char* encoderId = config.encoderId.empty() ? "obs_x264" : config.encoderId.c_str();
+	const char *encoderId = config.encoderId.empty() ? "obs_x264" : config.encoderId.c_str();
 	m_videoEncoder = obs_video_encoder_create(encoderId, "sl-dual-video-encoder", videoSettings, nullptr);
 
 	if (!m_videoEncoder && strcmp(encoderId, "obs_x264") != 0)
@@ -121,7 +112,7 @@ bool SlDualStreamOutput::start(const SlDualConfig& config, video_t* canvasVideo)
 
 	obs_data_release(videoSettings);
 
-	obs_data_t* audioSettings = obs_data_create();
+	obs_data_t *audioSettings = obs_data_create();
 	obs_data_set_int(audioSettings, "bitrate", config.audioBitrateKbps);
 	size_t track = (size_t)std::clamp(config.audioTrack, 1, (int)MAX_AUDIO_MIXES) - 1;
 	m_audioEncoder = obs_audio_encoder_create("ffmpeg_aac", "sl-dual-audio-encoder", audioSettings, track, nullptr);
@@ -138,7 +129,7 @@ bool SlDualStreamOutput::start(const SlDualConfig& config, video_t* canvasVideo)
 	obs_encoder_set_video(m_videoEncoder, canvasVideo);
 	obs_encoder_set_audio(m_audioEncoder, obs_get_audio());
 
-	const char* outputType = obs_service_get_preferred_output_type(m_service);
+	const char *outputType = obs_service_get_preferred_output_type(m_service);
 
 	if (!outputType)
 		outputType = "rtmp_output";
@@ -162,7 +153,7 @@ bool SlDualStreamOutput::start(const SlDualConfig& config, video_t* canvasVideo)
 
 	if (!obs_output_start(m_output))
 	{
-		const char* err = obs_output_get_last_error(m_output);
+		const char *err = obs_output_get_last_error(m_output);
 		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "output start failed: %s", err ? err : "(none)");
 		disconnectSignals();
 		std::string msg = (err && *err) ? err : "Failed to start output";
@@ -223,7 +214,7 @@ void SlDualStreamOutput::connectSignals()
 	if (!m_output || m_signalsConnected)
 		return;
 
-	signal_handler_t* sh = obs_output_get_signal_handler(m_output);
+	signal_handler_t *sh = obs_output_get_signal_handler(m_output);
 	signal_handler_connect(sh, "start", onStartSignal, this);
 	signal_handler_connect(sh, "stop", onStopSignal, this);
 	signal_handler_connect(sh, "reconnect", onReconnectSignal, this);
@@ -236,7 +227,7 @@ void SlDualStreamOutput::disconnectSignals()
 	if (!m_output || !m_signalsConnected)
 		return;
 
-	signal_handler_t* sh = obs_output_get_signal_handler(m_output);
+	signal_handler_t *sh = obs_output_get_signal_handler(m_output);
 	signal_handler_disconnect(sh, "start", onStartSignal, this);
 	signal_handler_disconnect(sh, "stop", onStopSignal, this);
 	signal_handler_disconnect(sh, "reconnect", onReconnectSignal, this);
@@ -272,7 +263,7 @@ void SlDualStreamOutput::releaseAll()
 	}
 }
 
-void SlDualStreamOutput::setState(SlDualStreamState state, const char* msg)
+void SlDualStreamOutput::setState(SlDualStreamState state, const char *msg)
 {
 	m_state.store(state);
 
@@ -286,19 +277,19 @@ void SlDualStreamOutput::setState(SlDualStreamState state, const char* msg)
 		callback(state, msg ? std::string(msg) : std::string());
 }
 
-void SlDualStreamOutput::onStartSignal(void* data, calldata_t*)
+void SlDualStreamOutput::onStartSignal(void *data, calldata_t *)
 {
-	auto* self = static_cast<SlDualStreamOutput*>(data);
+	auto *self = static_cast<SlDualStreamOutput *>(data);
 	self->setState(SlDualStreamState::Live, "Live");
 }
 
-void SlDualStreamOutput::onStopSignal(void* data, calldata_t* cd)
+void SlDualStreamOutput::onStopSignal(void *data, calldata_t *cd)
 {
-	auto* self = static_cast<SlDualStreamOutput*>(data);
+	auto *self = static_cast<SlDualStreamOutput *>(data);
 	int code = (int)calldata_int(cd, "code");
-	const char* lastError = calldata_string(cd, "last_error");
+	const char *lastError = calldata_string(cd, "last_error");
 
-	const char* msg;
+	const char *msg;
 
 	if (code == OBS_OUTPUT_SUCCESS)
 		msg = "Stopped";
@@ -313,14 +304,14 @@ void SlDualStreamOutput::onStopSignal(void* data, calldata_t* cd)
 	self->setState(SlDualStreamState::Idle, msg);
 }
 
-void SlDualStreamOutput::onReconnectSignal(void* data, calldata_t*)
+void SlDualStreamOutput::onReconnectSignal(void *data, calldata_t *)
 {
-	auto* self = static_cast<SlDualStreamOutput*>(data);
+	auto *self = static_cast<SlDualStreamOutput *>(data);
 	self->setState(SlDualStreamState::Reconnecting, "Reconnecting");
 }
 
-void SlDualStreamOutput::onReconnectSuccessSignal(void* data, calldata_t*)
+void SlDualStreamOutput::onReconnectSuccessSignal(void *data, calldata_t *)
 {
-	auto* self = static_cast<SlDualStreamOutput*>(data);
+	auto *self = static_cast<SlDualStreamOutput *>(data);
 	self->setState(SlDualStreamState::Live, "Live");
 }

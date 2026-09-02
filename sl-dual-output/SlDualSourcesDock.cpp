@@ -8,10 +8,7 @@
 #include <QCursor>
 #include <QVBoxLayout>
 
-SlDualSourcesDock::SlDualSourcesDock(SlDualController& controller, SlDualPreview* preview)
-	: QWidget(nullptr),
-	  m_controller(controller),
-	  m_preview(preview)
+SlDualSourcesDock::SlDualSourcesDock(SlDualController &controller, SlDualPreview *preview) : QWidget(nullptr), m_controller(controller), m_preview(preview)
 {
 	m_list = new SlDualSourceList(controller, preview, this);
 
@@ -30,7 +27,7 @@ SlDualSourcesDock::SlDualSourcesDock(SlDualController& controller, SlDualPreview
 	m_downAction = slDualToolAction(m_toolbar, ":/res/images/down.svg", "icon-down", "Move Down", "Move source down");
 	slDualApplyThemeProperties(m_toolbar);
 
-	auto* layout = new QVBoxLayout(this);
+	auto *layout = new QVBoxLayout(this);
 	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(0);
 	layout->addWidget(m_list, 1);
@@ -59,7 +56,7 @@ void SlDualSourcesDock::onAdd()
 	if (!m_preview)
 		return;
 
-	QWidget* button = m_toolbar->widgetForAction(m_addAction);
+	QWidget *button = m_toolbar->widgetForAction(m_addAction);
 	QPoint pos = button ? button->mapToGlobal(QPoint(0, button->height())) : QCursor::pos();
 	m_preview->editor().showAddSourceMenu(pos, this);
 }

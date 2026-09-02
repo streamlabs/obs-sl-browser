@@ -19,29 +19,29 @@ class QToolBar;
 class SlDualScenesDock : public QWidget
 {
 public:
-	explicit SlDualScenesDock(SlDualController& controller);
+	explicit SlDualScenesDock(SlDualController &controller);
 
 	// Rebuilds the list from the canvas and config.sceneOrder; highlights the active scene.
 	void refresh();
 
 private:
 	void onSelectionChanged();
-	void onItemEdited(QListWidgetItem* item);
+	void onItemEdited(QListWidgetItem *item);
 	void onAdd();
 	void onRemove();
 	void onMove(int direction);
 	void onOrderDropped();
-	void showContextMenu(const QPoint& pos);
+	void showContextMenu(const QPoint &pos);
 
 	std::vector<std::string> displayedNames() const;
 	void persistOrder();
 
-	SlDualController& m_controller;
-	QListWidget* m_list = nullptr;
-	QToolBar* m_toolbar = nullptr;
-	QAction* m_addAction = nullptr;
-	QAction* m_removeAction = nullptr;
-	QAction* m_upAction = nullptr;
-	QAction* m_downAction = nullptr;
+	SlDualController &m_controller;
+	QListWidget *m_list = nullptr;
+	QToolBar *m_toolbar = nullptr;
+	QAction *m_addAction = nullptr;
+	QAction *m_removeAction = nullptr;
+	QAction *m_upAction = nullptr;
+	QAction *m_downAction = nullptr;
 	bool m_updating = false;
 };

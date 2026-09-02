@@ -28,27 +28,26 @@ struct obs_canvas;
 class SlDualOutput
 {
 public:
-	static SlDualOutput& instance();
+	static SlDualOutput &instance();
 
 	void initialize();
 	void shutdown();
 
 public: // control surface, UI thread only
-
 	// False in a stub build, before initialize(), and while the canvas is detached (scene collection loading/switching).
 	bool available() const;
 
 	// Borrowed, null when unavailable. Enough on its own to resolve scenes in the canvas's namespace.
-	struct obs_canvas* canvas() const;
+	struct obs_canvas *canvas() const;
 
-	bool sceneCreate(const std::string& name);
-	bool sceneRemove(const std::string& name);
-	bool sceneSetActive(const std::string& name);
+	bool sceneCreate(const std::string &name);
+	bool sceneRemove(const std::string &name);
+	bool sceneSetActive(const std::string &name);
 	std::string activeSceneName() const;
 	std::vector<std::string> sceneNames() const;
 
 	SlDualConfig config() const;
-	bool applyConfig(const SlDualConfig& next);
+	bool applyConfig(const SlDualConfig &next);
 
 	bool setEnabled(bool enabled);
 	bool setOutputMode(SlDualOutputMode mode);
@@ -62,8 +61,8 @@ public: // control surface, UI thread only
 private:
 	SlDualOutput();
 	~SlDualOutput();
-	SlDualOutput(const SlDualOutput&) = delete;
-	SlDualOutput& operator=(const SlDualOutput&) = delete;
+	SlDualOutput(const SlDualOutput &) = delete;
+	SlDualOutput &operator=(const SlDualOutput &) = delete;
 
 	// its output-state callback re-enters via instance()
 	friend class SlDualController;

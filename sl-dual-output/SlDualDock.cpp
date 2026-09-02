@@ -17,7 +17,7 @@
 * SlDualPreview
 */
 
-SlDualPreview::SlDualPreview(SlDualController& controller, QWidget* parent) : QWidget(parent), m_controller(controller)
+SlDualPreview::SlDualPreview(SlDualController &controller, QWidget *parent) : QWidget(parent), m_controller(controller)
 {
 	setAttribute(Qt::WA_PaintOnScreen);
 	setAttribute(Qt::WA_StaticContents);
@@ -63,8 +63,8 @@ void SlDualPreview::createDisplay()
 
 	// Default bg color
 	uint32_t bgColor = 0xFF1A1413;
-	auto* main = static_cast<QWidget*>(obs_frontend_get_main_window());
-	QWidget* mainPreview = main ? main->findChild<QWidget*>("preview") : nullptr;
+	auto *main = static_cast<QWidget *>(obs_frontend_get_main_window());
+	QWidget *mainPreview = main ? main->findChild<QWidget *>("preview") : nullptr;
 	QVariant themed = mainPreview ? mainPreview->property("displayBackgroundColor") : QVariant();
 
 	if (themed.isValid() && themed.value<QColor>().isValid())
@@ -112,11 +112,11 @@ void SlDualPreview::updateCallbackRegistration()
 	}
 }
 
-void SlDualPreview::drawThunk(void* data, uint32_t cx, uint32_t cy)
+void SlDualPreview::drawThunk(void *data, uint32_t cx, uint32_t cy)
 {
-	auto* self = static_cast<SlDualPreview*>(data);
+	auto *self = static_cast<SlDualPreview *>(data);
 
-	if (SlDualCanvas* canvas = self->m_controller.canvas.get())
+	if (SlDualCanvas *canvas = self->m_controller.canvas.get())
 		canvas->renderPreview(cx, cy);
 	self->m_editor->drawOverlay(cx, cy);
 }
@@ -126,20 +126,20 @@ void SlDualPreview::syncEditorView()
 	m_editor->setViewSize(QSizeF(size()), devicePixelRatioF());
 }
 
-void SlDualPreview::showEvent(QShowEvent* event)
+void SlDualPreview::showEvent(QShowEvent *event)
 {
 	QWidget::showEvent(event);
 	syncEditorView();
 	createDisplay();
 }
 
-void SlDualPreview::hideEvent(QHideEvent* event)
+void SlDualPreview::hideEvent(QHideEvent *event)
 {
 	destroyDisplay();
 	QWidget::hideEvent(event);
 }
 
-void SlDualPreview::resizeEvent(QResizeEvent* event)
+void SlDualPreview::resizeEvent(QResizeEvent *event)
 {
 	QWidget::resizeEvent(event);
 	syncEditorView();
@@ -151,12 +151,12 @@ void SlDualPreview::resizeEvent(QResizeEvent* event)
 	}
 }
 
-void SlDualPreview::paintEvent(QPaintEvent*)
+void SlDualPreview::paintEvent(QPaintEvent *)
 {
 	// Rendering is done by libobs into the native window.
 }
 
-void SlDualPreview::changeEvent(QEvent* event)
+void SlDualPreview::changeEvent(QEvent *event)
 {
 	QWidget::changeEvent(event);
 
@@ -168,27 +168,27 @@ void SlDualPreview::changeEvent(QEvent* event)
 	}
 }
 
-void SlDualPreview::mousePressEvent(QMouseEvent* event)
+void SlDualPreview::mousePressEvent(QMouseEvent *event)
 {
 	syncEditorView();
 	m_editor->mousePress(event->position(), event->button(), event->modifiers());
 	QWidget::mousePressEvent(event);
 }
 
-void SlDualPreview::mouseMoveEvent(QMouseEvent* event)
+void SlDualPreview::mouseMoveEvent(QMouseEvent *event)
 {
 	syncEditorView();
 	m_editor->mouseMove(event->position(), (event->buttons() & Qt::LeftButton) != 0, event->modifiers());
 	QWidget::mouseMoveEvent(event);
 }
 
-void SlDualPreview::mouseReleaseEvent(QMouseEvent* event)
+void SlDualPreview::mouseReleaseEvent(QMouseEvent *event)
 {
 	m_editor->mouseRelease(event->position(), event->button(), event->modifiers());
 	QWidget::mouseReleaseEvent(event);
 }
 
-void SlDualPreview::leaveEvent(QEvent* event)
+void SlDualPreview::leaveEvent(QEvent *event)
 {
 	m_editor->mouseLeave();
 	QWidget::leaveEvent(event);
@@ -199,21 +199,21 @@ void SlDualPreview::resetEditor(bool clearUndo)
 	m_editor->reset(clearUndo);
 }
 
-void SlDualPreview::mouseDoubleClickEvent(QMouseEvent* event)
+void SlDualPreview::mouseDoubleClickEvent(QMouseEvent *event)
 {
 	syncEditorView();
 	m_editor->mouseDoubleClick(event->position());
 	QWidget::mouseDoubleClickEvent(event);
 }
 
-void SlDualPreview::contextMenuEvent(QContextMenuEvent* event)
+void SlDualPreview::contextMenuEvent(QContextMenuEvent *event)
 {
 	syncEditorView();
 	m_editor->contextMenu(QPointF(event->pos()), this);
 	event->accept();
 }
 
-void SlDualPreview::keyPressEvent(QKeyEvent* event)
+void SlDualPreview::keyPressEvent(QKeyEvent *event)
 {
 	if (m_editor->keyPress(event->key(), event->modifiers()))
 	{
@@ -228,7 +228,7 @@ void SlDualPreview::keyPressEvent(QKeyEvent* event)
 * SlDualDock
 */
 
-SlDualDock::SlDualDock(SlDualController& controller) : QWidget(nullptr), m_controller(controller)
+SlDualDock::SlDualDock(SlDualController &controller) : QWidget(nullptr), m_controller(controller)
 {
 	m_preview = new SlDualPreview(controller, this);
 
@@ -237,13 +237,13 @@ SlDualDock::SlDualDock(SlDualController& controller) : QWidget(nullptr), m_contr
 	m_statusLabel = new QLabel(this);
 	m_statusLabel->setTextFormat(Qt::RichText);
 
-	auto* controls = new QHBoxLayout();
+	auto *controls = new QHBoxLayout();
 	controls->setContentsMargins(0, 0, 0, 0);
 	controls->addWidget(m_statusLabel, 1);
 	controls->addWidget(m_settingsButton);
 	controls->addWidget(m_startStopButton);
 
-	auto* layout = new QVBoxLayout(this);
+	auto *layout = new QVBoxLayout(this);
 	layout->setContentsMargins(4, 4, 4, 4);
 	layout->setSpacing(4);
 	layout->addWidget(m_preview, 1);
@@ -259,8 +259,7 @@ void SlDualDock::onStartStopClicked()
 {
 	switch (m_state)
 	{
-	case SlDualStreamState::Idle:
-	{
+	case SlDualStreamState::Idle: {
 		if (m_controller.config.server.empty())
 		{
 			openSettings();
@@ -272,13 +271,11 @@ void SlDualDock::onStartStopClicked()
 	}
 	case SlDualStreamState::Starting:
 	case SlDualStreamState::Live:
-	case SlDualStreamState::Reconnecting:
-	{
+	case SlDualStreamState::Reconnecting: {
 		m_controller.stopStream();
 		break;
 	}
-	case SlDualStreamState::Stopping:
-	{
+	case SlDualStreamState::Stopping: {
 		break;
 	}
 	}
@@ -292,40 +289,35 @@ void SlDualDock::openSettings()
 		m_controller.applySettings(dialog.resultConfig());
 }
 
-void SlDualDock::setStreamState(SlDualStreamState state, const std::string& msg)
+void SlDualDock::setStreamState(SlDualStreamState state, const std::string &msg)
 {
 	m_state = state;
 
-	const char* text = "Idle";
-	const char* color = "#909090";
+	const char *text = "Idle";
+	const char *color = "#909090";
 	switch (state)
 	{
-	case SlDualStreamState::Starting:
-	{
+	case SlDualStreamState::Starting: {
 		text = "Connecting";
 		color = "#e0a800";
 		break;
 	}
-	case SlDualStreamState::Live:
-	{
+	case SlDualStreamState::Live: {
 		text = "Live";
 		color = "#2ecc71";
 		break;
 	}
-	case SlDualStreamState::Reconnecting:
-	{
+	case SlDualStreamState::Reconnecting: {
 		text = "Reconnecting";
 		color = "#e0a800";
 		break;
 	}
-	case SlDualStreamState::Stopping:
-	{
+	case SlDualStreamState::Stopping: {
 		text = "Stopping";
 		color = "#909090";
 		break;
 	}
-	case SlDualStreamState::Idle:
-	{
+	case SlDualStreamState::Idle: {
 		break;
 	}
 	}

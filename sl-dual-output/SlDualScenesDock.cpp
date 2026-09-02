@@ -11,7 +11,7 @@
 
 #include <algorithm>
 
-SlDualScenesDock::SlDualScenesDock(SlDualController& controller) : QWidget(nullptr), m_controller(controller)
+SlDualScenesDock::SlDualScenesDock(SlDualController &controller) : QWidget(nullptr), m_controller(controller)
 {
 	m_list = new QListWidget(this);
 	m_list->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -33,15 +33,15 @@ SlDualScenesDock::SlDualScenesDock(SlDualController& controller) : QWidget(nullp
 	m_downAction = slDualToolAction(m_toolbar, ":/res/images/down.svg", "icon-down", "Move Down", "Move scene down");
 	slDualApplyThemeProperties(m_toolbar);
 
-	auto* layout = new QVBoxLayout(this);
+	auto *layout = new QVBoxLayout(this);
 	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(0);
 	layout->addWidget(m_list, 1);
 	layout->addWidget(m_toolbar);
 
 	QObject::connect(m_list, &QListWidget::itemSelectionChanged, this, [this]() { onSelectionChanged(); });
-	QObject::connect(m_list, &QListWidget::itemChanged, this, [this](QListWidgetItem* item) { onItemEdited(item); });
-	QObject::connect(m_list, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) { showContextMenu(pos); });
+	QObject::connect(m_list, &QListWidget::itemChanged, this, [this](QListWidgetItem *item) { onItemEdited(item); });
+	QObject::connect(m_list, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) { showContextMenu(pos); });
 	QObject::connect(m_list->model(), &QAbstractItemModel::rowsMoved, this, [this]() { onOrderDropped(); });
 	QObject::connect(m_addAction, &QAction::triggered, this, [this]() { onAdd(); });
 	QObject::connect(m_removeAction, &QAction::triggered, this, [this]() { onRemove(); });
@@ -56,7 +56,7 @@ void SlDualScenesDock::refresh()
 	m_updating = true;
 	m_list->clear();
 
-	SlDualCanvas* canvas = m_controller.canvas.get();
+	SlDualCanvas *canvas = m_controller.canvas.get();
 	bool haveCanvas = canvas && canvas->valid();
 
 	if (haveCanvas)
@@ -65,7 +65,7 @@ void SlDualScenesDock::refresh()
 		std::vector<std::string> names = canvas->sceneNames();
 		std::vector<std::string> ordered;
 
-		for (const std::string& name : m_controller.config.sceneOrder)
+		for (const std::string &name : m_controller.config.sceneOrder)
 		{
 			bool known = std::find(names.begin(), names.end(), name) != names.end();
 			bool seen = std::find(ordered.begin(), ordered.end(), name) != ordered.end();
@@ -74,7 +74,7 @@ void SlDualScenesDock::refresh()
 				ordered.push_back(name);
 		}
 
-		for (const std::string& name : names)
+		for (const std::string &name : names)
 		{
 			if (std::find(ordered.begin(), ordered.end(), name) == ordered.end())
 				ordered.push_back(name);
@@ -83,9 +83,9 @@ void SlDualScenesDock::refresh()
 		m_controller.config.sceneOrder = ordered;
 		std::string active = canvas->activeSceneName();
 
-		for (const std::string& name : ordered)
+		for (const std::string &name : ordered)
 		{
-			auto* item = new QListWidgetItem(QString::fromUtf8(name.c_str()), m_list);
+			auto *item = new QListWidgetItem(QString::fromUtf8(name.c_str()), m_list);
 			item->setFlags(item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
 
 			// original name, for rename validation
@@ -109,19 +109,19 @@ void SlDualScenesDock::onSelectionChanged()
 	if (m_updating)
 		return;
 
-	QListWidgetItem* item = m_list->currentItem();
+	QListWidgetItem *item = m_list->currentItem();
 
 	if (!item)
 		return;
 
 	std::string name = item->text().toUtf8().constData();
-	SlDualCanvas* canvas = m_controller.canvas.get();
+	SlDualCanvas *canvas = m_controller.canvas.get();
 
 	if (canvas && name != canvas->activeSceneName())
 		m_controller.sceneSetActive(name);
 }
 
-void SlDualScenesDock::onItemEdited(QListWidgetItem* item)
+void SlDualScenesDock::onItemEdited(QListWidgetItem *item)
 {
 	if (m_updating || !item)
 		return;
@@ -156,7 +156,7 @@ void SlDualScenesDock::onAdd()
 
 void SlDualScenesDock::onRemove()
 {
-	SlDualCanvas* canvas = m_controller.canvas.get();
+	SlDualCanvas *canvas = m_controller.canvas.get();
 
 	if (!canvas)
 		return;
@@ -178,7 +178,7 @@ void SlDualScenesDock::onMove(int direction)
 		return;
 
 	m_updating = true;
-	QListWidgetItem* item = m_list->takeItem(row);
+	QListWidgetItem *item = m_list->takeItem(row);
 	m_list->insertItem(target, item);
 	m_list->setCurrentItem(item);
 	m_updating = false;
@@ -194,7 +194,7 @@ void SlDualScenesDock::onOrderDropped()
 	persistOrder();
 }
 
-void SlDualScenesDock::showContextMenu(const QPoint& pos)
+void SlDualScenesDock::showContextMenu(const QPoint &pos)
 {
 	QMenu menu(this);
 	menu.addAction("Add Scene", [this]() { onAdd(); });
@@ -203,7 +203,7 @@ void SlDualScenesDock::showContextMenu(const QPoint& pos)
 	// canvas's active scene - so the clicked row has to become current first, or right-clicking an
 	// unselected scene acts on a different one. Selecting on right-click is what the main OBS
 	// scene list does too.
-	if (QListWidgetItem* clicked = m_list->itemAt(pos))
+	if (QListWidgetItem *clicked = m_list->itemAt(pos))
 	{
 		m_list->setCurrentItem(clicked);
 

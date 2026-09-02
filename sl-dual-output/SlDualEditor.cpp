@@ -48,7 +48,7 @@ struct SnapConfig
 static SnapConfig readSnapConfig()
 {
 	SnapConfig snap;
-	config_t* cfg = obs_frontend_get_user_config();
+	config_t *cfg = obs_frontend_get_user_config();
 
 	if (!cfg)
 		return snap;
@@ -61,16 +61,16 @@ static SnapConfig readSnapConfig()
 	return snap;
 }
 
-static bool userConfigBool(const char* section, const char* key)
+static bool userConfigBool(const char *section, const char *key)
 {
-	config_t* cfg = obs_frontend_get_user_config();
+	config_t *cfg = obs_frontend_get_user_config();
 	return cfg ? config_get_bool(cfg, section, key) : false;
 }
 
-static vec4 accessibilityColor(const char* overrideKey, float r, float g, float b)
+static vec4 accessibilityColor(const char *overrideKey, float r, float g, float b)
 {
 	vec4 color;
-	config_t* cfg = obs_frontend_get_user_config();
+	config_t *cfg = obs_frontend_get_user_config();
 
 	if (cfg && config_get_bool(cfg, "Accessibility", "OverrideColors"))
 	{
@@ -85,7 +85,7 @@ static vec4 accessibilityColor(const char* overrideKey, float r, float g, float 
 	return color;
 }
 
-static std::string frontendDataFile(const char* name)
+static std::string frontendDataFile(const char *name)
 {
 	QString candidate = QCoreApplication::applicationDirPath() + "/../../data/obs-studio/" + name;
 
@@ -98,7 +98,7 @@ static std::string frontendDataFile(const char* name)
 * Ported helpers
 */
 
-static void RotatePos(vec2* pos, float rot)
+static void RotatePos(vec2 *pos, float rot)
 {
 	float cosR = cos(rot);
 	float sinR = sin(rot);
@@ -109,7 +109,7 @@ static void RotatePos(vec2* pos, float rot)
 	vec2_copy(pos, &newPos);
 }
 
-static vec3 GetTransformedPos(float x, float y, const matrix4& mat)
+static vec3 GetTransformedPos(float x, float y, const matrix4 &mat)
 {
 	vec3 result;
 	vec3_set(&result, x, y, 0.0f);
@@ -117,9 +117,9 @@ static vec3 GetTransformedPos(float x, float y, const matrix4& mat)
 	return result;
 }
 
-static bool SceneItemHasVideo(obs_sceneitem_t* item)
+static bool SceneItemHasVideo(obs_sceneitem_t *item)
 {
-	obs_source_t* source = obs_sceneitem_get_source(item);
+	obs_source_t *source = obs_sceneitem_get_source(item);
 	uint32_t flags = obs_source_get_output_flags(source);
 	return (flags & OBS_SOURCE_VIDEO) != 0;
 }
@@ -131,26 +131,26 @@ static bool CloseFloat(float a, float b, float epsilon = 0.01f)
 
 struct SceneFindData
 {
-	const vec2& pos;
-	obs_sceneitem_t* item = nullptr;
+	const vec2 &pos;
+	obs_sceneitem_t *item = nullptr;
 	bool selectBelow;
-	obs_sceneitem_t* group = nullptr;
+	obs_sceneitem_t *group = nullptr;
 
-	SceneFindData(const vec2& pos_, bool selectBelow_) : pos(pos_), selectBelow(selectBelow_) {}
+	SceneFindData(const vec2 &pos_, bool selectBelow_) : pos(pos_), selectBelow(selectBelow_) {}
 };
 
 struct SceneFindBoxData
 {
-	const vec2& startPos;
-	const vec2& pos;
-	std::vector<obs_sceneitem_t*> sceneItems;
+	const vec2 &startPos;
+	const vec2 &pos;
+	std::vector<obs_sceneitem_t *> sceneItems;
 
-	SceneFindBoxData(const vec2& startPos_, const vec2& pos_) : startPos(startPos_), pos(pos_) {}
+	SceneFindBoxData(const vec2 &startPos_, const vec2 &pos_) : startPos(startPos_), pos(pos_) {}
 };
 
-static bool FindItemAtPos(obs_scene_t*, obs_sceneitem_t* item, void* param)
+static bool FindItemAtPos(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
-	SceneFindData* data = static_cast<SceneFindData*>(param);
+	SceneFindData *data = static_cast<SceneFindData *>(param);
 	matrix4 transform;
 	matrix4 invTransform;
 	vec3 transformedPos;
@@ -171,8 +171,7 @@ static bool FindItemAtPos(obs_scene_t*, obs_sceneitem_t* item, void* param)
 	vec3_transform(&transformedPos, &pos3, &invTransform);
 	vec3_transform(&pos3_, &transformedPos, &transform);
 
-	if (CloseFloat(pos3.x, pos3_.x) && CloseFloat(pos3.y, pos3_.y) && transformedPos.x >= 0.0f &&
-	    transformedPos.x <= 1.0f && transformedPos.y >= 0.0f && transformedPos.y <= 1.0f)
+	if (CloseFloat(pos3.x, pos3_.x) && CloseFloat(pos3.y, pos3_.y) && transformedPos.x >= 0.0f && transformedPos.x <= 1.0f && transformedPos.y >= 0.0f && transformedPos.y <= 1.0f)
 	{
 		if (data->selectBelow && obs_sceneitem_selected(item))
 		{
@@ -188,9 +187,9 @@ static bool FindItemAtPos(obs_scene_t*, obs_sceneitem_t* item, void* param)
 	return true;
 }
 
-static bool CheckItemSelected(obs_scene_t*, obs_sceneitem_t* item, void* param)
+static bool CheckItemSelected(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
-	SceneFindData* data = static_cast<SceneFindData*>(param);
+	SceneFindData *data = static_cast<SceneFindData *>(param);
 	matrix4 transform;
 	vec3 transformedPos;
 	vec3 pos3;
@@ -222,8 +221,7 @@ static bool CheckItemSelected(obs_scene_t*, obs_sceneitem_t* item, void* param)
 	matrix4_inv(&transform, &transform);
 	vec3_transform(&transformedPos, &pos3, &transform);
 
-	if (transformedPos.x >= 0.0f && transformedPos.x <= 1.0f && transformedPos.y >= 0.0f &&
-	    transformedPos.y <= 1.0f)
+	if (transformedPos.x >= 0.0f && transformedPos.x <= 1.0f && transformedPos.y >= 0.0f && transformedPos.y <= 1.0f)
 	{
 		if (obs_sceneitem_selected(item))
 		{
@@ -237,38 +235,25 @@ static bool CheckItemSelected(obs_scene_t*, obs_sceneitem_t* item, void* param)
 
 struct HandleFindData
 {
-	const vec2& pos;
+	const vec2 &pos;
 	const float radius;
 	matrix4 parent_xform;
 
-	obs_sceneitem_t* item = nullptr;
+	obs_sceneitem_t *item = nullptr;
 	SlItemHandle handle = SlItemHandle::None;
 	float angle = 0.0f;
 	vec2 rotatePoint = {};
 	vec2 offsetPoint = {};
 	float angleOffset = 0.0f;
 
-	HandleFindData(const vec2& pos_, float scaleLogical) : pos(pos_), radius(HANDLE_SEL_RADIUS / scaleLogical)
-	{
-		matrix4_identity(&parent_xform);
-	}
+	HandleFindData(const vec2 &pos_, float scaleLogical) : pos(pos_), radius(HANDLE_SEL_RADIUS / scaleLogical) { matrix4_identity(&parent_xform); }
 
-	HandleFindData(const HandleFindData& hfd, obs_sceneitem_t* parent)
-		: pos(hfd.pos),
-		  radius(hfd.radius),
-		  item(hfd.item),
-		  handle(hfd.handle),
-		  angle(hfd.angle),
-		  rotatePoint(hfd.rotatePoint),
-		  offsetPoint(hfd.offsetPoint)
-	{
-		obs_sceneitem_get_draw_transform(parent, &parent_xform);
-	}
+	HandleFindData(const HandleFindData &hfd, obs_sceneitem_t *parent) : pos(hfd.pos), radius(hfd.radius), item(hfd.item), handle(hfd.handle), angle(hfd.angle), rotatePoint(hfd.rotatePoint), offsetPoint(hfd.offsetPoint) { obs_sceneitem_get_draw_transform(parent, &parent_xform); }
 };
 
-static bool FindHandleAtPos(obs_scene_t*, obs_sceneitem_t* item, void* param)
+static bool FindHandleAtPos(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
-	HandleFindData& data = *static_cast<HandleFindData*>(param);
+	HandleFindData &data = *static_cast<HandleFindData *>(param);
 
 	if (!obs_sceneitem_selected(item))
 	{
@@ -297,8 +282,7 @@ static bool FindHandleAtPos(obs_scene_t*, obs_sceneitem_t* item, void* param)
 
 	obs_sceneitem_get_box_transform(item, &transform);
 
-	auto TestHandle = [&](float x, float y, SlItemHandle handle)
-	{
+	auto TestHandle = [&](float x, float y, SlItemHandle handle) {
 		vec3 handlePos = GetTransformedPos(x, y, transform);
 		vec3_transform(&handlePos, &handlePos, &data.parent_xform);
 
@@ -330,8 +314,7 @@ static bool FindHandleAtPos(obs_scene_t*, obs_sceneitem_t* item, void* param)
 	vec2 rotHandleOffset;
 	vec2_set(&rotHandleOffset, 0.0f, HANDLE_RADIUS * data.radius * 1.5f - data.radius);
 	bool invertx = scale.x < 0.0f && boundsType == OBS_BOUNDS_NONE;
-	float angle =
-		atan2(invertx ? transform.x.y * -1.0f : transform.x.y, invertx ? transform.x.x * -1.0f : transform.x.x);
+	float angle = atan2(invertx ? transform.x.y * -1.0f : transform.x.y, invertx ? transform.x.x * -1.0f : transform.x.x);
 	RotatePos(&rotHandleOffset, angle);
 	RotatePos(&rotHandleOffset, RAD(data.angleOffset));
 
@@ -364,7 +347,7 @@ static bool FindHandleAtPos(obs_scene_t*, obs_sceneitem_t* item, void* param)
 	return true;
 }
 
-static vec2 GetItemSize(obs_sceneitem_t* item)
+static vec2 GetItemSize(obs_sceneitem_t *item)
 {
 	obs_bounds_type boundsType = obs_sceneitem_get_bounds_type(item);
 	vec2 size;
@@ -375,7 +358,7 @@ static vec2 GetItemSize(obs_sceneitem_t* item)
 	}
 	else
 	{
-		obs_source_t* source = obs_sceneitem_get_source(item);
+		obs_source_t *source = obs_sceneitem_get_source(item);
 		obs_sceneitem_crop crop;
 		vec2 scale;
 
@@ -389,9 +372,9 @@ static vec2 GetItemSize(obs_sceneitem_t* item)
 	return size;
 }
 
-static bool select_one(obs_scene_t*, obs_sceneitem_t* item, void* param)
+static bool select_one(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
-	obs_sceneitem_t* selectedItem = static_cast<obs_sceneitem_t*>(param);
+	obs_sceneitem_t *selectedItem = static_cast<obs_sceneitem_t *>(param);
 
 	if (obs_sceneitem_is_group(item))
 		obs_sceneitem_group_enum_items(item, select_one, param);
@@ -400,9 +383,9 @@ static bool select_one(obs_scene_t*, obs_sceneitem_t* item, void* param)
 	return true;
 }
 
-static bool FindSelected(obs_scene_t*, obs_sceneitem_t* item, void* param)
+static bool FindSelected(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
-	SceneFindBoxData* data = static_cast<SceneFindBoxData*>(param);
+	SceneFindBoxData *data = static_cast<SceneFindBoxData *>(param);
 
 	if (obs_sceneitem_selected(item))
 		data->sceneItems.push_back(item);
@@ -433,15 +416,13 @@ static bool IntersectBox(matrix4 transform, float x1, float x2, float y1, float 
 	x4 = x3 + transform.x.x;
 	y4 = y3 + transform.x.y;
 
-	if (IntersectLine(x1, x1, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y1, y1, y3, y4) ||
-	    IntersectLine(x2, x2, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y2, y2, y3, y4))
+	if (IntersectLine(x1, x1, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y1, y1, y3, y4) || IntersectLine(x2, x2, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y2, y2, y3, y4))
 		return true;
 
 	x4 = x3 + transform.y.x;
 	y4 = y3 + transform.y.y;
 
-	if (IntersectLine(x1, x1, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y1, y1, y3, y4) ||
-	    IntersectLine(x2, x2, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y2, y2, y3, y4))
+	if (IntersectLine(x1, x1, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y1, y1, y3, y4) || IntersectLine(x2, x2, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y2, y2, y3, y4))
 		return true;
 
 	x3 = transform.t.x + transform.x.x;
@@ -449,8 +430,7 @@ static bool IntersectBox(matrix4 transform, float x1, float x2, float y1, float 
 	x4 = x3 + transform.y.x;
 	y4 = y3 + transform.y.y;
 
-	if (IntersectLine(x1, x1, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y1, y1, y3, y4) ||
-	    IntersectLine(x2, x2, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y2, y2, y3, y4))
+	if (IntersectLine(x1, x1, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y1, y1, y3, y4) || IntersectLine(x2, x2, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y2, y2, y3, y4))
 		return true;
 
 	x3 = transform.t.x + transform.y.x;
@@ -458,16 +438,15 @@ static bool IntersectBox(matrix4 transform, float x1, float x2, float y1, float 
 	x4 = x3 + transform.x.x;
 	y4 = y3 + transform.x.y;
 
-	if (IntersectLine(x1, x1, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y1, y1, y3, y4) ||
-	    IntersectLine(x2, x2, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y2, y2, y3, y4))
+	if (IntersectLine(x1, x1, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y1, y1, y3, y4) || IntersectLine(x2, x2, x3, x4, y1, y2, y3, y4) || IntersectLine(x1, x2, x3, x4, y2, y2, y3, y4))
 		return true;
 
 	return false;
 }
 
-static bool FindItemsInBox(obs_scene_t*, obs_sceneitem_t* item, void* param)
+static bool FindItemsInBox(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
-	SceneFindBoxData* data = static_cast<SceneFindBoxData*>(param);
+	SceneFindBoxData *data = static_cast<SceneFindBoxData *>(param);
 	matrix4 transform;
 	matrix4 invTransform;
 	vec3 transformedPos;
@@ -500,8 +479,7 @@ static bool FindItemsInBox(obs_scene_t*, obs_sceneitem_t* item, void* param)
 	vec3_transform(&transformedPos, &pos3, &invTransform);
 	vec3_transform(&pos3_, &transformedPos, &transform);
 
-	if (CloseFloat(pos3.x, pos3_.x) && CloseFloat(pos3.y, pos3_.y) && transformedPos.x >= 0.0f &&
-	    transformedPos.x <= 1.0f && transformedPos.y >= 0.0f && transformedPos.y <= 1.0f)
+	if (CloseFloat(pos3.x, pos3_.x) && CloseFloat(pos3.y, pos3_.y) && transformedPos.x >= 0.0f && transformedPos.x <= 1.0f && transformedPos.y >= 0.0f && transformedPos.y <= 1.0f)
 	{
 		data->sceneItems.push_back(item);
 		return true;
@@ -513,31 +491,25 @@ static bool FindItemsInBox(obs_scene_t*, obs_sceneitem_t* item, void* param)
 		return true;
 	}
 
-	if (transform.t.x + transform.x.x > x1 && transform.t.x + transform.x.x < x2 &&
-	    transform.t.y + transform.x.y > y1 && transform.t.y + transform.x.y < y2)
+	if (transform.t.x + transform.x.x > x1 && transform.t.x + transform.x.x < x2 && transform.t.y + transform.x.y > y1 && transform.t.y + transform.x.y < y2)
 	{
 		data->sceneItems.push_back(item);
 		return true;
 	}
 
-	if (transform.t.x + transform.y.x > x1 && transform.t.x + transform.y.x < x2 &&
-	    transform.t.y + transform.y.y > y1 && transform.t.y + transform.y.y < y2)
+	if (transform.t.x + transform.y.x > x1 && transform.t.x + transform.y.x < x2 && transform.t.y + transform.y.y > y1 && transform.t.y + transform.y.y < y2)
 	{
 		data->sceneItems.push_back(item);
 		return true;
 	}
 
-	if (transform.t.x + transform.x.x + transform.y.x > x1 && transform.t.x + transform.x.x + transform.y.x < x2 &&
-	    transform.t.y + transform.x.y + transform.y.y > y1 && transform.t.y + transform.x.y + transform.y.y < y2)
+	if (transform.t.x + transform.x.x + transform.y.x > x1 && transform.t.x + transform.x.x + transform.y.x < x2 && transform.t.y + transform.x.y + transform.y.y > y1 && transform.t.y + transform.x.y + transform.y.y < y2)
 	{
 		data->sceneItems.push_back(item);
 		return true;
 	}
 
-	if (transform.t.x + 0.5f * (transform.x.x + transform.y.x) > x1 &&
-	    transform.t.x + 0.5f * (transform.x.x + transform.y.x) < x2 &&
-	    transform.t.y + 0.5f * (transform.x.y + transform.y.y) > y1 &&
-	    transform.t.y + 0.5f * (transform.x.y + transform.y.y) < y2)
+	if (transform.t.x + 0.5f * (transform.x.x + transform.y.x) > x1 && transform.t.x + 0.5f * (transform.x.x + transform.y.x) < x2 && transform.t.y + 0.5f * (transform.x.y + transform.y.y) > y1 && transform.t.y + 0.5f * (transform.x.y + transform.y.y) < y2)
 	{
 		data->sceneItems.push_back(item);
 		return true;
@@ -558,14 +530,13 @@ struct SelectedItemBounds
 	vec3 tl = {}, br = {};
 };
 
-static bool AddItemBounds(obs_scene_t*, obs_sceneitem_t* item, void* param)
+static bool AddItemBounds(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
-	SelectedItemBounds* data = static_cast<SelectedItemBounds*>(param);
+	SelectedItemBounds *data = static_cast<SelectedItemBounds *>(param);
 	vec3 t[4];
 
-	auto add_bounds = [data, &t]()
-	{
-		for (const vec3& v : t)
+	auto add_bounds = [data, &t]() {
+		for (const vec3 &v : t)
 		{
 			if (data->first)
 			{
@@ -624,9 +595,9 @@ struct OffsetData
 	vec3 tl = {}, br = {}, offset = {};
 };
 
-static bool GetSourceSnapOffset(obs_scene_t*, obs_sceneitem_t* item, void* param)
+static bool GetSourceSnapOffset(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
-	OffsetData* data = static_cast<OffsetData*>(param);
+	OffsetData *data = static_cast<OffsetData *>(param);
 
 	if (obs_sceneitem_selected(item))
 		return true;
@@ -634,15 +605,14 @@ static bool GetSourceSnapOffset(obs_scene_t*, obs_sceneitem_t* item, void* param
 	matrix4 boxTransform;
 	obs_sceneitem_get_box_transform(item, &boxTransform);
 
-	vec3 t[4] = {GetTransformedPos(0.0f, 0.0f, boxTransform), GetTransformedPos(1.0f, 0.0f, boxTransform),
-		     GetTransformedPos(0.0f, 1.0f, boxTransform), GetTransformedPos(1.0f, 1.0f, boxTransform)};
+	vec3 t[4] = {GetTransformedPos(0.0f, 0.0f, boxTransform), GetTransformedPos(1.0f, 0.0f, boxTransform), GetTransformedPos(0.0f, 1.0f, boxTransform), GetTransformedPos(1.0f, 1.0f, boxTransform)};
 
 	bool first = true;
 	vec3 tl, br;
 	vec3_zero(&tl);
 	vec3_zero(&br);
 
-	for (const vec3& v : t)
+	for (const vec3 &v : t)
 	{
 		if (first)
 		{
@@ -658,13 +628,12 @@ static bool GetSourceSnapOffset(obs_scene_t*, obs_sceneitem_t* item, void* param
 	}
 
 	// Snap to other source edges
-#define EDGE_SNAP(l, r, x, y)                                                                         \
-	do                                                                                            \
-	{                                                                                             \
-		double dist = fabsf(l.x - data->r.x);                                                 \
-		if (dist < data->clampDist && fabsf(data->offset.x) < EPSILON && data->tl.y < br.y && \
-		    data->br.y > tl.y && (fabsf(data->offset.x) > dist || data->offset.x < EPSILON))  \
-			data->offset.x = l.x - data->r.x;                                             \
+#define EDGE_SNAP(l, r, x, y)                                                                                                                                                          \
+	do                                                                                                                                                                             \
+	{                                                                                                                                                                              \
+		double dist = fabsf(l.x - data->r.x);                                                                                                                                  \
+		if (dist < data->clampDist && fabsf(data->offset.x) < EPSILON && data->tl.y < br.y && data->br.y > tl.y && (fabsf(data->offset.x) > dist || data->offset.x < EPSILON)) \
+			data->offset.x = l.x - data->r.x;                                                                                                                              \
 	} while (false)
 
 	EDGE_SNAP(tl, br, x, y);
@@ -676,13 +645,13 @@ static bool GetSourceSnapOffset(obs_scene_t*, obs_sceneitem_t* item, void* param
 	return true;
 }
 
-static bool move_items(obs_scene_t*, obs_sceneitem_t* item, void* param)
+static bool move_items(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
 	if (obs_sceneitem_locked(item))
 		return true;
 
 	bool selected = obs_sceneitem_selected(item);
-	vec2* offset = static_cast<vec2*>(param);
+	vec2 *offset = static_cast<vec2 *>(param);
 
 	if (obs_sceneitem_is_group(item) && !selected)
 	{
@@ -718,12 +687,12 @@ static float minfunc(float x, float y)
 	return x < y ? x : y;
 }
 
-static QString uniqueSourceName(const QString& base)
+static QString uniqueSourceName(const QString &base)
 {
 	for (int i = 1; i < 1000; i++)
 	{
 		QString candidate = (i == 1) ? base : QString("%1 %2").arg(base).arg(i);
-		obs_source_t* existing = obs_get_source_by_name(candidate.toUtf8().constData());
+		obs_source_t *existing = obs_get_source_by_name(candidate.toUtf8().constData());
 
 		if (!existing)
 			return candidate;
@@ -738,34 +707,33 @@ static QString uniqueSourceName(const QString& base)
 */
 
 // borrowed
-static obs_scene_t* sceneByUuid(const std::string& uuid)
+static obs_scene_t *sceneByUuid(const std::string &uuid)
 {
-	obs_source_t* source = obs_get_source_by_uuid(uuid.c_str());
+	obs_source_t *source = obs_get_source_by_uuid(uuid.c_str());
 
 	if (!source)
 		return nullptr;
-	obs_scene_t* scene = obs_scene_from_source(source);
+	obs_scene_t *scene = obs_scene_from_source(source);
 
 	// scene is kept alive by the canvas
 	obs_source_release(source);
 	return scene;
 }
 
-static int64_t itemOrderIndex(obs_sceneitem_t* item)
+static int64_t itemOrderIndex(obs_sceneitem_t *item)
 {
 	struct Ctx
 	{
-		obs_sceneitem_t* item;
+		obs_sceneitem_t *item;
 		int64_t index = -1;
 		int64_t current = 0;
 	} ctx{item};
 
-	obs_scene_t* scene = obs_sceneitem_get_scene(item);
+	obs_scene_t *scene = obs_sceneitem_get_scene(item);
 	obs_scene_enum_items(
 		scene,
-		[](obs_scene_t*, obs_sceneitem_t* it, void* param)
-		{
-			Ctx* c = static_cast<Ctx*>(param);
+		[](obs_scene_t *, obs_sceneitem_t *it, void *param) {
+			Ctx *c = static_cast<Ctx *>(param);
 
 			if (it == c->item)
 				c->index = c->current;
@@ -776,16 +744,16 @@ static int64_t itemOrderIndex(obs_sceneitem_t* item)
 	return ctx.index;
 }
 
-static std::string buildItemPayload(obs_sceneitem_t* item)
+static std::string buildItemPayload(obs_sceneitem_t *item)
 {
-	obs_source_t* source = obs_sceneitem_get_source(item);
-	obs_scene_t* scene = obs_sceneitem_get_scene(item);
+	obs_source_t *source = obs_sceneitem_get_source(item);
+	obs_scene_t *scene = obs_sceneitem_get_scene(item);
 
-	obs_data_t* d = obs_data_create();
+	obs_data_t *d = obs_data_create();
 	obs_data_set_string(d, "scene_uuid", obs_source_get_uuid(obs_scene_get_source(scene)));
 	obs_data_set_string(d, "source_uuid", obs_source_get_uuid(source));
 
-	obs_data_t* sourceData = obs_save_source(source);
+	obs_data_t *sourceData = obs_save_source(source);
 
 	if (sourceData)
 	{
@@ -813,7 +781,7 @@ static std::string buildItemPayload(obs_sceneitem_t* item)
 	obs_data_set_bool(d, "locked", obs_sceneitem_locked(item));
 	obs_data_set_int(d, "order", itemOrderIndex(item));
 
-	obs_data_t* priv = obs_sceneitem_get_private_settings(item);
+	obs_data_t *priv = obs_sceneitem_get_private_settings(item);
 	obs_data_set_obj(d, "private_settings", priv);
 	obs_data_release(priv);
 
@@ -822,14 +790,14 @@ static std::string buildItemPayload(obs_sceneitem_t* item)
 	return json;
 }
 
-static int64_t restoreItemFromPayload(const std::string& payload)
+static int64_t restoreItemFromPayload(const std::string &payload)
 {
-	obs_data_t* d = obs_data_create_from_json(payload.c_str());
+	obs_data_t *d = obs_data_create_from_json(payload.c_str());
 
 	if (!d)
 		return -1;
 
-	obs_scene_t* scene = sceneByUuid(obs_data_get_string(d, "scene_uuid"));
+	obs_scene_t *scene = sceneByUuid(obs_data_get_string(d, "scene_uuid"));
 
 	if (!scene)
 	{
@@ -837,11 +805,11 @@ static int64_t restoreItemFromPayload(const std::string& payload)
 		return -1;
 	}
 
-	obs_source_t* source = obs_get_source_by_uuid(obs_data_get_string(d, "source_uuid"));
+	obs_source_t *source = obs_get_source_by_uuid(obs_data_get_string(d, "source_uuid"));
 
 	if (!source)
 	{
-		obs_data_t* sourceData = obs_data_get_obj(d, "source_data");
+		obs_data_t *sourceData = obs_data_get_obj(d, "source_data");
 
 		if (sourceData)
 		{
@@ -859,7 +827,7 @@ static int64_t restoreItemFromPayload(const std::string& payload)
 		return -1;
 	}
 
-	obs_sceneitem_t* item = obs_scene_add(scene, source);
+	obs_sceneitem_t *item = obs_scene_add(scene, source);
 	int64_t id = -1;
 
 	if (item)
@@ -887,11 +855,11 @@ static int64_t restoreItemFromPayload(const std::string& payload)
 		obs_sceneitem_set_locked(item, obs_data_get_bool(d, "locked"));
 		obs_sceneitem_defer_update_end(item);
 
-		obs_data_t* priv = obs_data_get_obj(d, "private_settings");
+		obs_data_t *priv = obs_data_get_obj(d, "private_settings");
 
 		if (priv)
 		{
-			obs_data_t* itemPriv = obs_sceneitem_get_private_settings(item);
+			obs_data_t *itemPriv = obs_sceneitem_get_private_settings(item);
 			obs_data_apply(itemPriv, priv);
 			obs_data_release(itemPriv);
 			obs_data_release(priv);
@@ -910,13 +878,13 @@ static int64_t restoreItemFromPayload(const std::string& payload)
 	return id;
 }
 
-static void removeItemInScene(const std::string& sceneUuid, int64_t itemId)
+static void removeItemInScene(const std::string &sceneUuid, int64_t itemId)
 {
-	obs_scene_t* scene = sceneByUuid(sceneUuid);
+	obs_scene_t *scene = sceneByUuid(sceneUuid);
 
 	if (!scene)
 		return;
-	obs_sceneitem_t* item = obs_scene_find_sceneitem_by_id(scene, itemId);
+	obs_sceneitem_t *item = obs_scene_find_sceneitem_by_id(scene, itemId);
 
 	if (item)
 		obs_sceneitem_remove(item);
@@ -926,13 +894,13 @@ static void removeItemInScene(const std::string& sceneUuid, int64_t itemId)
 * Lifecycle
 */
 
-SlDualEditor::SlDualEditor(SlDualController& controller, QWidget* widget) : m_controller(controller), m_widget(widget) {}
+SlDualEditor::SlDualEditor(SlDualController &controller, QWidget *widget) : m_controller(controller), m_widget(widget) {}
 
 SlDualEditor::~SlDualEditor()
 {
 	clearStretch();
 
-	for (obs_source_t*& label : m_spacerLabel)
+	for (obs_source_t *&label : m_spacerLabel)
 	{
 		if (label)
 		{
@@ -965,7 +933,7 @@ SlDualEditor::~SlDualEditor()
 	m_overflowTexture = nullptr;
 }
 
-void SlDualEditor::setViewSize(const QSizeF& sizeLogical, qreal dpr)
+void SlDualEditor::setViewSize(const QSizeF &sizeLogical, qreal dpr)
 {
 	m_viewSize = sizeLogical;
 	m_dpr.store(dpr > 0.0 ? (float)dpr : 1.0f, std::memory_order_release);
@@ -997,7 +965,7 @@ void SlDualEditor::reset(bool clearUndo)
 SlDualEditor::ViewMap SlDualEditor::viewMapFor(uint32_t cx, uint32_t cy) const
 {
 	ViewMap map;
-	SlDualCanvas* canvas = m_controller.canvas.get();
+	SlDualCanvas *canvas = m_controller.canvas.get();
 
 	if (!canvas || !canvas->valid())
 		return map;
@@ -1029,7 +997,7 @@ SlDualEditor::ViewMap SlDualEditor::viewMap() const
 	return viewMapFor((uint32_t)(m_viewSize.width() * dpr), (uint32_t)(m_viewSize.height() * dpr));
 }
 
-bool SlDualEditor::widgetToCanvas(const QPointF& p, struct vec2& out) const
+bool SlDualEditor::widgetToCanvas(const QPointF &p, struct vec2 &out) const
 {
 	ViewMap map = viewMap();
 
@@ -1042,16 +1010,16 @@ bool SlDualEditor::widgetToCanvas(const QPointF& p, struct vec2& out) const
 	return true;
 }
 
-obs_scene_t* SlDualEditor::scene() const
+obs_scene_t *SlDualEditor::scene() const
 {
-	SlDualCanvas* canvas = m_controller.canvas.get();
+	SlDualCanvas *canvas = m_controller.canvas.get();
 	return canvas ? canvas->activeScene() : nullptr;
 }
 
 vec2 SlDualEditor::canvasSize() const
 {
 	vec2 size;
-	SlDualCanvas* canvas = m_controller.canvas.get();
+	SlDualCanvas *canvas = m_controller.canvas.get();
 	const SlDualCanvas::Size cs = canvas ? canvas->size() : SlDualCanvas::Size{0, 0};
 
 	vec2_set(&size, (float)cs.width, (float)cs.height);
@@ -1062,9 +1030,9 @@ vec2 SlDualEditor::canvasSize() const
 * Selection / hit testing
 */
 
-obs_sceneitem_t* SlDualEditor::getItemAtPos(const struct vec2& pos, bool selectBelow) const
+obs_sceneitem_t *SlDualEditor::getItemAtPos(const struct vec2 &pos, bool selectBelow) const
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return nullptr;
@@ -1074,9 +1042,9 @@ obs_sceneitem_t* SlDualEditor::getItemAtPos(const struct vec2& pos, bool selectB
 	return data.item;
 }
 
-bool SlDualEditor::selectedAtPos(const struct vec2& pos) const
+bool SlDualEditor::selectedAtPos(const struct vec2 &pos) const
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return false;
@@ -1086,20 +1054,20 @@ bool SlDualEditor::selectedAtPos(const struct vec2& pos) const
 	return !!data.item;
 }
 
-void SlDualEditor::doSelect(const struct vec2& pos)
+void SlDualEditor::doSelect(const struct vec2 &pos)
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return;
 
-	obs_sceneitem_t* item = getItemAtPos(pos, true);
+	obs_sceneitem_t *item = getItemAtPos(pos, true);
 	obs_scene_enum_items(s, select_one, item);
 }
 
-void SlDualEditor::doCtrlSelect(const struct vec2& pos)
+void SlDualEditor::doCtrlSelect(const struct vec2 &pos)
 {
-	obs_sceneitem_t* item = getItemAtPos(pos, false);
+	obs_sceneitem_t *item = getItemAtPos(pos, false);
 
 	if (!item)
 		return;
@@ -1108,7 +1076,7 @@ void SlDualEditor::doCtrlSelect(const struct vec2& pos)
 	obs_sceneitem_select(item, !selected);
 }
 
-void SlDualEditor::processClick(const struct vec2& pos, Qt::KeyboardModifiers mods)
+void SlDualEditor::processClick(const struct vec2 &pos, Qt::KeyboardModifiers mods)
 {
 	if (mods & Qt::ControlModifier)
 		doCtrlSelect(pos);
@@ -1134,9 +1102,9 @@ void SlDualEditor::clearStretch()
 	m_stretchHandle = SlItemHandle::None;
 }
 
-void SlDualEditor::getStretchHandleData(const struct vec2& pos, bool ignoreGroup)
+void SlDualEditor::getStretchHandleData(const struct vec2 &pos, bool ignoreGroup)
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return;
@@ -1188,11 +1156,11 @@ void SlDualEditor::getStretchHandleData(const struct vec2& pos, bool ignoreGroup
 		obs_sceneitem_get_crop(m_stretchItem, &m_startCrop);
 		obs_sceneitem_get_pos(m_stretchItem, &m_startItemPos);
 
-		obs_source_t* source = obs_sceneitem_get_source(m_stretchItem);
+		obs_source_t *source = obs_sceneitem_get_source(m_stretchItem);
 		m_cropSize.x = float(obs_source_get_width(source) - m_startCrop.left - m_startCrop.right);
 		m_cropSize.y = float(obs_source_get_height(source) - m_startCrop.top - m_startCrop.bottom);
 
-		obs_sceneitem_t* group = obs_sceneitem_get_group(s, m_stretchItem);
+		obs_sceneitem_t *group = obs_sceneitem_get_group(s, m_stretchItem);
 
 		if (group && !ignoreGroup)
 		{
@@ -1279,7 +1247,7 @@ void SlDualEditor::updateCursor(uint32_t flags)
 * Snapping / movement
 */
 
-struct vec3 SlDualEditor::getSnapOffset(const struct vec3& tl, const struct vec3& br) const
+struct vec3 SlDualEditor::getSnapOffset(const struct vec3 &tl, const struct vec3 &br) const
 {
 	vec2 screenSize = canvasSize();
 	vec3 clampOffset;
@@ -1308,8 +1276,7 @@ struct vec3 SlDualEditor::getSnapOffset(const struct vec3& tl, const struct vec3
 		clampOffset.x = screenSize.x - br.x;
 
 	// Horizontal center.
-	if (snap.center && fabsf(screenSize.x - (br.x - tl.x)) > clampDist &&
-	    fabsf(screenSize.x / 2.0f - centerX) < clampDist)
+	if (snap.center && fabsf(screenSize.x - (br.x - tl.x)) > clampDist && fabsf(screenSize.x / 2.0f - centerX) < clampDist)
 		clampOffset.x = screenSize.x / 2.0f - centerX;
 
 	// Top screen edge.
@@ -1321,16 +1288,15 @@ struct vec3 SlDualEditor::getSnapOffset(const struct vec3& tl, const struct vec3
 		clampOffset.y = screenSize.y - br.y;
 
 	// Vertical center.
-	if (snap.center && fabsf(screenSize.y - (br.y - tl.y)) > clampDist &&
-	    fabsf(screenSize.y / 2.0f - centerY) < clampDist)
+	if (snap.center && fabsf(screenSize.y - (br.y - tl.y)) > clampDist && fabsf(screenSize.y / 2.0f - centerY) < clampDist)
 		clampOffset.y = screenSize.y / 2.0f - centerY;
 
 	return clampOffset;
 }
 
-void SlDualEditor::snapItemMovement(struct vec2& offset) const
+void SlDualEditor::snapItemMovement(struct vec2 &offset) const
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return;
@@ -1380,9 +1346,9 @@ void SlDualEditor::snapItemMovement(struct vec2& offset) const
 	}
 }
 
-void SlDualEditor::moveItems(const struct vec2& pos, Qt::KeyboardModifiers mods)
+void SlDualEditor::moveItems(const struct vec2 &pos, Qt::KeyboardModifiers mods)
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return;
@@ -1399,9 +1365,9 @@ void SlDualEditor::moveItems(const struct vec2& pos, Qt::KeyboardModifiers mods)
 	obs_scene_enum_items(s, move_items, &moveOffset);
 }
 
-void SlDualEditor::boxItems(const struct vec2& startPos, const struct vec2& pos)
+void SlDualEditor::boxItems(const struct vec2 &startPos, const struct vec2 &pos)
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return;
@@ -1420,7 +1386,7 @@ void SlDualEditor::boxItems(const struct vec2& startPos, const struct vec2& pos)
 * Stretch / crop / rotate
 */
 
-struct vec3 SlDualEditor::calculateStretchPos(const struct vec3& tl, const struct vec3& br) const
+struct vec3 SlDualEditor::calculateStretchPos(const struct vec3 &tl, const struct vec3 &br) const
 {
 	uint32_t alignment = obs_sceneitem_get_alignment(m_stretchItem);
 	vec3 pos;
@@ -1443,14 +1409,13 @@ struct vec3 SlDualEditor::calculateStretchPos(const struct vec3& tl, const struc
 	return pos;
 }
 
-void SlDualEditor::clampAspect(struct vec3& tl, struct vec3& br, struct vec2& size, const struct vec2& baseSize) const
+void SlDualEditor::clampAspect(struct vec3 &tl, struct vec3 &br, struct vec2 &size, const struct vec2 &baseSize) const
 {
 	float baseAspect = baseSize.x / baseSize.y;
 	float aspect = size.x / size.y;
 	uint32_t stretchFlags = (uint32_t)m_stretchHandle;
 
-	if (m_stretchHandle == SlItemHandle::TopLeft || m_stretchHandle == SlItemHandle::TopRight ||
-	    m_stretchHandle == SlItemHandle::BottomLeft || m_stretchHandle == SlItemHandle::BottomRight)
+	if (m_stretchHandle == SlItemHandle::TopLeft || m_stretchHandle == SlItemHandle::TopRight || m_stretchHandle == SlItemHandle::BottomLeft || m_stretchHandle == SlItemHandle::BottomRight)
 	{
 		if (aspect < baseAspect)
 		{
@@ -1466,7 +1431,6 @@ void SlDualEditor::clampAspect(struct vec3& tl, struct vec3& br, struct vec2& si
 			else
 				size.y = size.x / baseAspect * -1.0f;
 		}
-
 	}
 	else if (m_stretchHandle == SlItemHandle::TopCenter || m_stretchHandle == SlItemHandle::BottomCenter)
 	{
@@ -1474,7 +1438,6 @@ void SlDualEditor::clampAspect(struct vec3& tl, struct vec3& br, struct vec2& si
 			size.x = size.y * baseAspect;
 		else
 			size.x = size.y * baseAspect * -1.0f;
-
 	}
 	else if (m_stretchHandle == SlItemHandle::CenterLeft || m_stretchHandle == SlItemHandle::CenterRight)
 	{
@@ -1498,7 +1461,7 @@ void SlDualEditor::clampAspect(struct vec3& tl, struct vec3& br, struct vec2& si
 		br.y = tl.y + size.y;
 }
 
-void SlDualEditor::snapStretchingToScreen(struct vec3& tl, struct vec3& br) const
+void SlDualEditor::snapStretchingToScreen(struct vec3 &tl, struct vec3 &br) const
 {
 	uint32_t stretchFlags = (uint32_t)m_stretchHandle;
 	vec3 newTL = GetTransformedPos(tl.x, tl.y, m_itemToScreen);
@@ -1534,7 +1497,7 @@ void SlDualEditor::snapStretchingToScreen(struct vec3& tl, struct vec3& br) cons
 		br.y += offset.y;
 }
 
-void SlDualEditor::cropItem(const struct vec2& pos)
+void SlDualEditor::cropItem(const struct vec2 &pos)
 {
 	obs_bounds_type boundsType = obs_sceneitem_get_bounds_type(m_stretchItem);
 	uint32_t stretchFlags = (uint32_t)m_stretchHandle;
@@ -1575,7 +1538,6 @@ void SlDualEditor::cropItem(const struct vec2& pos)
 	{
 		float maxX = m_stretchItemSize.x - (2.0f * scale.x);
 		pos3.x = tl.x = min_x(pos3.x, maxX);
-
 	}
 	else if (stretchFlags & SL_ITEM_RIGHT)
 	{
@@ -1587,7 +1549,6 @@ void SlDualEditor::cropItem(const struct vec2& pos)
 	{
 		float maxY = m_stretchItemSize.y - (2.0f * scale.y);
 		pos3.y = tl.y = min_y(pos3.y, maxY);
-
 	}
 	else if (stretchFlags & SL_ITEM_BOTTOM)
 	{
@@ -1639,11 +1600,11 @@ void SlDualEditor::cropItem(const struct vec2& pos)
 	obs_sceneitem_set_crop(m_stretchItem, &crop);
 
 	if (boundsType == OBS_BOUNDS_NONE)
-		obs_sceneitem_set_pos(m_stretchItem, (vec2*)&newPos);
+		obs_sceneitem_set_pos(m_stretchItem, (vec2 *)&newPos);
 	obs_sceneitem_defer_update_end(m_stretchItem);
 }
 
-void SlDualEditor::stretchItem(const struct vec2& pos, Qt::KeyboardModifiers mods)
+void SlDualEditor::stretchItem(const struct vec2 &pos, Qt::KeyboardModifiers mods)
 {
 	obs_bounds_type boundsType = obs_sceneitem_get_bounds_type(m_stretchItem);
 	uint32_t stretchFlags = (uint32_t)m_stretchHandle;
@@ -1669,7 +1630,7 @@ void SlDualEditor::stretchItem(const struct vec2& pos, Qt::KeyboardModifiers mod
 	if (!(mods & Qt::ControlModifier))
 		snapStretchingToScreen(tl, br);
 
-	obs_source_t* source = obs_sceneitem_get_source(m_stretchItem);
+	obs_source_t *source = obs_sceneitem_get_source(m_stretchItem);
 
 	uint32_t source_cx = obs_source_get_width(source);
 	uint32_t source_cy = obs_source_get_height(source);
@@ -1723,7 +1684,7 @@ void SlDualEditor::stretchItem(const struct vec2& pos, Qt::KeyboardModifiers mod
 	obs_sceneitem_set_pos(m_stretchItem, &newPos);
 }
 
-void SlDualEditor::rotateItem(const struct vec2& pos, Qt::KeyboardModifiers mods)
+void SlDualEditor::rotateItem(const struct vec2 &pos, Qt::KeyboardModifiers mods)
 {
 	bool shiftDown = (mods & Qt::ShiftModifier);
 	bool ctrlDown = (mods & Qt::ControlModifier);
@@ -1783,7 +1744,8 @@ void SlDualEditor::publishOverlay()
 	m_overlay = {m_selectionBox, m_startPos, m_mousePos};
 }
 
-namespace {
+namespace
+{
 
 template<typename Fn> struct ScopeExit
 {
@@ -1798,7 +1760,7 @@ template<typename Fn> ScopeExit<Fn> onScopeExit(Fn fn)
 
 }
 
-void SlDualEditor::mousePress(const QPointF& pos, Qt::MouseButton button, Qt::KeyboardModifiers mods)
+void SlDualEditor::mousePress(const QPointF &pos, Qt::MouseButton button, Qt::KeyboardModifiers mods)
 {
 	// Publishes on every exit path, early returns included. Declared first, so it runs last -
 	// after any lock_guard the handler took in an inner scope.
@@ -1855,7 +1817,7 @@ void SlDualEditor::mousePress(const QPointF& pos, Qt::MouseButton button, Qt::Ke
 	m_changed = false;
 }
 
-void SlDualEditor::mouseMove(const QPointF& pos, bool buttonDown, Qt::KeyboardModifiers mods)
+void SlDualEditor::mouseMove(const QPointF &pos, bool buttonDown, Qt::KeyboardModifiers mods)
 {
 	// Publishes on every exit path, early returns included. Declared first, so it runs last -
 	// after any lock_guard the handler took in an inner scope.
@@ -1886,8 +1848,8 @@ void SlDualEditor::mouseMove(const QPointF& pos, bool buttonDown, Qt::KeyboardMo
 
 			m_selectionBox = false;
 
-			obs_scene_t* s = scene();
-			obs_sceneitem_t* group = s ? obs_sceneitem_get_group(s, m_stretchItem) : nullptr;
+			obs_scene_t *s = scene();
+			obs_sceneitem_t *group = s ? obs_sceneitem_get_group(s, m_stretchItem) : nullptr;
 
 			if (group)
 			{
@@ -1911,7 +1873,6 @@ void SlDualEditor::mouseMove(const QPointF& pos, bool buttonDown, Qt::KeyboardMo
 			{
 				stretchItem(cpos, mods);
 			}
-
 		}
 		else if (m_mouseOverItems)
 		{
@@ -1934,7 +1895,7 @@ void SlDualEditor::mouseMove(const QPointF& pos, bool buttonDown, Qt::KeyboardMo
 	}
 	else
 	{
-		obs_sceneitem_t* item = getItemAtPos(cpos, true);
+		obs_sceneitem_t *item = getItemAtPos(cpos, true);
 
 		{
 			std::lock_guard<std::mutex> lock(m_selectMutex);
@@ -1952,7 +1913,7 @@ void SlDualEditor::mouseMove(const QPointF& pos, bool buttonDown, Qt::KeyboardMo
 	}
 }
 
-void SlDualEditor::mouseRelease(const QPointF& pos, Qt::MouseButton button, Qt::KeyboardModifiers mods)
+void SlDualEditor::mouseRelease(const QPointF &pos, Qt::MouseButton button, Qt::KeyboardModifiers mods)
 {
 	// Publishes on every exit path, early returns included. Declared first, so it runs last -
 	// after any lock_guard the handler took in an inner scope.
@@ -1990,7 +1951,7 @@ void SlDualEditor::mouseRelease(const QPointF& pos, Qt::MouseButton button, Qt::
 			for (size_t i = 0; i < m_hoveredPreviewItems.size(); i++)
 			{
 				bool select = true;
-				obs_sceneitem_t* item = m_hoveredPreviewItems[i];
+				obs_sceneitem_t *item = m_hoveredPreviewItems[i];
 
 				if (altDown)
 				{
@@ -2012,7 +1973,7 @@ void SlDualEditor::mouseRelease(const QPointF& pos, Qt::MouseButton button, Qt::
 		m_selectionBox = false;
 		m_widget->unsetCursor();
 
-		obs_sceneitem_t* item = getItemAtPos(m_mousePos, true);
+		obs_sceneitem_t *item = getItemAtPos(m_mousePos, true);
 
 		std::lock_guard<std::mutex> lock(m_selectMutex);
 		m_hoveredPreviewItems.clear();
@@ -2024,26 +1985,26 @@ void SlDualEditor::mouseRelease(const QPointF& pos, Qt::MouseButton button, Qt::
 
 	if (!m_dragSnapshot.empty() && !redoSnapshot.empty() && m_changed && m_dragSnapshot != redoSnapshot)
 	{
-		auto loadStates = [](const std::string& data) { obs_scene_load_transform_states(data.c_str()); };
+		auto loadStates = [](const std::string &data) { obs_scene_load_transform_states(data.c_str()); };
 		m_undo.add("Transform", loadStates, loadStates, m_dragSnapshot, redoSnapshot);
 	}
 
 	m_dragSnapshot.clear();
 }
 
-void SlDualEditor::mouseDoubleClick(const QPointF& pos)
+void SlDualEditor::mouseDoubleClick(const QPointF &pos)
 {
 	vec2 cpos;
 
 	if (!widgetToCanvas(pos, cpos))
 		return;
 
-	obs_sceneitem_t* hit = getItemAtPos(cpos, true);
+	obs_sceneitem_t *hit = getItemAtPos(cpos, true);
 
 	if (!hit)
 		return;
 
-	obs_source_t* source = obs_sceneitem_get_source(hit);
+	obs_source_t *source = obs_sceneitem_get_source(hit);
 
 	if (source && obs_source_configurable(source))
 		obs_frontend_open_source_properties(source);
@@ -2084,28 +2045,23 @@ bool SlDualEditor::keyPress(int key, Qt::KeyboardModifiers mods)
 	float step = (mods & Qt::ShiftModifier) ? 10.0f : 1.0f;
 	switch (key)
 	{
-	case Qt::Key_Left:
-	{
+	case Qt::Key_Left: {
 		nudgeSelected(-step, 0.0f);
 		return true;
 	}
-	case Qt::Key_Right:
-	{
+	case Qt::Key_Right: {
 		nudgeSelected(step, 0.0f);
 		return true;
 	}
-	case Qt::Key_Up:
-	{
+	case Qt::Key_Up: {
 		nudgeSelected(0.0f, -step);
 		return true;
 	}
-	case Qt::Key_Down:
-	{
+	case Qt::Key_Down: {
 		nudgeSelected(0.0f, step);
 		return true;
 	}
-	default:
-	{
+	default: {
 		return false;
 	}
 	}
@@ -2113,13 +2069,12 @@ bool SlDualEditor::keyPress(int key, Qt::KeyboardModifiers mods)
 
 void SlDualEditor::nudgeSelected(float dx, float dy)
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return;
 
-	transformAction("Nudge", [&]()
-	{
+	transformAction("Nudge", [&]() {
 		vec2 offset;
 		vec2_set(&offset, dx, dy);
 		obs_scene_enum_items(s, move_items, &offset);
@@ -2132,12 +2087,12 @@ void SlDualEditor::nudgeSelected(float dx, float dy)
 
 std::string SlDualEditor::snapshot() const
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return std::string();
 
-	obs_data_t* data = obs_scene_save_transform_states(s, true);
+	obs_data_t *data = obs_scene_save_transform_states(s, true);
 
 	if (!data)
 		return std::string();
@@ -2147,7 +2102,7 @@ std::string SlDualEditor::snapshot() const
 	return json;
 }
 
-void SlDualEditor::transformAction(const char* name, const std::function<void()>& fn)
+void SlDualEditor::transformAction(const char *name, const std::function<void()> &fn)
 {
 	std::string before = snapshot();
 	fn();
@@ -2155,34 +2110,34 @@ void SlDualEditor::transformAction(const char* name, const std::function<void()>
 
 	if (!before.empty() && !after.empty() && before != after)
 	{
-		auto loadStates = [](const std::string& data) { obs_scene_load_transform_states(data.c_str()); };
+		auto loadStates = [](const std::string &data) { obs_scene_load_transform_states(data.c_str()); };
 		m_undo.add(name, loadStates, loadStates, before, after);
 	}
 }
 
-void SlDualEditor::recordItemAdd(obs_sceneitem_t* item, const char* name)
+void SlDualEditor::recordItemAdd(obs_sceneitem_t *item, const char *name)
 {
 	if (!item)
 		return;
 
-	obs_scene_t* s = obs_sceneitem_get_scene(item);
+	obs_scene_t *s = obs_sceneitem_get_scene(item);
 	std::string sceneUuid = obs_source_get_uuid(obs_scene_get_source(s));
 	std::string payload = buildItemPayload(item);
 
 	auto state = std::make_shared<int64_t>(obs_sceneitem_get_id(item));
 
-	auto undoFn = [state, sceneUuid](const std::string&) { removeItemInScene(sceneUuid, *state); };
-	auto redoFn = [state](const std::string& data) { *state = restoreItemFromPayload(data); };
+	auto undoFn = [state, sceneUuid](const std::string &) { removeItemInScene(sceneUuid, *state); };
+	auto redoFn = [state](const std::string &data) { *state = restoreItemFromPayload(data); };
 
 	m_undo.add(name, undoFn, redoFn, std::string(), payload);
 }
 
-void SlDualEditor::recordItemRemoveAndRemove(obs_sceneitem_t* item)
+void SlDualEditor::recordItemRemoveAndRemove(obs_sceneitem_t *item)
 {
 	if (!item)
 		return;
 
-	obs_scene_t* s = obs_sceneitem_get_scene(item);
+	obs_scene_t *s = obs_sceneitem_get_scene(item);
 	std::string sceneUuid = obs_source_get_uuid(obs_scene_get_source(s));
 	std::string payload = buildItemPayload(item);
 
@@ -2190,8 +2145,8 @@ void SlDualEditor::recordItemRemoveAndRemove(obs_sceneitem_t* item)
 
 	obs_sceneitem_remove(item);
 
-	auto undoFn = [state](const std::string& data) { *state = restoreItemFromPayload(data); };
-	auto redoFn = [state, sceneUuid](const std::string&) { removeItemInScene(sceneUuid, *state); };
+	auto undoFn = [state](const std::string &data) { *state = restoreItemFromPayload(data); };
+	auto redoFn = [state, sceneUuid](const std::string &) { removeItemInScene(sceneUuid, *state); };
 
 	m_undo.add("Remove Item", undoFn, redoFn, payload, std::string());
 }
@@ -2210,15 +2165,15 @@ bool SlDualEditor::redoOnce()
 * Context menu / item operations
 */
 
-void SlDualEditor::contextMenu(const QPointF& pos, QWidget* parent)
+void SlDualEditor::contextMenu(const QPointF &pos, QWidget *parent)
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return;
 
 	vec2 cpos;
-	obs_sceneitem_t* hit = widgetToCanvas(pos, cpos) ? getItemAtPos(cpos, true) : nullptr;
+	obs_sceneitem_t *hit = widgetToCanvas(pos, cpos) ? getItemAtPos(cpos, true) : nullptr;
 
 	QMenu menu(parent);
 
@@ -2238,9 +2193,9 @@ void SlDualEditor::contextMenu(const QPointF& pos, QWidget* parent)
 	}
 }
 
-void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* parent)
+void SlDualEditor::buildItemMenu(QMenu &menu, obs_sceneitem_t *item, QWidget *parent)
 {
-	obs_source_t* source = obs_sceneitem_get_source(item);
+	obs_source_t *source = obs_sceneitem_get_source(item);
 
 	if (source && obs_source_configurable(source))
 		menu.addAction("Properties", [source]() { obs_frontend_open_source_properties(source); });
@@ -2251,9 +2206,8 @@ void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* pa
 	if (!menu.isEmpty())
 		menu.addSeparator();
 
-	auto orderAction = [this, item](enum obs_order_movement movement)
-	{
-		obs_scene_t* s = obs_sceneitem_get_scene(item);
+	auto orderAction = [this, item](enum obs_order_movement movement) {
+		obs_scene_t *s = obs_sceneitem_get_scene(item);
 		std::string sceneUuid = obs_source_get_uuid(obs_scene_get_source(s));
 		int64_t id = obs_sceneitem_get_id(item);
 		int64_t before = itemOrderIndex(item);
@@ -2263,13 +2217,12 @@ void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* pa
 		if (before == after)
 			return;
 
-		auto apply = [sceneUuid, id](const std::string& data)
-		{
-			obs_scene_t* sc = sceneByUuid(sceneUuid);
+		auto apply = [sceneUuid, id](const std::string &data) {
+			obs_scene_t *sc = sceneByUuid(sceneUuid);
 
 			if (!sc)
 				return;
-			obs_sceneitem_t* it = obs_scene_find_sceneitem_by_id(sc, id);
+			obs_sceneitem_t *it = obs_scene_find_sceneitem_by_id(sc, id);
 
 			if (it)
 				obs_sceneitem_set_order_position(it, atoi(data.c_str()));
@@ -2278,25 +2231,20 @@ void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* pa
 		m_undo.add("Reorder", apply, apply, std::to_string(before), std::to_string(after));
 	};
 
-	QMenu* order = menu.addMenu("Order");
+	QMenu *order = menu.addMenu("Order");
 	order->addAction("Move Up", [orderAction]() { orderAction(OBS_ORDER_MOVE_UP); });
 	order->addAction("Move Down", [orderAction]() { orderAction(OBS_ORDER_MOVE_DOWN); });
 	order->addAction("Move to Top", [orderAction]() { orderAction(OBS_ORDER_MOVE_TOP); });
 	order->addAction("Move to Bottom", [orderAction]() { orderAction(OBS_ORDER_MOVE_BOTTOM); });
 
-	SlDualCanvas* canvas = m_controller.canvas.get();
-	QMenu* transform = menu.addMenu("Transform");
+	SlDualCanvas *canvas = m_controller.canvas.get();
+	QMenu *transform = menu.addMenu("Transform");
 
 	if (canvas)
 	{
-		transform->addAction("Fill Canvas", [this, canvas, item]()
-		{
-			transformAction("Fill Canvas", [&]() { canvas->applyFillTransform(item); });
-		});
-		transform->addAction("Fit to Canvas", [this, canvas, item]()
-		{
-			transformAction("Fit to Canvas", [&]()
-			{
+		transform->addAction("Fill Canvas", [this, canvas, item]() { transformAction("Fill Canvas", [&]() { canvas->applyFillTransform(item); }); });
+		transform->addAction("Fit to Canvas", [this, canvas, item]() {
+			transformAction("Fit to Canvas", [&]() {
 				obs_transform_info info;
 				obs_sceneitem_get_info2(item, &info);
 				info.rot = 0.0f;
@@ -2310,10 +2258,8 @@ void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* pa
 				obs_sceneitem_set_info2(item, &info);
 			});
 		});
-		transform->addAction("Center", [this, canvas, item]()
-		{
-			transformAction("Center", [&]()
-			{
+		transform->addAction("Center", [this, canvas, item]() {
+			transformAction("Center", [&]() {
 				obs_transform_info info;
 				obs_sceneitem_get_info2(item, &info);
 				info.alignment = OBS_ALIGN_CENTER;
@@ -2325,10 +2271,8 @@ void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* pa
 		});
 	}
 
-	transform->addAction("Reset", [this, item]()
-	{
-		transformAction("Reset Transform", [&]()
-		{
+	transform->addAction("Reset", [this, item]() {
+		transformAction("Reset Transform", [&]() {
 			obs_transform_info info;
 			obs_sceneitem_get_info2(item, &info);
 			info.rot = 0.0f;
@@ -2343,26 +2287,17 @@ void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* pa
 		});
 	});
 	transform->addSeparator();
-	transform->addAction("Rotate 90 CW", [this, item]()
-	{
-		transformAction("Rotate", [&]() { obs_sceneitem_set_rot(item, obs_sceneitem_get_rot(item) + 90.0f); });
-	});
-	transform->addAction("Rotate 90 CCW", [this, item]()
-	{
-		transformAction("Rotate", [&]() { obs_sceneitem_set_rot(item, obs_sceneitem_get_rot(item) - 90.0f); });
-	});
-	transform->addAction("Rotate 180", [this, item]()
-	{
-		transformAction("Rotate", [&]() { obs_sceneitem_set_rot(item, obs_sceneitem_get_rot(item) + 180.0f); });
-	});
+	transform->addAction("Rotate 90 CW", [this, item]() { transformAction("Rotate", [&]() { obs_sceneitem_set_rot(item, obs_sceneitem_get_rot(item) + 90.0f); }); });
+	transform->addAction("Rotate 90 CCW", [this, item]() { transformAction("Rotate", [&]() { obs_sceneitem_set_rot(item, obs_sceneitem_get_rot(item) - 90.0f); }); });
+	transform->addAction("Rotate 180", [this, item]() { transformAction("Rotate", [&]() { obs_sceneitem_set_rot(item, obs_sceneitem_get_rot(item) + 180.0f); }); });
 
 	menu.addSeparator();
 
-	QAction* visible = menu.addAction("Visible", [this, item](bool checked) { flagUndoable(item, true, checked); });
+	QAction *visible = menu.addAction("Visible", [this, item](bool checked) { flagUndoable(item, true, checked); });
 	visible->setCheckable(true);
 	visible->setChecked(obs_sceneitem_visible(item));
 
-	QAction* locked = menu.addAction("Locked", [this, item](bool checked) { flagUndoable(item, false, checked); });
+	QAction *locked = menu.addAction("Locked", [this, item](bool checked) { flagUndoable(item, false, checked); });
 	locked->setCheckable(true);
 	locked->setChecked(obs_sceneitem_locked(item));
 
@@ -2370,15 +2305,15 @@ void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* pa
 	menu.addAction("Remove", [this, parent]() { removeSelectedItems(parent); });
 }
 
-void SlDualEditor::buildSceneMenu(QMenu& menu, QWidget* parent)
+void SlDualEditor::buildSceneMenu(QMenu &menu, QWidget *parent)
 {
 	Q_UNUSED(parent);
 
-	QMenu* add = menu.addMenu("Add Source");
+	QMenu *add = menu.addMenu("Add Source");
 	buildAddSourceMenu(*add);
 }
 
-void SlDualEditor::showAddSourceMenu(const QPoint& globalPos, QWidget* parent)
+void SlDualEditor::showAddSourceMenu(const QPoint &globalPos, QWidget *parent)
 {
 	if (!scene())
 		return;
@@ -2388,7 +2323,7 @@ void SlDualEditor::showAddSourceMenu(const QPoint& globalPos, QWidget* parent)
 	menu.exec(globalPos);
 }
 
-void SlDualEditor::showSceneMenu(const QPoint& globalPos, QWidget* parent)
+void SlDualEditor::showSceneMenu(const QPoint &globalPos, QWidget *parent)
 {
 	if (!scene())
 		return;
@@ -2398,10 +2333,10 @@ void SlDualEditor::showSceneMenu(const QPoint& globalPos, QWidget* parent)
 	menu.exec(globalPos);
 }
 
-void SlDualEditor::buildAddSourceMenu(QMenu& menu)
+void SlDualEditor::buildAddSourceMenu(QMenu &menu)
 {
-	QMenu* newMenu = menu.addMenu("New");
-	const char* typeId = nullptr;
+	QMenu *newMenu = menu.addMenu("New");
+	const char *typeId = nullptr;
 
 	for (size_t i = 0; obs_enum_source_types(i, &typeId); i++)
 	{
@@ -2413,19 +2348,19 @@ void SlDualEditor::buildAddSourceMenu(QMenu& menu)
 		if (flags & (OBS_SOURCE_CAP_DISABLED | OBS_SOURCE_DEPRECATED))
 			continue;
 
-		const char* display = obs_source_get_display_name(typeId);
+		const char *display = obs_source_get_display_name(typeId);
 		std::string idCopy = typeId;
 		newMenu->addAction(QString::fromUtf8(display ? display : typeId), [this, idCopy]() { addNewSource(idCopy); });
 	}
 
-	QMenu* existing = menu.addMenu("Existing");
+	QMenu *existing = menu.addMenu("Existing");
 
 	obs_frontend_source_list scenes = {};
 	obs_frontend_get_scenes(&scenes);
 
 	for (size_t i = 0; i < scenes.sources.num; i++)
 	{
-		const char* name = obs_source_get_name(scenes.sources.array[i]);
+		const char *name = obs_source_get_name(scenes.sources.array[i]);
 
 		if (!name)
 			continue;
@@ -2439,14 +2374,13 @@ void SlDualEditor::buildAddSourceMenu(QMenu& menu)
 
 	std::vector<std::string> sourceNames;
 	obs_enum_sources(
-		[](void* param, obs_source_t* source)
-		{
+		[](void *param, obs_source_t *source) {
 			if (obs_source_get_output_flags(source) & OBS_SOURCE_VIDEO)
 			{
-				const char* name = obs_source_get_name(source);
+				const char *name = obs_source_get_name(source);
 
 				if (name)
-					static_cast<std::vector<std::string>*>(param)->push_back(name);
+					static_cast<std::vector<std::string> *>(param)->push_back(name);
 			}
 
 			return true;
@@ -2454,13 +2388,13 @@ void SlDualEditor::buildAddSourceMenu(QMenu& menu)
 		&sourceNames);
 	std::sort(sourceNames.begin(), sourceNames.end());
 
-	for (const std::string& name : sourceNames)
+	for (const std::string &name : sourceNames)
 		existing->addAction(QString::fromUtf8(name.c_str()), [this, name]() { addExistingSource(name); });
 }
 
-void SlDualEditor::placeNewItem(obs_sceneitem_t* item)
+void SlDualEditor::placeNewItem(obs_sceneitem_t *item)
 {
-	SlDualCanvas* canvas = m_controller.canvas.get();
+	SlDualCanvas *canvas = m_controller.canvas.get();
 
 	if (!item || !canvas)
 		return;
@@ -2473,21 +2407,21 @@ void SlDualEditor::placeNewItem(obs_sceneitem_t* item)
 	vec2_set(&info.pos, (float)cs.width * 0.5f, (float)cs.height * 0.5f);
 	obs_sceneitem_set_info2(item, &info);
 
-	obs_scene_t* s = obs_sceneitem_get_scene(item);
+	obs_scene_t *s = obs_sceneitem_get_scene(item);
 	obs_scene_enum_items(s, select_one, item);
 }
 
-void SlDualEditor::addNewSource(const std::string& typeId)
+void SlDualEditor::addNewSource(const std::string &typeId)
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return;
 
-	const char* display = obs_source_get_display_name(typeId.c_str());
+	const char *display = obs_source_get_display_name(typeId.c_str());
 	QString name = uniqueSourceName(QString::fromUtf8(display ? display : typeId.c_str()));
 
-	obs_source_t* source = obs_source_create(typeId.c_str(), name.toUtf8().constData(), nullptr, nullptr);
+	obs_source_t *source = obs_source_create(typeId.c_str(), name.toUtf8().constData(), nullptr, nullptr);
 
 	if (!source)
 	{
@@ -2495,7 +2429,7 @@ void SlDualEditor::addNewSource(const std::string& typeId)
 		return;
 	}
 
-	obs_sceneitem_t* item = obs_scene_add(s, source);
+	obs_sceneitem_t *item = obs_scene_add(s, source);
 
 	if (item)
 	{
@@ -2509,19 +2443,19 @@ void SlDualEditor::addNewSource(const std::string& typeId)
 	obs_source_release(source);
 }
 
-void SlDualEditor::addExistingSource(const std::string& name)
+void SlDualEditor::addExistingSource(const std::string &name)
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return;
 
-	obs_source_t* source = obs_get_source_by_name(name.c_str());
+	obs_source_t *source = obs_get_source_by_name(name.c_str());
 
 	if (!source)
 		return;
 
-	obs_sceneitem_t* item = obs_scene_add(s, source);
+	obs_sceneitem_t *item = obs_scene_add(s, source);
 
 	if (item)
 	{
@@ -2532,9 +2466,9 @@ void SlDualEditor::addExistingSource(const std::string& name)
 	obs_source_release(source);
 }
 
-void SlDualEditor::removeSelectedItems(QWidget* parent)
+void SlDualEditor::removeSelectedItems(QWidget *parent)
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return;
@@ -2558,13 +2492,13 @@ void SlDualEditor::removeSelectedItems(QWidget* parent)
 		m_hoveredPreviewItems.clear();
 	}
 
-	for (obs_sceneitem_t* item : data.sceneItems)
+	for (obs_sceneitem_t *item : data.sceneItems)
 		recordItemRemoveAndRemove(item);
 }
 
-void SlDualEditor::flagUndoable(obs_sceneitem_t* item, bool isVisibility, bool value)
+void SlDualEditor::flagUndoable(obs_sceneitem_t *item, bool isVisibility, bool value)
 {
-	obs_scene_t* s = obs_sceneitem_get_scene(item);
+	obs_scene_t *s = obs_sceneitem_get_scene(item);
 	std::string sceneUuid = obs_source_get_uuid(obs_scene_get_source(s));
 	int64_t id = obs_sceneitem_get_id(item);
 	bool oldValue = isVisibility ? obs_sceneitem_visible(item) : obs_sceneitem_locked(item);
@@ -2577,13 +2511,12 @@ void SlDualEditor::flagUndoable(obs_sceneitem_t* item, bool isVisibility, bool v
 	else
 		obs_sceneitem_set_locked(item, value);
 
-	auto apply = [sceneUuid, id, isVisibility](const std::string& data)
-	{
-		obs_scene_t* sc = sceneByUuid(sceneUuid);
+	auto apply = [sceneUuid, id, isVisibility](const std::string &data) {
+		obs_scene_t *sc = sceneByUuid(sceneUuid);
 
 		if (!sc)
 			return;
-		obs_sceneitem_t* it = obs_scene_find_sceneitem_by_id(sc, id);
+		obs_sceneitem_t *it = obs_scene_find_sceneitem_by_id(sc, id);
 
 		if (!it)
 			return;
@@ -2597,12 +2530,12 @@ void SlDualEditor::flagUndoable(obs_sceneitem_t* item, bool isVisibility, bool v
 	m_undo.add(isVisibility ? "Visibility" : "Lock", apply, apply, oldValue ? "1" : "0", value ? "1" : "0");
 }
 
-void SlDualEditor::setItemVisibleUndoable(obs_sceneitem_t* item, bool visible)
+void SlDualEditor::setItemVisibleUndoable(obs_sceneitem_t *item, bool visible)
 {
 	flagUndoable(item, true, visible);
 }
 
-void SlDualEditor::showItemMenu(obs_sceneitem_t* item, const QPoint& globalPos, QWidget* parent)
+void SlDualEditor::showItemMenu(obs_sceneitem_t *item, const QPoint &globalPos, QWidget *parent)
 {
 	if (!item)
 		return;
@@ -2614,32 +2547,31 @@ void SlDualEditor::showItemMenu(obs_sceneitem_t* item, const QPoint& globalPos, 
 	obs_sceneitem_release(item);
 }
 
-static std::vector<int64_t> currentOrderBottomToTop(obs_scene_t* scene)
+static std::vector<int64_t> currentOrderBottomToTop(obs_scene_t *scene)
 {
 	std::vector<int64_t> order;
 	obs_scene_enum_items(
 		scene,
-		[](obs_scene_t*, obs_sceneitem_t* item, void* param)
-		{
-			static_cast<std::vector<int64_t>*>(param)->push_back(obs_sceneitem_get_id(item));
+		[](obs_scene_t *, obs_sceneitem_t *item, void *param) {
+			static_cast<std::vector<int64_t> *>(param)->push_back(obs_sceneitem_get_id(item));
 			return true;
 		},
 		&order);
 	return order;
 }
 
-static void applyOrder(obs_scene_t* scene, const std::vector<int64_t>& orderBottomToTop)
+static void applyOrder(obs_scene_t *scene, const std::vector<int64_t> &orderBottomToTop)
 {
 	for (size_t i = 0; i < orderBottomToTop.size(); i++)
 	{
-		obs_sceneitem_t* item = obs_scene_find_sceneitem_by_id(scene, orderBottomToTop[i]);
+		obs_sceneitem_t *item = obs_scene_find_sceneitem_by_id(scene, orderBottomToTop[i]);
 
 		if (item)
 			obs_sceneitem_set_order_position(item, (int)i);
 	}
 }
 
-static std::string orderToString(const std::vector<int64_t>& order)
+static std::string orderToString(const std::vector<int64_t> &order)
 {
 	std::string out;
 
@@ -2653,7 +2585,7 @@ static std::string orderToString(const std::vector<int64_t>& order)
 	return out;
 }
 
-static std::vector<int64_t> orderFromString(const std::string& data)
+static std::vector<int64_t> orderFromString(const std::string &data)
 {
 	std::vector<int64_t> order;
 	size_t start = 0;
@@ -2671,9 +2603,9 @@ static std::vector<int64_t> orderFromString(const std::string& data)
 	return order;
 }
 
-void SlDualEditor::applyOrderUndoable(const std::vector<int64_t>& newOrderBottomToTop)
+void SlDualEditor::applyOrderUndoable(const std::vector<int64_t> &newOrderBottomToTop)
 {
-	obs_scene_t* s = scene();
+	obs_scene_t *s = scene();
 
 	if (!s)
 		return;
@@ -2686,9 +2618,8 @@ void SlDualEditor::applyOrderUndoable(const std::vector<int64_t>& newOrderBottom
 	applyOrder(s, newOrderBottomToTop);
 
 	std::string sceneUuid = obs_source_get_uuid(obs_scene_get_source(s));
-	auto apply = [sceneUuid](const std::string& data)
-	{
-		obs_scene_t* sc = sceneByUuid(sceneUuid);
+	auto apply = [sceneUuid](const std::string &data) {
+		obs_scene_t *sc = sceneByUuid(sceneUuid);
 
 		if (sc)
 			applyOrder(sc, orderFromString(data));
@@ -2761,7 +2692,7 @@ static void DrawSquareAtPos(float x, float y, float pixelRatio)
 	gs_matrix_pop();
 }
 
-static void DrawRotationHandle(gs_vertbuffer_t* circle, float rot, float pixelRatio, bool invert)
+static void DrawRotationHandle(gs_vertbuffer_t *circle, float rot, float pixelRatio, bool invert)
 {
 	struct vec3 pos;
 	vec3_set(&pos, 0.5f, invert ? 1.0f : 0.0f, 0.0f);
@@ -2793,14 +2724,14 @@ static void DrawRotationHandle(gs_vertbuffer_t* circle, float rot, float pixelRa
 	gs_matrix_pop();
 }
 
-static bool crop_enabled(const obs_sceneitem_crop* crop)
+static bool crop_enabled(const obs_sceneitem_crop *crop)
 {
 	return crop->left > 0 || crop->top > 0 || crop->right > 0 || crop->bottom > 0;
 }
 
 struct SlDrawCtx
 {
-	SlDualEditor* editor;
+	SlDualEditor *editor;
 	float pixelRatio;
 	vec4 red;
 	vec4 green;
@@ -2851,7 +2782,7 @@ void SlDualEditor::drawStripedLine(float x1, float y1, float x2, float y2, float
 	if (!m_stripedLineEffect)
 	{
 		// Fallback: solid line (striped_line.effect not found)
-		gs_effect_t* solid = obs_get_base_effect(OBS_EFFECT_SOLID);
+		gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
 
 		while (gs_effect_loop(solid, "Solid"))
 			DrawLine(x1, y1, x2, y2, thickness, scale);
@@ -2906,8 +2837,8 @@ void SlDualEditor::drawStripedLine(float x1, float y1, float x2, float y2, float
 		vec2_set(&count_inv, 0.0f, f_stripes_inv);
 	}
 
-	gs_eparam_t* size_param = gs_effect_get_param_by_name(m_stripedLineEffect, "size");
-	gs_eparam_t* count_inv_param = gs_effect_get_param_by_name(m_stripedLineEffect, "count_inv");
+	gs_eparam_t *size_param = gs_effect_get_param_by_name(m_stripedLineEffect, "size");
+	gs_eparam_t *count_inv_param = gs_effect_get_param_by_name(m_stripedLineEffect, "count_inv");
 
 	gs_effect_set_vec2(size_param, &size);
 	gs_effect_set_vec2(count_inv_param, &count_inv);
@@ -2923,10 +2854,10 @@ void SlDualEditor::drawStripedLine(float x1, float y1, float x2, float y2, float
 	gs_matrix_pop();
 }
 
-bool SlDualEditor::drawSelectedItemProc(obs_scene_t* scene, obs_sceneitem_t* item, void* param)
+bool SlDualEditor::drawSelectedItemProc(obs_scene_t *scene, obs_sceneitem_t *item, void *param)
 {
-	SlDrawCtx* ctx = static_cast<SlDrawCtx*>(param);
-	SlDualEditor* self = ctx->editor;
+	SlDrawCtx *ctx = static_cast<SlDrawCtx *>(param);
+	SlDualEditor *self = ctx->editor;
 
 	if (obs_sceneitem_locked(item))
 		return true;
@@ -2982,8 +2913,7 @@ bool SlDualEditor::drawSelectedItemProc(obs_scene_t* scene, obs_sceneitem_t* ite
 		{{{1.f, 1.f, 0.f, 0.f}}},
 	};
 
-	bool visible = std::all_of(std::begin(bounds), std::end(bounds), [&](const vec3& b)
-	{
+	bool visible = std::all_of(std::begin(bounds), std::end(bounds), [&](const vec3 &b) {
 		vec3 pos;
 		vec3_transform(&pos, &b, &boxTransform);
 		vec3_transform(&pos, &pos, &invBoxTransform);
@@ -2994,7 +2924,7 @@ bool SlDualEditor::drawSelectedItemProc(obs_scene_t* scene, obs_sceneitem_t* ite
 		return true;
 
 	float pixelRatio = ctx->pixelRatio;
-	gs_effect_t* solid = obs_get_base_effect(OBS_EFFECT_SOLID);
+	gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
 
 	matrix4 curTransform;
 	vec2 boxScale;
@@ -3014,31 +2944,30 @@ bool SlDualEditor::drawSelectedItemProc(obs_scene_t* scene, obs_sceneitem_t* ite
 
 	if (info.bounds_type == OBS_BOUNDS_NONE && crop_enabled(&crop))
 	{
-#define DRAW_SIDE(side, x1, y1, x2, y2)                                                          \
-	if (hovered && !selected)                                                                \
-	{                                                                                        \
-		gs_eparam_t* colParam = gs_effect_get_param_by_name(solid, "color");             \
-		gs_effect_set_vec4(colParam, &ctx->blue);                                        \
-		while (gs_effect_loop(solid, "Solid"))                                           \
-		{                                                                                \
-			DrawLine(x1, y1, x2, y2, HANDLE_RADIUS * pixelRatio / 2, boxScale);      \
-		}                                                                                \
-	}                                                                                        \
-	else if (crop.side > 0)                                                                  \
-	{                                                                                        \
-		gs_eparam_t* colParam = gs_effect_get_param_by_name(                             \
-			self->m_stripedLineEffect ? self->m_stripedLineEffect : solid, "color"); \
-		gs_effect_set_vec4(colParam, &ctx->green);                                       \
-		self->drawStripedLine(x1, y1, x2, y2, HANDLE_RADIUS * pixelRatio / 2, boxScale); \
-	}                                                                                        \
-	else                                                                                     \
-	{                                                                                        \
-		gs_eparam_t* colParam = gs_effect_get_param_by_name(solid, "color");             \
-		gs_effect_set_vec4(colParam, &ctx->red);                                         \
-		while (gs_effect_loop(solid, "Solid"))                                           \
-		{                                                                                \
-			DrawLine(x1, y1, x2, y2, HANDLE_RADIUS * pixelRatio / 2, boxScale);      \
-		}                                                                                \
+#define DRAW_SIDE(side, x1, y1, x2, y2)                                                                                                      \
+	if (hovered && !selected)                                                                                                            \
+	{                                                                                                                                    \
+		gs_eparam_t *colParam = gs_effect_get_param_by_name(solid, "color");                                                         \
+		gs_effect_set_vec4(colParam, &ctx->blue);                                                                                    \
+		while (gs_effect_loop(solid, "Solid"))                                                                                       \
+		{                                                                                                                            \
+			DrawLine(x1, y1, x2, y2, HANDLE_RADIUS *pixelRatio / 2, boxScale);                                                   \
+		}                                                                                                                            \
+	}                                                                                                                                    \
+	else if (crop.side > 0)                                                                                                              \
+	{                                                                                                                                    \
+		gs_eparam_t *colParam = gs_effect_get_param_by_name(self->m_stripedLineEffect ? self->m_stripedLineEffect : solid, "color"); \
+		gs_effect_set_vec4(colParam, &ctx->green);                                                                                   \
+		self->drawStripedLine(x1, y1, x2, y2, HANDLE_RADIUS *pixelRatio / 2, boxScale);                                              \
+	}                                                                                                                                    \
+	else                                                                                                                                 \
+	{                                                                                                                                    \
+		gs_eparam_t *colParam = gs_effect_get_param_by_name(solid, "color");                                                         \
+		gs_effect_set_vec4(colParam, &ctx->red);                                                                                     \
+		while (gs_effect_loop(solid, "Solid"))                                                                                       \
+		{                                                                                                                            \
+			DrawLine(x1, y1, x2, y2, HANDLE_RADIUS *pixelRatio / 2, boxScale);                                                   \
+		}                                                                                                                            \
 	}
 
 		DRAW_SIDE(left, 0.0f, 0.0f, 0.0f, 1.0f);
@@ -3049,7 +2978,7 @@ bool SlDualEditor::drawSelectedItemProc(obs_scene_t* scene, obs_sceneitem_t* ite
 	}
 	else
 	{
-		gs_eparam_t* colParam = gs_effect_get_param_by_name(solid, "color");
+		gs_eparam_t *colParam = gs_effect_get_param_by_name(solid, "color");
 		gs_effect_set_vec4(colParam, selected ? &ctx->red : &ctx->blue);
 
 		while (gs_effect_loop(solid, "Solid"))
@@ -3058,9 +2987,9 @@ bool SlDualEditor::drawSelectedItemProc(obs_scene_t* scene, obs_sceneitem_t* ite
 		}
 	}
 
-	gs_eparam_t* colParam = gs_effect_get_param_by_name(solid, "color");
+	gs_eparam_t *colParam = gs_effect_get_param_by_name(solid, "color");
 
-	gs_technique_t* tech = gs_effect_get_technique(solid, "Solid");
+	gs_technique_t *tech = gs_effect_get_technique(solid, "Solid");
 	gs_technique_begin(tech);
 	gs_technique_begin_pass(tech, 0);
 
@@ -3091,10 +3020,10 @@ bool SlDualEditor::drawSelectedItemProc(obs_scene_t* scene, obs_sceneitem_t* ite
 	return true;
 }
 
-bool SlDualEditor::drawSelectedOverflowProc(obs_scene_t*, obs_sceneitem_t* item, void* param)
+bool SlDualEditor::drawSelectedOverflowProc(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
-	SlDrawCtx* ctx = static_cast<SlDrawCtx*>(param);
-	SlDualEditor* self = ctx->editor;
+	SlDrawCtx *ctx = static_cast<SlDrawCtx *>(param);
+	SlDualEditor *self = ctx->editor;
 
 	if (obs_sceneitem_locked(item))
 		return true;
@@ -3134,8 +3063,7 @@ bool SlDualEditor::drawSelectedOverflowProc(obs_scene_t*, obs_sceneitem_t* item,
 		{{{1.f, 1.f, 0.f, 0.f}}},
 	};
 
-	bool visible = std::all_of(std::begin(bounds), std::end(bounds), [&](const vec3& b)
-	{
+	bool visible = std::all_of(std::begin(bounds), std::end(bounds), [&](const vec3 &b) {
 		vec3 pos;
 		vec3_transform(&pos, &b, &boxTransform);
 		vec3_transform(&pos, &pos, &invBoxTransform);
@@ -3145,9 +3073,9 @@ bool SlDualEditor::drawSelectedOverflowProc(obs_scene_t*, obs_sceneitem_t* item,
 	if (!visible)
 		return true;
 
-	gs_effect_t* repeat = obs_get_base_effect(OBS_EFFECT_REPEAT);
-	gs_eparam_t* image = gs_effect_get_param_by_name(repeat, "image");
-	gs_eparam_t* scale = gs_effect_get_param_by_name(repeat, "scale");
+	gs_effect_t *repeat = obs_get_base_effect(OBS_EFFECT_REPEAT);
+	gs_eparam_t *image = gs_effect_get_param_by_name(repeat, "image");
+	gs_eparam_t *scale = gs_effect_get_param_by_name(repeat, "scale");
 
 	vec2 s;
 	vec2_set(&s, boxTransform.x.x / 96, boxTransform.y.y / 96);
@@ -3172,7 +3100,7 @@ bool SlDualEditor::drawSelectedOverflowProc(obs_scene_t*, obs_sceneitem_t* item,
 // pass holds its own reference for the whole pass instead of the borrowed pointer scene() returns.
 struct SlActiveSceneRef
 {
-	explicit SlActiveSceneRef(SlDualCanvas* canvas) : scene(canvas ? canvas->activeSceneRef() : nullptr) {}
+	explicit SlActiveSceneRef(SlDualCanvas *canvas) : scene(canvas ? canvas->activeSceneRef() : nullptr) {}
 
 	~SlActiveSceneRef()
 	{
@@ -3180,13 +3108,13 @@ struct SlActiveSceneRef
 			obs_scene_release(scene);
 	}
 
-	SlActiveSceneRef(const SlActiveSceneRef&) = delete;
-	SlActiveSceneRef& operator=(const SlActiveSceneRef&) = delete;
+	SlActiveSceneRef(const SlActiveSceneRef &) = delete;
+	SlActiveSceneRef &operator=(const SlActiveSceneRef &) = delete;
 
-	obs_scene_t* scene;
+	obs_scene_t *scene;
 };
 
-void SlDualEditor::drawOverflow(const ViewMap& map)
+void SlDualEditor::drawOverflow(const ViewMap &map)
 {
 	if (userConfigBool("BasicWindow", "OverflowHidden"))
 		return;
@@ -3204,7 +3132,7 @@ void SlDualEditor::drawOverflow(const ViewMap& map)
 		return;
 
 	SlActiveSceneRef held(m_controller.canvas.get());
-	obs_scene_t* s = held.scene;
+	obs_scene_t *s = held.scene;
 
 	if (!s)
 		return;
@@ -3228,8 +3156,8 @@ void SlDualEditor::drawSelectionBox(float x1, float y1, float x2, float y2)
 	y1 = std::round(y1);
 	y2 = std::round(y2);
 
-	gs_effect_t* eff = gs_get_effect();
-	gs_eparam_t* colParam = gs_effect_get_param_by_name(eff, "color");
+	gs_effect_t *eff = gs_get_effect();
+	gs_eparam_t *colParam = gs_effect_get_param_by_name(eff, "color");
 
 	vec4 fillColor;
 	vec4_set(&fillColor, 0.7f, 0.7f, 0.7f, 0.5f);
@@ -3256,17 +3184,15 @@ void SlDualEditor::drawSelectionBox(float x1, float y1, float x2, float y2)
 	gs_matrix_pop();
 }
 
-void SlDualEditor::drawSceneEditing(const ViewMap& map)
+void SlDualEditor::drawSceneEditing(const ViewMap &map)
 {
 	SlActiveSceneRef held(m_controller.canvas.get());
-	obs_scene_t* s = held.scene;
+	obs_scene_t *s = held.scene;
 
 	if (!s)
 		return;
 
-	SlDrawCtx ctx{this, pixelRatio(), accessibilityColor("SelectRed", 1.0f, 0.0f, 0.0f),
-		      accessibilityColor("SelectGreen", 0.0f, 1.0f, 0.0f),
-		      accessibilityColor("SelectBlue", 0.0f, 0.5f, 1.0f)};
+	SlDrawCtx ctx{this, pixelRatio(), accessibilityColor("SelectRed", 1.0f, 0.0f, 0.0f), accessibilityColor("SelectGreen", 0.0f, 1.0f, 0.0f), accessibilityColor("SelectBlue", 0.0f, 0.5f, 1.0f)};
 
 	gs_matrix_push();
 	gs_matrix_scale3f(map.scale, map.scale, 1.0f);
@@ -3277,12 +3203,11 @@ void SlDualEditor::drawSceneEditing(const ViewMap& map)
 
 	if (overlay.active)
 	{
-		gs_effect_t* solid = obs_get_base_effect(OBS_EFFECT_SOLID);
+		gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
 
 		while (gs_effect_loop(solid, "Solid"))
 		{
-			drawSelectionBox(overlay.start.x * map.scale, overlay.start.y * map.scale, overlay.mouse.x * map.scale,
-					 overlay.mouse.y * map.scale);
+			drawSelectionBox(overlay.start.x * map.scale, overlay.start.y * map.scale, overlay.mouse.x * map.scale, overlay.mouse.y * map.scale);
 		}
 	}
 
@@ -3293,10 +3218,10 @@ void SlDualEditor::drawSceneEditing(const ViewMap& map)
 * Spacing helpers
 */
 
-static obs_source_t* CreateLabel(float pixelRatio, int i)
+static obs_source_t *CreateLabel(float pixelRatio, int i)
 {
-	obs_data_t* settings = obs_data_create();
-	obs_data_t* font = obs_data_create();
+	obs_data_t *settings = obs_data_create();
+	obs_data_t *font = obs_data_create();
 
 	obs_data_set_string(font, "face", "Arial");
 
@@ -3310,14 +3235,14 @@ static obs_source_t* CreateLabel(float pixelRatio, int i)
 	obs_data_set_int(settings, "outline_size", 3);
 
 	std::string name = "sl-dual spacing label " + std::to_string(i);
-	obs_source_t* source = obs_source_create_private("text_gdiplus", name.c_str(), settings);
+	obs_source_t *source = obs_source_create_private("text_gdiplus", name.c_str(), settings);
 
 	obs_data_release(font);
 	obs_data_release(settings);
 	return source;
 }
 
-static void DrawLabel(obs_source_t* source, vec3& pos, vec3& viewport)
+static void DrawLabel(obs_source_t *source, vec3 &pos, vec3 &viewport)
 {
 	if (!source)
 		return;
@@ -3331,15 +3256,15 @@ static void DrawLabel(obs_source_t* source, vec3& pos, vec3& viewport)
 	gs_matrix_pop();
 }
 
-static void DrawSpacingLine(vec3& start, vec3& end, vec3& viewport, float pixelRatio, const vec4& color)
+static void DrawSpacingLine(vec3 &start, vec3 &end, vec3 &viewport, float pixelRatio, const vec4 &color)
 {
 	matrix4 transform;
 	matrix4_identity(&transform);
 	transform.x.x = viewport.x;
 	transform.y.y = viewport.y;
 
-	gs_effect_t* solid = obs_get_base_effect(OBS_EFFECT_SOLID);
-	gs_technique_t* tech = gs_effect_get_technique(solid, "Solid");
+	gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
+	gs_technique_t *tech = gs_effect_get_technique(solid, "Solid");
 
 	gs_effect_set_vec4(gs_effect_get_param_by_name(solid, "color"), &color);
 
@@ -3362,7 +3287,7 @@ static void DrawSpacingLine(vec3& start, vec3& end, vec3& viewport, float pixelR
 	gs_technique_end(tech);
 }
 
-void SlDualEditor::renderSpacingHelper(int index, struct vec3& start, struct vec3& end, struct vec3& viewport, float pixelRatio, uint32_t baseW, uint32_t baseH)
+void SlDualEditor::renderSpacingHelper(int index, struct vec3 &start, struct vec3 &end, struct vec3 &viewport, float pixelRatio, uint32_t baseW, uint32_t baseH)
 {
 	bool horizontal = (index == 2 || index == 3);
 
@@ -3382,7 +3307,7 @@ void SlDualEditor::renderSpacingHelper(int index, struct vec3& start, struct vec
 	if (px <= 0.0f)
 		return;
 
-	obs_source_t* source = m_spacerLabel[index];
+	obs_source_t *source = m_spacerLabel[index];
 	vec3 labelSize, labelPos;
 	vec3_set(&labelSize, (float)obs_source_get_width(source), (float)obs_source_get_height(source), 1.0f);
 
@@ -3415,7 +3340,7 @@ void SlDualEditor::renderSpacingHelper(int index, struct vec3& start, struct vec
 	if (source && ipx != m_spacerPx[index])
 	{
 		std::string text = std::to_string(ipx) + " px";
-		obs_data_t* settings = obs_source_get_settings(source);
+		obs_data_t *settings = obs_source_get_settings(source);
 		obs_data_set_string(settings, "text", text.c_str());
 		obs_source_update(source, settings);
 		obs_data_release(settings);
@@ -3425,10 +3350,10 @@ void SlDualEditor::renderSpacingHelper(int index, struct vec3& start, struct vec
 	DrawLabel(source, labelPos, viewport);
 }
 
-void SlDualEditor::drawSpacingHelpers(const ViewMap& map)
+void SlDualEditor::drawSpacingHelpers(const ViewMap &map)
 {
 	SlActiveSceneRef held(m_controller.canvas.get());
-	obs_scene_t* s = held.scene;
+	obs_scene_t *s = held.scene;
 
 	if (!s)
 		return;
@@ -3441,7 +3366,7 @@ void SlDualEditor::drawSpacingHelpers(const ViewMap& map)
 	if (data.sceneItems.size() != 1)
 		return;
 
-	obs_sceneitem_t* item = data.sceneItems[0];
+	obs_sceneitem_t *item = data.sceneItems[0];
 
 	if (!item || obs_sceneitem_locked(item))
 		return;
@@ -3451,7 +3376,7 @@ void SlDualEditor::drawSpacingHelpers(const ViewMap& map)
 	if (itemSize.x == 0.0f || itemSize.y == 0.0f)
 		return;
 
-	obs_sceneitem_t* parentGroup = obs_sceneitem_get_group(s, item);
+	obs_sceneitem_t *parentGroup = obs_sceneitem_get_group(s, item);
 
 	if (parentGroup && obs_sceneitem_locked(parentGroup))
 		return;
@@ -3608,7 +3533,7 @@ void SlDualEditor::drawOverlay(uint32_t cx, uint32_t cy)
 	drawOverflow(map);
 	drawSceneEditing(map);
 
-	config_t* cfg = obs_frontend_get_user_config();
+	config_t *cfg = obs_frontend_get_user_config();
 
 	if (cfg && config_get_bool(cfg, "BasicWindow", "SpacingHelpersEnabled"))
 		drawSpacingHelpers(map);

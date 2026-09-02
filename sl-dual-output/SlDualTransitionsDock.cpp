@@ -12,9 +12,9 @@
 #include <QVBoxLayout>
 
 // Same button construction as the main transitions dock: OBS's icons plus the btn-tool theme class.
-static QPushButton* toolButton(QWidget* parent, const char* iconResource, const char* themeClass, const char* toolTip)
+static QPushButton *toolButton(QWidget *parent, const char *iconResource, const char *themeClass, const char *toolTip)
 {
-	auto* button = new QPushButton(parent);
+	auto *button = new QPushButton(parent);
 	button->setIcon(QIcon(QString::fromUtf8(iconResource)));
 	button->setToolTip(QString::fromUtf8(toolTip));
 	button->setProperty("class", themeClass);
@@ -22,7 +22,7 @@ static QPushButton* toolButton(QWidget* parent, const char* iconResource, const 
 	return button;
 }
 
-SlDualTransitionsDock::SlDualTransitionsDock(SlDualController& controller) : QWidget(nullptr), m_controller(controller)
+SlDualTransitionsDock::SlDualTransitionsDock(SlDualController &controller) : QWidget(nullptr), m_controller(controller)
 {
 	m_combo = new QComboBox(this);
 	m_combo->setToolTip("Scene transition for the vertical canvas");
@@ -35,7 +35,7 @@ SlDualTransitionsDock::SlDualTransitionsDock(SlDualController& controller) : QWi
 	m_duration->setMaximum(20000);
 	m_duration->setSingleStep(50);
 
-	auto* durationRow = new QHBoxLayout();
+	auto *durationRow = new QHBoxLayout();
 	durationRow->setContentsMargins(0, 0, 0, 0);
 	durationRow->addWidget(m_durationLabel);
 	durationRow->addWidget(m_duration, 1);
@@ -44,14 +44,14 @@ SlDualTransitionsDock::SlDualTransitionsDock(SlDualController& controller) : QWi
 	m_removeButton = toolButton(this, ":/res/images/minus.svg", "btn-tool icon-trash", "Remove transition");
 	m_propertiesButton = toolButton(this, ":/settings/images/settings/general.svg", "btn-tool icon-gear", "Transition properties");
 
-	auto* buttonRow = new QHBoxLayout();
+	auto *buttonRow = new QHBoxLayout();
 	buttonRow->setContentsMargins(0, 0, 0, 0);
 	buttonRow->addStretch(1);
 	buttonRow->addWidget(m_addButton);
 	buttonRow->addWidget(m_removeButton);
 	buttonRow->addWidget(m_propertiesButton);
 
-	auto* layout = new QVBoxLayout(this);
+	auto *layout = new QVBoxLayout(this);
 	layout->setContentsMargins(4, 4, 4, 4);
 	layout->setSpacing(4);
 	layout->addWidget(m_combo);
@@ -60,8 +60,7 @@ SlDualTransitionsDock::SlDualTransitionsDock(SlDualController& controller) : QWi
 	layout->addStretch(1);
 
 	QObject::connect(m_combo, &QComboBox::currentIndexChanged, this, [this](int) { onSelectionChanged(); });
-	QObject::connect(m_duration, &QSpinBox::valueChanged, this, [this](int value)
-	{
+	QObject::connect(m_duration, &QSpinBox::valueChanged, this, [this](int value) {
 		if (!m_updating)
 			m_controller.transitionSetDuration(value);
 	});
@@ -74,7 +73,7 @@ SlDualTransitionsDock::SlDualTransitionsDock(SlDualController& controller) : QWi
 
 void SlDualTransitionsDock::refresh()
 {
-	SlDualTransitions* transitions = m_controller.transitions.get();
+	SlDualTransitions *transitions = m_controller.transitions.get();
 
 	m_updating = true;
 	m_combo->clear();
@@ -85,7 +84,7 @@ void SlDualTransitionsDock::refresh()
 	{
 		selected = transitions->selectedName(m_controller.config);
 
-		for (const std::string& name : transitions->names())
+		for (const std::string &name : transitions->names())
 		{
 			m_combo->addItem(QString::fromUtf8(name.c_str()));
 
@@ -98,7 +97,7 @@ void SlDualTransitionsDock::refresh()
 	m_updating = false;
 
 	bool haveSelection = transitions && !selected.empty();
-	obs_source_t* source = haveSelection ? transitions->find(selected) : nullptr;
+	obs_source_t *source = haveSelection ? transitions->find(selected) : nullptr;
 	bool fixed = source && obs_transition_fixed(source);
 	bool configurable = haveSelection && transitions->configurable(selected);
 
@@ -123,18 +122,17 @@ void SlDualTransitionsDock::onAdd()
 {
 	QMenu menu(this);
 	size_t idx = 0;
-	const char* id = nullptr;
+	const char *id = nullptr;
 
 	while (obs_enum_transition_types(idx++, &id))
 	{
 		if (!obs_is_source_configurable(id))
 			continue;
 
-		const char* display = obs_source_get_display_name(id);
+		const char *display = obs_source_get_display_name(id);
 		std::string idCopy = id;
 		QString label = QString::fromUtf8(display ? display : id);
-		menu.addAction(label, [this, idCopy, label]()
-		{
+		menu.addAction(label, [this, idCopy, label]() {
 			bool ok = false;
 			QString name = QInputDialog::getText(this, "Add Transition", "Transition name:", QLineEdit::Normal, label, &ok);
 			name = name.trimmed();
@@ -165,12 +163,12 @@ void SlDualTransitionsDock::onRemove()
 
 void SlDualTransitionsDock::onProperties()
 {
-	SlDualTransitions* transitions = m_controller.transitions.get();
+	SlDualTransitions *transitions = m_controller.transitions.get();
 
 	if (!transitions)
 		return;
 
-	obs_source_t* source = transitions->selected(m_controller.config);
+	obs_source_t *source = transitions->selected(m_controller.config);
 
 	if (source && obs_source_configurable(source))
 		obs_frontend_open_source_properties(source);

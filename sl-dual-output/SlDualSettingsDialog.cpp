@@ -17,7 +17,7 @@
 
 struct SizePreset
 {
-	const char* label;
+	const char *label;
 	uint32_t width;
 	uint32_t height;
 };
@@ -29,19 +29,17 @@ static const SizePreset kPresets[] = {
 	{"540 x 960 (9:16 vertical)", 540, 960},
 };
 
-SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool streamBusy, QWidget* parent)
-	: QDialog(parent),
-	  m_base(current)
+SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig &current, bool streamBusy, QWidget *parent) : QDialog(parent), m_base(current)
 {
 	setWindowTitle("Vertical Settings");
 	setMinimumWidth(420);
 
-	auto* form = new QFormLayout();
+	auto *form = new QFormLayout();
 
 	// Canvas size
 	m_sizePreset = new QComboBox(this);
 
-	for (const SizePreset& preset : kPresets)
+	for (const SizePreset &preset : kPresets)
 		m_sizePreset->addItem(preset.label);
 
 	// A size set through the js api need not be one of the three presets. Without an entry holding
@@ -68,7 +66,7 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	m_height->setMinimumWidth(80);
 	m_height->setValue((int)current.canvasHeight);
 
-	auto* sizeRow = new QHBoxLayout();
+	auto *sizeRow = new QHBoxLayout();
 	sizeRow->addWidget(m_width);
 	sizeRow->addWidget(new QLabel("x", this));
 	sizeRow->addWidget(m_height);
@@ -95,12 +93,9 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	m_key = new QLineEdit(QString::fromUtf8(current.key.c_str()), this);
 	m_key->setEchoMode(QLineEdit::Password);
 	m_showKey = new QCheckBox("Show", this);
-	QObject::connect(m_showKey, &QCheckBox::toggled, this, [this](bool checked)
-	{
-		m_key->setEchoMode(checked ? QLineEdit::Normal : QLineEdit::Password);
-	});
+	QObject::connect(m_showKey, &QCheckBox::toggled, this, [this](bool checked) { m_key->setEchoMode(checked ? QLineEdit::Normal : QLineEdit::Password); });
 
-	auto* keyRow = new QHBoxLayout();
+	auto *keyRow = new QHBoxLayout();
 	keyRow->addWidget(m_key, 1);
 	keyRow->addWidget(m_showKey);
 	form->addRow("Stream key:", keyRow);
@@ -117,8 +112,7 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	m_authPassword->setEchoMode(QLineEdit::Password);
 	form->addRow("Password:", m_authPassword);
 
-	auto syncAuth = [this](bool on)
-	{
+	auto syncAuth = [this](bool on) {
 		m_authUsername->setEnabled(on);
 		m_authPassword->setEnabled(on);
 	};
@@ -157,18 +151,18 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	m_autoStart->setChecked(current.autoStart);
 	form->addRow(QString(), m_autoStart);
 
-	auto* layout = new QVBoxLayout(this);
+	auto *layout = new QVBoxLayout(this);
 	layout->addLayout(form);
 
 	if (streamBusy)
 	{
 		m_sizePreset->setEnabled(false);
-		auto* note = new QLabel("Canvas size is locked while the vertical stream is live.", this);
+		auto *note = new QLabel("Canvas size is locked while the vertical stream is live.", this);
 		note->setWordWrap(true);
 		layout->addWidget(note);
 	}
 
-	auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+	auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 	QObject::connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
 	QObject::connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 	layout->addWidget(buttons);
@@ -196,16 +190,16 @@ void SlDualSettingsDialog::onPresetChanged(int index)
 	m_height->setValue((int)kPresets[index].height);
 }
 
-void SlDualSettingsDialog::populateEncoders(const std::string& currentId)
+void SlDualSettingsDialog::populateEncoders(const std::string &currentId)
 {
-	const char* id = nullptr;
+	const char *id = nullptr;
 
 	for (size_t i = 0; obs_enum_encoder_types(i, &id); i++)
 	{
 		if (obs_get_encoder_type(id) != OBS_ENCODER_VIDEO)
 			continue;
 
-		const char* codec = obs_get_encoder_codec(id);
+		const char *codec = obs_get_encoder_codec(id);
 
 		if (!codec || strcmp(codec, "h264") != 0)
 			continue;
@@ -215,7 +209,7 @@ void SlDualSettingsDialog::populateEncoders(const std::string& currentId)
 		if (caps & (OBS_ENCODER_CAP_DEPRECATED | OBS_ENCODER_CAP_INTERNAL))
 			continue;
 
-		const char* display = obs_encoder_get_display_name(id);
+		const char *display = obs_encoder_get_display_name(id);
 		m_encoder->addItem(QString::fromUtf8(display ? display : id), QString::fromUtf8(id));
 	}
 
