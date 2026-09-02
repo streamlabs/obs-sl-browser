@@ -87,12 +87,26 @@ export async function launchObs({ exe, pageUrl, collection, port, timeoutMs = 12
 	if (collection) args.push("--collection", collection);
 
 	say(`starting ${exe}`);
-	const child = spawn(exe, args, {
-		cwd: dirname(exe), // OBS resolves data\, obs-plugins\ and its portable config relative to cwd
-		env: { ...process.env, SL_PLUGIN_DEFAULT_URL: pageUrl },
-		detached: true,
-		stdio: "ignore",
-	});
+
+	// "Exists but will not run" reaches us two different ways. On Windows a bad executable
+	// format throws from spawn() itself; a failure discovered later - the file going away
+	// after assertObsExe saw it, a permission denial - arrives as an "error" event, and an
+	// "error" event with no listener is thrown, which would end the run rather than the suite.
+	let child;
+	try {
+		child = spawn(exe, args, {
+			cwd: dirname(exe), // OBS resolves data\, obs-plugins\ and its portable config relative to cwd
+			env: { ...process.env, SL_PLUGIN_DEFAULT_URL: pageUrl },
+			detached: true,
+			stdio: "ignore",
+		});
+	} catch (e) {
+		throw new Error(`could not start ${exe}: ${e.message}`);
+	}
+
+	let spawnError = null;
+	child.once("error", (e) => { spawnError = e; });
+
 	child.unref();
 
 	const obs = {
@@ -117,6 +131,10 @@ export async function launchObs({ exe, pageUrl, collection, port, timeoutMs = 12
 
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
+		if (spawnError) {
+			obs.pid = null;
+			throw new Error(`could not start ${exe}: ${spawnError.message}`);
+		}
 		const v = await devtoolsUp(port);
 		if (v) {
 			say(`devtools up on ${port} after ${Math.round((timeoutMs - (deadline - Date.now())) / 1000)}s`);

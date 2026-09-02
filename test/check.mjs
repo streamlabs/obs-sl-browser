@@ -5,7 +5,7 @@
  * Everything else here takes a fifteen-minute build and a running OBS before it can tell you
  * anything. These three run in about a second, so they gate every pull request:
  *
- *   1. every test file parses
+ *   1. every test file parses - modules, inline page scripts and collection json alike
  *   2. every suite.mjs satisfies the contract, and the files it names exist
  *   3. every plugin api function a suite calls actually exists in JavascriptApi.h
  *
@@ -18,6 +18,7 @@
 
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { Script } from "node:vm";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, relative, resolve, extname, sep } from "node:path";
 
@@ -60,11 +61,47 @@ function suiteFile(dir, name, label) {
 
 /* ------------------------------------------------------- 1. does it parse --- */
 
+/*
+ * Not only .mjs and .js. A suite page carries its logic in inline <script>, and a scene
+ * collection is json; a syntax error in either used to reach the expensive e2e job
+ * untouched. Reporting every walked file as "parsed" while checking two extensions was
+ * also simply untrue, so this counts what it actually checked.
+ */
+let checked = 0;
+
 for (const f of files.filter((f) => [".mjs", ".js"].includes(extname(f)))) {
+	checked++;
 	try {
 		execFileSync(process.execPath, ["--check", f], { stdio: "pipe" });
 	} catch (e) {
 		note(rel(f), `does not parse\n    ${String(e.stderr || e.message).trim().split("\n").slice(0, 3).join("\n    ")}`);
+	}
+}
+
+// new Script() compiles without running, so a page that touches `document` is safe to check.
+const INLINE_SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
+
+for (const f of files.filter((f) => extname(f) === ".html")) {
+	checked++;
+	const src = readFileSync(f, "utf8");
+	for (const m of src.matchAll(INLINE_SCRIPT)) {
+		if (/\bsrc\s*=/i.test(m[1])) continue; // an external script, checked as its own file
+		const line = src.slice(0, m.index).split("\n").length;
+		try {
+			new Script(m[2], { filename: `${rel(f)}:${line}` });
+		} catch (e) {
+			note(`${rel(f)}:${line}`, `inline script does not parse: ${e.message}`);
+		}
+	}
+}
+
+for (const f of files.filter((f) => extname(f) === ".json")) {
+	checked++;
+	try {
+		// {{BASE_URL}} and friends are substituted at install time, not here.
+		JSON.parse(readFileSync(f, "utf8").replace(/\{\{[A-Z_]+\}\}/g, "placeholder"));
+	} catch (e) {
+		note(rel(f), `is not valid JSON: ${e.message}`);
 	}
 }
 
@@ -155,5 +192,5 @@ if (problems.length) {
 }
 
 console.log(
-	`  ok  ${files.length} files parse, ${suites.length} suite${suites.length === 1 ? "" : "s"} valid` +
+	`  ok  ${checked} files parse, ${suites.length} suite${suites.length === 1 ? "" : "s"} valid` +
 	(known ? `, api calls check out against ${known.size} names in JavascriptApi.h` : ""));

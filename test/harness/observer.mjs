@@ -113,7 +113,20 @@ export async function startServer({ dir, port = 0, onEvent = () => {} }) {
 		send(200, TYPES[extname(file)] || "application/octet-stream", readFileSync(file));
 	}
 
-	await new Promise((r) => server.listen(port, "127.0.0.1", r));
+	// A bind failure arrives as the server's "error" event, not as a callback argument. With
+	// a pinned --observer-port that is already taken, an unlistened EADDRINUSE would be thrown
+	// and end the run before anything could report it.
+	await new Promise((res, rej) => {
+		const onError = (e) => rej(new Error(
+			`could not start the harness server${port ? ` on port ${port}` : ""}: ${e.message}`));
+		server.once("error", onError);
+		server.listen(port, "127.0.0.1", () => {
+			server.removeListener("error", onError);
+			res();
+		});
+	});
+	// Anything the socket reports later is worth recording, but not worth ending a run over.
+	server.on("error", (e) => record("server", "server-error", String(e?.message || e)));
 	const origin = `http://127.0.0.1:${server.address().port}`;
 
 	return {

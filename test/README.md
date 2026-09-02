@@ -139,8 +139,11 @@ minute to load its page after OBS starts, and nothing announces when it has. Rep
 
 Three things, in about a second, with no build:
 
-1. every test file parses
-2. every `suite.mjs` satisfies the contract, and the files it names exist
+1. every test file parses — modules and standalone scripts through `node --check`, the
+   inline `<script>` blocks in suite pages compiled without being run, and scene collections
+   as JSON
+2. every `suite.mjs` satisfies the contract, and the files it names are real files inside
+   the suite directory
 3. every api function a suite calls exists in `JavascriptApi.h`
 
 (3) is the one that earns its place. A renamed or misspelled api call otherwise costs a

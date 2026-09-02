@@ -126,15 +126,21 @@ async function runSuite(name) {
 	// would block every later one. --keep-open therefore applies to the last suite that runs.
 	const keepOpen = has("--keep-open") && name === selected.at(-1);
 	keepCurrentOpen = keepOpen;
-	const suite = await load(name);
+
 	const workDir = join(WORK, name);
-	rmSync(workDir, { recursive: true, force: true });
-	mkdirSync(workDir, { recursive: true });
-
 	let server, cdp, obs;
-	const run = { suite: name, description: suite.description, results: [], ms: 0 };
+	const run = { suite: name, results: [], ms: 0 };
 
+	// Importing the suite and preparing its scratch directory are inside the boundary too:
+	// outside it, a suite.mjs that will not import took down the whole loop, and the console
+	// and JUnit reports for the suites that did run were never written.
 	try {
+		const suite = await load(name);
+		run.description = suite.description;
+
+		rmSync(workDir, { recursive: true, force: true });
+		mkdirSync(workDir, { recursive: true });
+
 		server = await startServer({ dir: suite.dir, port: Number(opt("--observer-port", "0")) });
 		const pageUrl = server.pageUrl(suite.page);
 
