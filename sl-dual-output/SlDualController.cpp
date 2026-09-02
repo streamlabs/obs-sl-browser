@@ -183,11 +183,6 @@ void SlDualController::stopStream()
 		output->requestStop();
 }
 
-bool SlDualController::streamActive() const
-{
-	return output && output->active();
-}
-
 bool SlDualController::streamBusy() const
 {
 	return output && output->state() != SlDualStreamState::Idle;
@@ -201,8 +196,8 @@ void SlDualController::applySettings(const SlDualConfig& next)
 
 	// A running output cannot be resized under it. Sampled before the assignment below, and the old
 	// size put back after, because storing the requested one would have config() report a size the
-	// canvas never took - and nothing re-applies it on stop. streamBusy(), not streamActive(): the
-	// same lock the settings dialog and the js api use, and it holds while the output is starting.
+	// canvas never took - and nothing re-applies it on stop. The same lock the settings dialog and
+	// the js api use, and it holds while the output is merely starting.
 	bool sizeLocked = streamBusy();
 	uint32_t lockedWidth = config.canvasWidth;
 	uint32_t lockedHeight = config.canvasHeight;
@@ -463,13 +458,18 @@ void SlDualController::onFrontendEvent(enum obs_frontend_event event)
 	{
 	case OBS_FRONTEND_EVENT_STREAMING_STARTED:
 	{
-		if (config.autoStart && !streamActive() && !config.server.empty())
+		// Starting again over an output that is already starting or reconnecting would re-enter
+		//	SlDualStreamOutput::start, which guards only Stopping and an already-active output.
+		if (config.autoStart && !streamBusy() && !config.server.empty())
 			startStream();
 		break;
 	}
 	case OBS_FRONTEND_EVENT_STREAMING_STOPPING:
 	{
-		if (config.autoStart && streamActive())
+		// An output caught mid-connect is exactly the one that must not be left behind: it is not
+		//	active yet, so a check for that would skip it and autoStart would let it go live on
+		//	its own after the main stream had already stopped.
+		if (config.autoStart && streamBusy())
 			stopStream();
 		break;
 	}
@@ -505,9 +505,15 @@ void SlDualController::onCollectionChanging()
 {
 	// The frontend is about to destroy its canvases and this collection's scenes.
 	// Stop the output hard, quiesce the preview, drop canvas refs.
-	m_restartOutputAfterCollectionChange = streamActive();
+	// Read once: the two decisions below are not the same question. Anything not Idle has to be
+	// stopped before its canvas goes away, but Stopping must not come back afterwards - the user
+	// already asked for it to stop, and restarting it here would override that.
+	SlDualStreamState state = output ? output->state() : SlDualStreamState::Idle;
 
-	if (output && m_restartOutputAfterCollectionChange)
+	m_restartOutputAfterCollectionChange = state == SlDualStreamState::Starting || state == SlDualStreamState::Live ||
+					       state == SlDualStreamState::Reconnecting;
+
+	if (output && state != SlDualStreamState::Idle)
 	{
 		output->hardStop();
 		onOutputState(SlDualStreamState::Idle, "Paused for scene collection change");

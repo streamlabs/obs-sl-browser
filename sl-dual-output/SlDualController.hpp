@@ -38,10 +38,10 @@ public: // lifecycle (called by the facade)
 public: // actions, UI thread (dock / editor / settings dialog)
 	void startStream();
 	void stopStream();
-	bool streamActive() const;
 
-	// Anything other than Idle. streamActive() is active() alone, which is false while the output is
-	// starting, reconnecting or stopping - windows in which the canvas still must not be resized.
+	// Anything other than Idle. Deliberately not obs_output_active(), which is false while the
+	// output is starting, reconnecting or stopping, and false for one that failed to connect - it
+	// answers "is it carrying data", where every caller here means "is it in use".
 	bool streamBusy() const;
 	void applySettings(const SlDualConfig& next);
 

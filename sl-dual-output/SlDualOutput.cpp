@@ -185,7 +185,10 @@ bool SlDualOutput::startStream()
 		return false;
 
 	m_controller->startStream();
-	return m_controller->streamActive();
+
+	// Whether the output was accepted, not whether it has connected - connecting is asynchronous,
+	// so an is-it-active check here would report false for a start that is going perfectly well.
+	return m_controller->streamBusy();
 }
 
 bool SlDualOutput::stopStream()

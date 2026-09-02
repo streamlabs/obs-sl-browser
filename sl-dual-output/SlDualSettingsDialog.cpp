@@ -29,7 +29,7 @@ static const SizePreset kPresets[] = {
 	{"540 x 960 (9:16 vertical)", 540, 960},
 };
 
-SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool streamActive, QWidget* parent)
+SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool streamBusy, QWidget* parent)
 	: QDialog(parent),
 	  m_base(current)
 {
@@ -160,7 +160,7 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	auto* layout = new QVBoxLayout(this);
 	layout->addLayout(form);
 
-	if (streamActive)
+	if (streamBusy)
 	{
 		m_sizePreset->setEnabled(false);
 		auto* note = new QLabel("Canvas size is locked while the vertical stream is live.", this);
