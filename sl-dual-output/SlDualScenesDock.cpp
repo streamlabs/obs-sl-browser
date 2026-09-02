@@ -199,8 +199,14 @@ void SlDualScenesDock::showContextMenu(const QPoint& pos)
 	QMenu menu(this);
 	menu.addAction("Add Scene", [this]() { onAdd(); });
 
-	if (m_list->itemAt(pos))
+	// Both actions work on the current row - Rename through currentItem(), Remove through the
+	// canvas's active scene - so the clicked row has to become current first, or right-clicking an
+	// unselected scene acts on a different one. Selecting on right-click is what the main OBS
+	// scene list does too.
+	if (QListWidgetItem* clicked = m_list->itemAt(pos))
 	{
+		m_list->setCurrentItem(clicked);
+
 		menu.addAction("Rename", [this]() { m_list->editItem(m_list->currentItem()); });
 		menu.addAction("Remove", [this]() { onRemove(); });
 	}

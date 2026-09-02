@@ -39,6 +39,10 @@ public: // actions, UI thread (dock / editor / settings dialog)
 	void startStream();
 	void stopStream();
 	bool streamActive() const;
+
+	// Anything other than Idle. streamActive() is active() alone, which is false while the output is
+	// starting, reconnecting or stopping - windows in which the canvas still must not be resized.
+	bool streamBusy() const;
 	void applySettings(const SlDualConfig& next);
 
 	void sceneSetActive(const std::string& name);

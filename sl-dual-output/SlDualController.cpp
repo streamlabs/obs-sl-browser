@@ -188,16 +188,34 @@ bool SlDualController::streamActive() const
 	return output && output->active();
 }
 
+bool SlDualController::streamBusy() const
+{
+	return output && output->state() != SlDualStreamState::Idle;
+}
+
 void SlDualController::applySettings(const SlDualConfig& next)
 {
 	// Scene state is owned by the dock/editor; preserve it.
 	std::string activeScene = config.activeScene;
 	bool wasEnabled = config.enabled;
 
+	// A running output cannot be resized under it. Sampled before the assignment below, and the old
+	// size put back after, because storing the requested one would have config() report a size the
+	// canvas never took - and nothing re-applies it on stop. streamBusy(), not streamActive(): the
+	// same lock the settings dialog and the js api use, and it holds while the output is starting.
+	bool sizeLocked = streamBusy();
+	uint32_t lockedWidth = config.canvasWidth;
+	uint32_t lockedHeight = config.canvasHeight;
+
 	config = next;
 	config.activeScene = activeScene;
 
-	if (canvas && !streamActive())
+	if (sizeLocked)
+	{
+		config.canvasWidth = lockedWidth;
+		config.canvasHeight = lockedHeight;
+	}
+	else if (canvas)
 	{
 		canvas->resetVideo(config.canvasWidth, config.canvasHeight);
 		config.canvasWidth = canvas->width();

@@ -551,7 +551,9 @@ public:
 			//	'server' is any RTMP url, so a platform ingest or the Streamlabs multistream endpoint both work.
 			//	'encoderId' is an obs encoder id ("obs_x264", "jim_nvenc", ...); it falls back to obs_x264 if unavailable.
 			//	'audioTrack' is 1-based and selects which of the main audio mixes to encode - there is no separate vertical audio.
-			//	Empty strings and non-positive numbers keep the stored value, so a partial update is safe.
+			//		Out of range is an error rather than a clamp, so the reported track is always the one encoded.
+			//	Empty strings, non-positive numbers and omitted booleans keep the stored value, so a partial update is safe.
+			//		There is deliberately no way to clear a stored string this way; send a new value instead.
 			//	'autoStart' starts and stops this output with the main OBS stream.
 			{"dualoutput_setStreamSettings", JS_DUALOUTPUT_SET_STREAM_SETTINGS},
 

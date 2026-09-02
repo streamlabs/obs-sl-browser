@@ -26,6 +26,9 @@ private:
 	SlDualConfig m_base;
 
 	QComboBox* m_sizePreset = nullptr;
+
+	// Index of the "Custom (W x H)" entry, or -1 when the size matched a preset and none was added.
+	int m_customIndex = -1;
 	QSpinBox* m_width = nullptr;
 	QSpinBox* m_height = nullptr;
 	QLineEdit* m_server = nullptr;

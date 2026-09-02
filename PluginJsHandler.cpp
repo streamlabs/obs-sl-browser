@@ -1588,6 +1588,14 @@ void PluginJsHandler::JS_GET_CURRENT_SCENE(const json11::Json &params, std::stri
 
 	std::string canvas_name = params["param2"].string_value();
 
+	// These handlers take no scene name, so there is no resolveSceneSource to reject an unknown
+	//	canvas for them: without this the vertical branch is simply skipped and main is read instead.
+	if (!isKnownCanvas(canvas_name))
+	{
+		out_jsonReturn = unknownCanvasError(canvas_name);
+		return;
+	}
+
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
@@ -3483,6 +3491,12 @@ void PluginJsHandler::JS_ENUM_SCENES(const json11::Json &params, std::string &ou
 
 	std::string canvas_name = params["param2"].string_value();
 
+	if (!isKnownCanvas(canvas_name))
+	{
+		out_jsonReturn = unknownCanvasError(canvas_name);
+		return;
+	}
+
 	QMetaObject::invokeMethod(
 		mainWindow,
 		[canvas_name, &out_jsonReturn]() {
@@ -3548,6 +3562,12 @@ void PluginJsHandler::JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
 	std::string canvas_name = params["param2"].string_value();
+
+	if (!isKnownCanvas(canvas_name))
+	{
+		out_jsonReturn = unknownCanvasError(canvas_name);
+		return;
+	}
 
 	QMetaObject::invokeMethod(
 		mainWindow,
@@ -3844,6 +3864,15 @@ void PluginJsHandler::JS_DUALOUTPUT_SET_CANVAS_SIZE(const json11::Json &params, 
 
 	onUiThread([width, height, &out_jsonReturn]() {
 		SlDualOutput &dual = SlDualOutput::instance();
+
+		// The canvas cannot be resized under a running output, and a request made anyway would
+		//	otherwise report back the old size with nothing to say why.
+		if (dual.streamState() != "idle")
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Canvas size is locked while the vertical stream is live"}})).dump();
+			return;
+		}
+
 		SlDualConfig cfg = dual.config();
 		cfg.canvasWidth = static_cast<uint32_t>(width);
 		cfg.canvasHeight = static_cast<uint32_t>(height);
@@ -3879,27 +3908,46 @@ void PluginJsHandler::JS_DUALOUTPUT_SET_STREAM_SETTINGS(const json11::Json &para
 {
 	std::string server = params["param2"].string_value();
 	std::string key = params["param3"].string_value();
-	bool use_auth = params["param4"].bool_value();
 	std::string username = params["param5"].string_value();
 	std::string password = params["param6"].string_value();
 	std::string encoder_id = params["param7"].string_value();
 	int video_bitrate = params["param8"].int_value();
 	int audio_bitrate = params["param9"].int_value();
 	int audio_track = params["param10"].int_value();
+
+	// A boolean has no empty or zero form, so an omitted one is told apart by its type rather than
+	//	its value. Without this a partial update silently switches both of these off.
+	bool has_use_auth = params["param4"].is_bool();
+	bool has_auto_start = params["param11"].is_bool();
+	bool use_auth = params["param4"].bool_value();
 	bool auto_start = params["param11"].bool_value();
 
-	onUiThread([server, key, use_auth, username, password, encoder_id, video_bitrate, audio_bitrate, audio_track, auto_start, &out_jsonReturn]() {
+	// Rejected rather than clamped: SlDualStreamOutput::start clamps to the same bound, so storing
+	//	an out-of-range track would have getStreamSettings report a track that is not the one encoded.
+	if (audio_track > (int)MAX_AUDIO_MIXES)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "audio_track must be between 1 and " + std::to_string(MAX_AUDIO_MIXES)}})).dump();
+		return;
+	}
+
+	onUiThread([server, key, has_use_auth, use_auth, username, password, encoder_id, video_bitrate, audio_bitrate, audio_track, has_auto_start, auto_start, &out_jsonReturn]() {
 		SlDualOutput &dual = SlDualOutput::instance();
 		SlDualConfig cfg = dual.config();
 
-		cfg.server = server;
-		cfg.key = key;
-		cfg.useAuth = use_auth;
-		cfg.authUsername = username;
-		cfg.authPassword = password;
-		cfg.autoStart = auto_start;
+		// Absent strings, numerics and booleans keep the stored value rather than writing a broken
+		// one, which is what makes a partial update safe - the contract JavascriptApi.h states.
+		if (!server.empty())
+			cfg.server = server;
 
-		// Absent numerics and strings arrive empty/zero; keep the stored value rather than writing a broken one.
+		if (!key.empty())
+			cfg.key = key;
+
+		if (!username.empty())
+			cfg.authUsername = username;
+
+		if (!password.empty())
+			cfg.authPassword = password;
+
 		if (!encoder_id.empty())
 			cfg.encoderId = encoder_id;
 
@@ -3911,6 +3959,12 @@ void PluginJsHandler::JS_DUALOUTPUT_SET_STREAM_SETTINGS(const json11::Json &para
 
 		if (audio_track > 0)
 			cfg.audioTrack = audio_track;
+
+		if (has_use_auth)
+			cfg.useAuth = use_auth;
+
+		if (has_auto_start)
+			cfg.autoStart = auto_start;
 
 		out_jsonReturn = dual.applyConfig(cfg) ? dualSuccess() : dualUnavailableError();
 	});

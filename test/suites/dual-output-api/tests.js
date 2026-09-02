@@ -131,6 +131,25 @@
     });
   });
 
+  /* The handlers above resolve a scene, so an unknown canvas is refused on the way. These three
+     take a canvas and no scene, so nothing else would catch a typo: before they were guarded, each
+     one skipped its vertical branch and answered for the main canvas instead. */
+  test("a typo is refused by the handlers that take no scene name", function () {
+    var bogus = "verticle";
+
+    return call("obs_get_current_scene", bogus).then(function (res) {
+      check(!!res.error, "obs_get_current_scene answered for a canvas named '" + bogus + "': " + JSON.stringify(res));
+      return call("obs_canvas_get_dimensions", bogus);
+    }).then(function (res) {
+      check(!!res.error, "obs_canvas_get_dimensions answered for '" + bogus + "': " + JSON.stringify(res));
+      return call("obs_enum_scenes", bogus);
+    }).then(function (res) {
+      // This one answers with an array when it works, so an error object is the only refusal shape.
+      check(!Array.isArray(res) && !!res.error,
+        "obs_enum_scenes enumerated a canvas named '" + bogus + "': " + JSON.stringify(res));
+    });
+  });
+
   test("adds a source to a vertical scene and round-trips its position", function (ctx) {
     ctx.sourceName = PREFIX + "src";
     var ids = ["color_source_v3", "color_source_v2", "color_source"];
@@ -168,16 +187,31 @@
     });
   });
 
-  test("reports vertical canvas dimensions, not the main ones", function () {
-    var v;
-    return call("obs_canvas_get_dimensions", V).then(function (r) {
-      v = checkOk(r, "vertical dimensions");
-      return call("obs_canvas_get_dimensions");
-    }).then(function (m) {
-      checkOk(m, "main dimensions");
-      check(v.width > 0 && v.height > 0, "vertical dimensions are zero");
-      check(!(v.width === m.width && v.height === m.height),
-        "vertical dimensions match main exactly (" + v.width + "x" + v.height + "), suspicious");
+  /* Equal main and vertical sizes are a perfectly valid setup, so "they differ" proves nothing
+     about which canvas was read. Set a size on the vertical canvas and require exactly it back. */
+  test("reports vertical canvas dimensions, not the main ones", function (ctx) {
+    var w = 540;
+    var h = 960;
+
+    return call("dualoutput_getState").then(function (s) {
+      checkOk(s, "getState");
+      if (!ctx.sizeBefore) ctx.sizeBefore = s.canvas;
+      return call("dualoutput_setCanvasSize", w, h);
+    }).then(function (applied) {
+      checkOk(applied, "setCanvasSize");
+      // The canvas aligns what it is given; compare against what it said it took.
+      w = applied.width;
+      h = applied.height;
+      return call("obs_canvas_get_dimensions", V);
+    }).then(function (v) {
+      checkOk(v, "vertical dimensions");
+      check(v.width === w && v.height === h,
+        "vertical dimensions are " + v.width + "x" + v.height + ", expected the " + w + "x" + h + " just applied");
+      return call("dualoutput_getState");
+    }).then(function (s) {
+      checkOk(s, "getState after resize");
+      check(s.canvas.width === w && s.canvas.height === h,
+        "getState reports " + s.canvas.width + "x" + s.canvas.height + ", expected " + w + "x" + h);
     });
   });
 
@@ -185,7 +219,7 @@
     return call("dualoutput_getStreamSettings").then(function (before) {
       ctx.settingsBefore = checkOk(before, "getStreamSettings");
       return call("dualoutput_setStreamSettings",
-        "rtmp://127.0.0.1/slt", "slt-key", false, "", "", "obs_x264", 3210, 96, 1, false);
+        "rtmp://127.0.0.1/slt", "slt-key", true, "slt-user", "slt-pass", "obs_x264", 3210, 96, 1, true);
     }).then(function (r) {
       checkOk(r, "setStreamSettings");
       return call("dualoutput_getStreamSettings");
@@ -193,24 +227,48 @@
       checkOk(got, "getStreamSettings after set");
       check(got.server === "rtmp://127.0.0.1/slt", "server not stored, got: " + got.server);
       check(got.key === "slt-key", "key not stored");
+      check(got.username === "slt-user", "username not stored, got: " + got.username);
+      check(got.password === "slt-pass", "password not stored");
+      check(got.use_auth === true, "use_auth not stored");
+      check(got.auto_start === true, "auto_start not stored");
       check(got.video_bitrate === 3210, "video_bitrate not stored, got: " + got.video_bitrate);
       check(got.audio_bitrate === 96, "audio_bitrate not stored");
     });
   });
 
+  /* Every field, not just the one that happened to be guarded. The previous version passed a
+     non-empty server and key, so it never exercised the case where an empty string was assigned
+     straight over a stored credential. */
   test("a partial update keeps the values it omits", function () {
-    // Empty strings and non-positive numbers are documented as "keep stored value".
+    // Only the video bitrate is supplied; everything else is the documented "keep stored value".
     return call("dualoutput_setStreamSettings",
-      "rtmp://127.0.0.1/changed", "slt-key", false, "", "", "", 0, 0, 0, false).then(function (r) {
+      "", "", undefined, "", "", "", 4200, 0, 0, undefined).then(function (r) {
       checkOk(r, "partial setStreamSettings");
       return call("dualoutput_getStreamSettings");
     }).then(function (got) {
       checkOk(got, "getStreamSettings after partial");
-      check(got.server === "rtmp://127.0.0.1/changed", "server did not update");
-      check(got.video_bitrate === 3210, "video_bitrate was clobbered by 0, got: " + got.video_bitrate);
+      check(got.video_bitrate === 4200, "video_bitrate did not update, got: " + got.video_bitrate);
+      check(got.server === "rtmp://127.0.0.1/slt", "server was cleared by an empty string, got: " + got.server);
+      check(got.key === "slt-key", "key was cleared by an empty string");
+      check(got.username === "slt-user", "username was cleared by an empty string");
+      check(got.password === "slt-pass", "password was cleared by an empty string");
+      check(got.use_auth === true, "use_auth was switched off by an omitted boolean");
+      check(got.auto_start === true, "auto_start was switched off by an omitted boolean");
       check(got.audio_bitrate === 96, "audio_bitrate was clobbered by 0");
       check(got.encoder_id && got.encoder_id.length > 0, "encoder_id was cleared by an empty string");
     });
+  });
+
+  test("an out of range audio track is refused, not clamped", function () {
+    return call("dualoutput_setStreamSettings", "", "", undefined, "", "", "", 0, 0, 99, undefined)
+      .then(function (r) {
+        check(!!r.error, "expected an error for audio track 99, got: " + JSON.stringify(r));
+        return call("dualoutput_getStreamSettings");
+      }).then(function (got) {
+        checkOk(got, "getStreamSettings after a refused track");
+        // The refusal has to leave the stored track alone, or it is a clamp with extra steps.
+        check(got.audio_track === 1, "a refused track still changed the stored one, got: " + got.audio_track);
+      });
   });
 
   test("enhanced_broadcasting mode refuses to start our own output", function (ctx) {
@@ -247,7 +305,7 @@
   test("canvas size reports what was actually applied", function (ctx) {
     return call("dualoutput_getState").then(function (s) {
       checkOk(s, "getState");
-      ctx.sizeBefore = s.canvas;
+      if (!ctx.sizeBefore) ctx.sizeBefore = s.canvas;
       // 1079 is not 4-aligned; width should come back aligned to a multiple of 4.
       return call("dualoutput_setCanvasSize", 1079, 1920);
     }).then(function (applied) {
@@ -258,15 +316,47 @@
     });
   });
 
+  /* Last, because it briefly starts an output. The size guard has no other coverage: every other
+     test runs with the stream idle, which is the branch that was already correct. */
+  test("a resize is refused while the stream is live", function (ctx) {
+    return call("dualoutput_getState").then(function (s) {
+      checkOk(s, "getState");
+      if (!ctx.sizeBefore) ctx.sizeBefore = s.canvas;
+      if (!ctx.modeBefore) ctx.modeBefore = s.output_mode;
+      // Nothing is listening there. startStream returns once the output is accepted, not once it
+      // connects, and "starting" is already not "idle" - which is all the guard looks at.
+      return call("dualoutput_setStreamSettings",
+        "rtmp://127.0.0.1:1/none", "k", undefined, "", "", "", 0, 0, 0, undefined);
+    }).then(function (r) {
+      checkOk(r, "setStreamSettings for the live check");
+      return call("dualoutput_startStream");
+    }).then(function (started) {
+      checkOk(started, "startStream");
+      check(started.stream_state !== "idle", "the output never left idle, nothing to guard against");
+      return call("dualoutput_setCanvasSize", 720, 1280);
+    }).then(function (res) {
+      check(!!res.error, "a resize was accepted while the stream was live: " + JSON.stringify(res));
+      return call("dualoutput_getState");
+    }).then(function (s) {
+      // The refusal has to leave the stored size alone: reporting a size the canvas never took is
+      // the actual defect, and it outlives the stream.
+      check(!(s.canvas.width === 720 && s.canvas.height === 1280),
+        "the refused size was stored anyway, getState reports " + s.canvas.width + "x" + s.canvas.height);
+      return call("dualoutput_stopStream");
+    });
+  });
+
   /* ----------------------------------------------------------- cleanup --- */
 
   function cleanup(ctx) {
     var removed = [];
     ctx = ctx || {};
 
-    // Scans both canvases for the prefix rather than trusting ctx, so an interrupted
-    // run can be tidied up by calling cleanup on its own.
-    return call("obs_enum_scenes", V).then(function (list) {
+    // Before anything else: a live output would make the setCanvasSize restore below fail, and a
+    // test that threw part way through its live section may have left one running.
+    return call("dualoutput_stopStream").then(function () {
+      return call("obs_enum_scenes", V);
+    }).then(function (list) {
       var doomed = names(list).filter(function (n) { return n.indexOf(PREFIX) === 0; });
 
       return doomed.reduce(function (chain, n) {

@@ -44,6 +44,15 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	for (const SizePreset& preset : kPresets)
 		m_sizePreset->addItem(preset.label);
 
+	// A size set through the js api need not be one of the three presets. Without an entry holding
+	// it, opening this dialog would snap the canvas to 1080x1920 and accepting an unrelated change
+	// would silently resize it.
+	if (presetIndexFor(current.canvasWidth, current.canvasHeight) < 0)
+	{
+		m_customIndex = m_sizePreset->count();
+		m_sizePreset->addItem(QString("Custom (%1 x %2)").arg(current.canvasWidth).arg(current.canvasHeight));
+	}
+
 	// Disabled mirrors of the preset; wide enough for four digits.
 	m_width = new QSpinBox(this);
 	m_width->setRange(32, 8192);
@@ -71,6 +80,10 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig& current, bool str
 	QObject::connect(m_sizePreset, &QComboBox::currentIndexChanged, this, [this](int index) { onPresetChanged(index); });
 
 	int presetIndex = presetIndexFor(current.canvasWidth, current.canvasHeight);
+
+	if (presetIndex < 0)
+		presetIndex = m_customIndex;
+
 	m_sizePreset->setCurrentIndex(presetIndex);
 	onPresetChanged(presetIndex);
 
@@ -169,13 +182,14 @@ int SlDualSettingsDialog::presetIndexFor(uint32_t width, uint32_t height) const
 			return i;
 	}
 
-	// Sizes saved by older builds (custom preset) snap to 1080x1920.
-	return 0;
+	// -1, not a fallback preset: the caller adds a Custom entry so the size survives the dialog.
+	return -1;
 }
 
 void SlDualSettingsDialog::onPresetChanged(int index)
 {
-	if (index < 0 || index >= (int)(sizeof(kPresets) / sizeof(kPresets[0])))
+	// The Custom entry stands for the size the dialog opened with, which the mirrors already show.
+	if (index == m_customIndex || index < 0 || index >= (int)(sizeof(kPresets) / sizeof(kPresets[0])))
 		return;
 
 	m_width->setValue((int)kPresets[index].width);
