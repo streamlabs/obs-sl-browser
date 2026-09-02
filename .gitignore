@@ -84,3 +84,6 @@ tags
 */**/.DS_Store
 
 grpc_dist/
+
+#test harness scratch
+/test/.work/
