@@ -12,11 +12,19 @@
 #include <ShlObj.h>
 #include <shellapi.h>
 #include <Psapi.h>
+#include <bcrypt.h>
+#pragma comment(lib, "bcrypt.lib")
 
 // Stl
 #include <chrono>
 #include <functional>
 #include <codecvt>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <algorithm>
+#include <cwctype>
+#include <vector>
 
 // Obs
 #include <obs.hpp>
@@ -41,6 +49,9 @@ PluginJsHandler::PluginJsHandler() {}
 PluginJsHandler::~PluginJsHandler()
 {
 	stop();
+
+	if (m_childJob)
+		CloseHandle(m_childJob);
 
 	if (m_restartApp)
 		QProcess::startDetached(*m_restartProgramStr, *m_restartArguments);
@@ -288,6 +299,16 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_SOURCE_FILTER_REMOVE: JS_SOURCE_FILTER_REMOVE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_QT_GET_COOKIE_VALUE: JS_QT_GET_COOKIE_VALUE(jsonParams, jsonReturnStr); break;			
 		case JavascriptApi::JS_BROWSERSOURCE_SEND_MESSAGE: JS_BROWSERSOURCE_SEND_MESSAGE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_PATH_JOIN: JS_PATH_JOIN(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_GET_ENV_VAR: JS_GET_ENV_VAR(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_MKDIR: JS_MKDIR(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_PATH_EXISTS: JS_PATH_EXISTS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_REMOVE_PATH: JS_REMOVE_PATH(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_MOVE_PATH: JS_MOVE_PATH(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_SHA256_FILE: JS_SHA256_FILE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_WRITE_FILE: JS_WRITE_FILE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_IS_PROCESS_RUNNING: JS_IS_PROCESS_RUNNING(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_STOP_PROCESS: JS_STOP_PROCESS(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -1837,47 +1858,58 @@ void PluginJsHandler::JS_CREATE_SCENE(const json11::Json &params, std::string &o
 		Qt::BlockingQueuedConnection);
 }
 
+// One job object shared by every exe we launch. KILL_ON_JOB_CLOSE ties them all to our lifetime,
+// so this handle is created once and released in the destructor rather than per launch.
+HANDLE PluginJsHandler::getChildJob()
+{
+	if (m_childJob)
+		return m_childJob;
+
+	HANDLE job = CreateJobObjectW(nullptr, nullptr);
+
+	if (!job)
+		return nullptr;
+
+	JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobInfo = {};
+	jobInfo.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+	if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &jobInfo, sizeof(jobInfo)))
+	{
+		// Without the limit the job buys us nothing, so don't hold a handle to it.
+		CloseHandle(job);
+		return nullptr;
+	}
+
+	m_childJob = job;
+	return m_childJob;
+}
+
 void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::string &out_jsonReturn)
 {
-	static std::unordered_map<std::string, HANDLE> s_processes;
-
 	const auto &param2Value = params["param2"];
 	std::string fileName = param2Value.string_value();
-
-	// Check if this specific exe is already running
-	auto it = s_processes.find(fileName);
-
-	if (it != s_processes.end())
-	{
-		DWORD exitCode = 0;
-
-		if (GetExitCodeProcess(it->second, &exitCode) && exitCode == STILL_ACTIVE)
-		{
-			out_jsonReturn = Json(Json::object({{"success", false}, {"error", fileName + " is already running"}})).dump();
-			return;
-		}
-
-		CloseHandle(it->second);
-		s_processes.erase(it);
-	}
+	const bool hideWindow = params["param3"].bool_value();
 
 	std::wstring folderPath = getDownloadsDir();
 	std::wstring wFileName(fileName.begin(), fileName.end());
 	std::wstring fullPath = folderPath + L"\\" + wFileName;
 
-	HANDLE hJob = CreateJobObjectW(nullptr, nullptr);
-
-	if (hJob)
-	{
-		JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobInfo = {};
-		jobInfo.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-		SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jobInfo, sizeof(jobInfo));
-	}
+	// Tie the child's lifetime to ours: the launched exe is terminated if this (parent) process goes away.
+	HANDLE hJob = getChildJob();
 
 	STARTUPINFOW si = {sizeof(si)};
 	PROCESS_INFORMATION pi = {};
+	DWORD creationFlags = CREATE_SUSPENDED;
 
-	BOOL success = CreateProcessW(fullPath.c_str(), nullptr, nullptr, nullptr, FALSE, CREATE_SUSPENDED, nullptr, folderPath.c_str(), &si, &pi);
+	if (hideWindow)
+	{
+		// SW_HIDE hides a GUI window; CREATE_NO_WINDOW suppresses the console a console app would otherwise get.
+		si.dwFlags |= STARTF_USESHOWWINDOW;
+		si.wShowWindow = SW_HIDE;
+		creationFlags |= CREATE_NO_WINDOW;
+	}
+
+	BOOL success = CreateProcessW(fullPath.c_str(), nullptr, nullptr, nullptr, FALSE, creationFlags, nullptr, folderPath.c_str(), &si, &pi);
 
 	if (success)
 	{
@@ -1886,13 +1918,12 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 
 		ResumeThread(pi.hThread);
 		CloseHandle(pi.hThread);
-		s_processes[fileName] = pi.hProcess;
-		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+
+		m_childProcesses[pi.dwProcessId] = pi.hProcess;
+		out_jsonReturn = Json(Json::object({{"success", true}, {"pid", (int)pi.dwProcessId}})).dump();
 	}
 	else
 	{
-		if (hJob)
-			CloseHandle(hJob);
 		out_jsonReturn = Json(Json::object({{"success", false}, {"error", "CreateProcess failed with error " + std::to_string(GetLastError())}})).dump();
 	}
 }
@@ -1901,6 +1932,9 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 {
 	const auto &param2Value = params["param2"];
 	std::string url = param2Value.string_value();
+
+	// Optional SHA-256 (hex). When provided, the downloaded zip must match it before we unpack anything.
+	std::string expectedSha = params["param3"].string_value();
 	std::wstring folderPath = getDownloadsDir();
 
 	if (!folderPath.empty())
@@ -1927,25 +1961,64 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 
 		if (WindowsFunctions::DownloadFile(url, wstring_to_utf8(zipFilepath)))
 		{
-			std::vector<std::string> filepaths;
+			// Verify the checksum (if one was supplied) before trusting the archive.
+			bool shaOk = true;
+			std::string shaError;
 
-			if (WindowsFunctions::Unzip(wstring_to_utf8(zipFilepath), filepaths))
+			if (!expectedSha.empty())
 			{
-				// Build json string now
-				Json::array json_array;
+				std::string actualSha;
+				std::string hashErr;
 
-				for (const auto &filepath : filepaths)
+				if (!sha256File(zipFilepath, actualSha, hashErr))
 				{
-					Json::object obj;
-					obj["path"] = filepath;
-					json_array.push_back(obj);
+					shaOk = false;
+					shaError = "Failed to hash downloaded file: " + hashErr;
 				}
+				else
+				{
+					// Lowercase the expected hex so the compare is case-insensitive (actualSha is already lowercase).
+					std::string expectedLower = expectedSha;
+					for (char &c : expectedLower)
+					{
+						if (c >= 'A' && c <= 'Z')
+							c = (char)(c - 'A' + 'a');
+					}
 
-				out_jsonReturn = Json(json_array).dump();
+					if (actualSha != expectedLower)
+					{
+						shaOk = false;
+						shaError = "SHA-256 mismatch: expected " + expectedLower + ", got " + actualSha;
+					}
+				}
+			}
+
+			if (!shaOk)
+			{
+				out_jsonReturn = Json(Json::object({{"error", shaError}})).dump();
 			}
 			else
 			{
-				out_jsonReturn = Json(Json::object({{"error", "Unzip file failed"}})).dump();
+				std::vector<std::string> filepaths;
+
+				if (WindowsFunctions::Unzip(wstring_to_utf8(zipFilepath), filepaths))
+				{
+					// Build json string now
+					Json::array json_array;
+
+					for (const auto &filepath : filepaths)
+					{
+						Json::object obj;
+						obj["path"] = filepath;
+						json_array.push_back(obj);
+					}
+
+					out_jsonReturn = Json(json_array).dump();
+				}
+				else
+				{
+					out_jsonReturn = Json(Json::object({{"error", "Unzip file failed"}})).dump();
+				}
 			}
 		}
 		else
@@ -2320,6 +2393,348 @@ void PluginJsHandler::JS_QUERY_DOWNLOADS_FOLDER(const Json &params, std::string 
 	{
 		out_jsonReturn = Json(Json::object({{"error", "Failed to query downloads folder: " + std::string(e.what())}})).dump();
 	}
+}
+
+void PluginJsHandler::JS_PATH_JOIN(const Json &params, std::string &out_jsonReturn)
+{
+	const std::string a = params["param2"].string_value();
+	const std::string b = params["param3"].string_value();
+
+	if (a.empty() && b.empty())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid params"}})).dump();
+		return;
+	}
+
+	std::filesystem::path joined;
+
+	if (a.empty())
+		joined = std::filesystem::path(utf8_to_ws(b));
+	else if (b.empty())
+		joined = std::filesystem::path(utf8_to_ws(a));
+	else
+		joined = std::filesystem::path(utf8_to_ws(a)) / std::filesystem::path(utf8_to_ws(b));
+
+	joined = joined.make_preferred();
+
+	out_jsonReturn = Json(Json::object({{"path", ws_to_utf8(joined.wstring())}})).dump();
+}
+
+void PluginJsHandler::JS_GET_ENV_VAR(const Json &params, std::string &out_jsonReturn)
+{
+	const std::string varName = params["param2"].string_value();
+
+	if (varName.empty())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid param"}})).dump();
+		return;
+	}
+
+	std::wstring wName = utf8_to_ws(varName);
+
+	// First call sizes the buffer (return value includes the null terminator when the var exists).
+	DWORD needed = GetEnvironmentVariableW(wName.c_str(), nullptr, 0);
+
+	if (needed == 0)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Environment variable not set: " + varName}})).dump();
+		return;
+	}
+
+	std::wstring value(needed, L'\0');
+	DWORD written = GetEnvironmentVariableW(wName.c_str(), value.data(), needed);
+
+	// 'written' excludes the null terminator
+	value.resize(written); 
+
+	out_jsonReturn = Json(Json::object({{"value", ws_to_utf8(value)}})).dump();
+}
+
+void PluginJsHandler::JS_MKDIR(const Json &params, std::string &out_jsonReturn)
+{
+	const std::string inputPath = params["param2"].string_value();
+
+	std::filesystem::path resolved;
+	std::string err;
+
+	if (!resolveWithinDownloads(getDownloadsDir(), inputPath, resolved, err))
+	{
+		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+		return;
+	}
+
+	std::error_code ec;
+	std::filesystem::create_directories(resolved, ec);
+
+	// create_directories returns false (with no error_code) when the directory already exists - that's fine.
+	if (ec)
+		out_jsonReturn = Json(Json::object({{"error", "Failed to create directory: " + ec.message()}})).dump();
+	else
+		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+}
+
+void PluginJsHandler::JS_PATH_EXISTS(const Json &params, std::string &out_jsonReturn)
+{
+	const std::string inputPath = params["param2"].string_value();
+
+	std::filesystem::path resolved;
+	std::string err;
+
+	// Confined like the rest, so this can't be used to probe for arbitrary files outside the folder.
+	if (!resolveWithinDownloads(getDownloadsDir(), inputPath, resolved, err))
+	{
+		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+		return;
+	}
+
+	std::error_code ec;
+	bool exists = std::filesystem::exists(resolved, ec);
+	bool isDirectory = exists && std::filesystem::is_directory(resolved, ec);
+
+	out_jsonReturn = Json(Json::object({{"exists", exists}, {"isDirectory", isDirectory}})).dump();
+}
+
+void PluginJsHandler::JS_REMOVE_PATH(const Json &params, std::string &out_jsonReturn)
+{
+	const std::string inputPath = params["param2"].string_value();
+	const bool recursive = params["param3"].bool_value();
+	const bool force = params["param4"].bool_value();
+
+	std::filesystem::path resolved;
+	std::string err;
+
+	if (!resolveWithinDownloads(getDownloadsDir(), inputPath, resolved, err))
+	{
+		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+		return;
+	}
+
+	std::error_code ec;
+
+	if (!std::filesystem::exists(resolved, ec))
+	{
+		// 'force' mirrors 'rm -f': a missing target is not an error.
+		if (force)
+			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+		else
+			out_jsonReturn = Json(Json::object({{"error", "Path not found: " + inputPath}})).dump();
+
+		return;
+	}
+
+	const bool isDir = std::filesystem::is_directory(resolved, ec);
+
+	if (isDir && recursive)
+	{
+		std::filesystem::remove_all(resolved, ec);
+	}
+	else if (isDir && !recursive)
+	{
+		// Without 'recursive' this only succeeds on an empty directory, matching 'rmdir' / 'rm' semantics.
+		std::filesystem::remove(resolved, ec);
+
+		if (ec)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Directory not empty (pass recursive=true): " + inputPath}})).dump();
+			return;
+		}
+	}
+	else
+	{
+		std::filesystem::remove(resolved, ec);
+	}
+
+	if (ec)
+		out_jsonReturn = Json(Json::object({{"error", "Failed to remove '" + inputPath + "': " + ec.message()}})).dump();
+	else
+		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+}
+
+void PluginJsHandler::JS_MOVE_PATH(const Json &params, std::string &out_jsonReturn)
+{
+	const std::string srcInput = params["param2"].string_value();
+	const std::string dstInput = params["param3"].string_value();
+
+	const std::wstring downloadsDir = getDownloadsDir();
+
+	std::filesystem::path srcResolved;
+	std::filesystem::path dstResolved;
+	std::string err;
+
+	// Both endpoints must live inside the Streamlabs folder.
+	if (!resolveWithinDownloads(downloadsDir, srcInput, srcResolved, err))
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Source: " + err}})).dump();
+		return;
+	}
+
+	if (!resolveWithinDownloads(downloadsDir, dstInput, dstResolved, err))
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Destination: " + err}})).dump();
+		return;
+	}
+
+	std::error_code ec;
+
+	if (!std::filesystem::exists(srcResolved, ec))
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Source path not found: " + srcInput}})).dump();
+		return;
+	}
+
+	// Refuse to clobber an existing destination. The updater is expected to move the old target out of
+	// the way first, which keeps the swap predictable and avoids accidentally destroying data on overwrite.
+	if (std::filesystem::exists(dstResolved, ec))
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Destination already exists: " + dstInput}})).dump();
+		return;
+	}
+
+	std::filesystem::rename(srcResolved, dstResolved, ec);
+
+	if (ec)
+	{
+		// rename() can't move across volumes; fall back to a recursive copy followed by deleting the source.
+		std::error_code copyEc;
+		std::filesystem::copy(srcResolved, dstResolved, std::filesystem::copy_options::recursive, copyEc);
+
+		if (copyEc)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Failed to move '" + srcInput + "' to '" + dstInput + "': " + copyEc.message()}})).dump();
+			return;
+		}
+
+		std::error_code removeEc;
+		std::filesystem::remove_all(srcResolved, removeEc);
+
+		if (removeEc)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Copied to destination but failed to remove source '" + srcInput + "': " + removeEc.message()}})).dump();
+			return;
+		}
+	}
+
+	out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+}
+
+void PluginJsHandler::JS_SHA256_FILE(const Json &params, std::string &out_jsonReturn)
+{
+	const std::string inputPath = params["param2"].string_value();
+
+	std::filesystem::path resolved;
+	std::string err;
+
+	if (!resolveWithinDownloads(getDownloadsDir(), inputPath, resolved, err))
+	{
+		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+		return;
+	}
+
+	std::error_code ec;
+
+	if (!std::filesystem::exists(resolved, ec) || std::filesystem::is_directory(resolved, ec))
+	{
+		out_jsonReturn = Json(Json::object({{"error", "File not found: " + inputPath}})).dump();
+		return;
+	}
+
+	std::string digest;
+	std::string hashErr;
+
+	if (sha256File(resolved, digest, hashErr))
+		out_jsonReturn = Json(Json::object({{"sha256", digest}})).dump();
+	else
+		out_jsonReturn = Json(Json::object({{"error", hashErr}})).dump();
+}
+
+void PluginJsHandler::JS_WRITE_FILE(const Json &params, std::string &out_jsonReturn)
+{
+	const std::string inputPath = params["param2"].string_value();
+	const std::string contents = params["param3"].string_value();
+	const bool append = params["param4"].bool_value();
+
+	std::filesystem::path resolved;
+	std::string err;
+
+	if (!resolveWithinDownloads(getDownloadsDir(), inputPath, resolved, err))
+	{
+		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+		return;
+	}
+
+	std::ios::openmode mode = std::ios::binary | std::ios::out;
+	mode |= append ? std::ios::app : std::ios::trunc;
+
+	std::ofstream file(resolved, mode);
+
+	if (!file)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Unable to open file for writing (does the parent directory exist?): " + inputPath}})).dump();
+		return;
+	}
+
+	file.write(contents.data(), (std::streamsize)contents.size());
+	file.flush();
+
+	if (!file)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Failed while writing file: " + inputPath}})).dump();
+		return;
+	}
+
+	out_jsonReturn = Json(Json::object({{"success", true}, {"bytesWritten", (int)contents.size()}})).dump();
+}
+
+void PluginJsHandler::JS_IS_PROCESS_RUNNING(const Json &params, std::string &out_jsonReturn)
+{
+	DWORD pid = (DWORD)params["param2"].int_value();
+
+	bool running = false;
+
+	auto it = m_childProcesses.find(pid);
+
+	if (it != m_childProcesses.end())
+	{
+		DWORD exitCode = 0;
+
+		if (GetExitCodeProcess(it->second, &exitCode) && exitCode == STILL_ACTIVE)
+		{
+			running = true;
+		}
+		else
+		{
+			// Process has exited (or the handle is no longer queryable) - release it.
+			CloseHandle(it->second);
+			m_childProcesses.erase(it);
+		}
+	}
+
+	out_jsonReturn = Json(Json::object({{"running", running}})).dump();
+}
+
+void PluginJsHandler::JS_STOP_PROCESS(const Json &params, std::string &out_jsonReturn)
+{
+	DWORD pid = (DWORD)params["param2"].int_value();
+
+	auto it = m_childProcesses.find(pid);
+
+	if (it == m_childProcesses.end())
+	{
+		out_jsonReturn = Json(Json::object({{"success", false}, {"error", "Unknown pid (not a process we started)"}})).dump();
+		return;
+	}
+
+	BOOL terminated = TerminateProcess(it->second, 0);
+	DWORD err = terminated ? 0 : GetLastError();
+
+	// Either way we're done tracking this pid: release the handle and drop it from the cache.
+	CloseHandle(it->second);
+	m_childProcesses.erase(it);
+
+	if (terminated)
+		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+	else
+		out_jsonReturn = Json(Json::object({{"success", false}, {"error", "TerminateProcess failed with error " + std::to_string(err)}})).dump();
 }
 
 void PluginJsHandler::JS_OBS_SOURCE_CREATE(const Json &params, std::string &out_jsonReturn)
@@ -3633,4 +4048,155 @@ void PluginJsHandler::JS_BROWSERSOURCE_SEND_MESSAGE(const json11::Json &params, 
 	}
 
 	out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+}
+
+/***
+* Helpers
+*/
+
+std::string PluginJsHandler::ws_to_utf8(const std::wstring &str)
+{
+	std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+	return conv.to_bytes(str);
+}
+
+std::wstring PluginJsHandler::utf8_to_ws(const std::string &str)
+{
+	std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+	return conv.from_bytes(str);
+}
+
+bool PluginJsHandler::resolveWithinDownloads(const std::wstring &downloadsDir, const std::string &inputPath, std::filesystem::path &out_resolved, std::string &out_error)
+{
+	if (downloadsDir.empty())
+	{
+		out_error = "File system can't access Local AppData folder";
+		return false;
+	}
+
+	if (inputPath.empty())
+	{
+		out_error = "Invalid path: (empty)";
+		return false;
+	}
+
+	std::filesystem::path root = std::filesystem::path(downloadsDir).lexically_normal();
+	std::filesystem::path candidate = (root / utf8_to_ws(inputPath)).lexically_normal();
+
+	std::wstring rootStr = root.wstring();
+	std::wstring candStr = candidate.wstring();
+
+	// Trailing separators on the root would throw off the boundary check below.
+	while (!rootStr.empty() && (rootStr.back() == L'\\' || rootStr.back() == L'/'))
+		rootStr.pop_back();
+
+	auto toLower = [](std::wstring s) {
+		std::transform(s.begin(), s.end(), s.begin(), [](wchar_t c) { return (wchar_t)::towlower(c); });
+		return s;
+	};
+
+	const std::wstring rootLower = toLower(rootStr);
+	const std::wstring candLower = toLower(candStr);
+
+	const bool contained = (candLower == rootLower) || (candLower.size() > rootLower.size() && candLower.compare(0, rootLower.size(), rootLower) == 0 && (candLower[rootLower.size()] == L'\\' || candLower[rootLower.size()] == L'/'));
+
+	if (!contained)
+	{
+		out_error = "Invalid path (escapes the Streamlabs folder): " + inputPath;
+		return false;
+	}
+
+	out_resolved = candidate;
+	return true;
+}
+
+bool PluginJsHandler::sha256File(const std::filesystem::path &filePath, std::string &out_hexDigest, std::string &out_error)
+{
+	std::ifstream file(filePath, std::ios::binary);
+
+	if (!file)
+	{
+		out_error = "Unable to open file";
+		return false;
+	}
+
+	BCRYPT_ALG_HANDLE hAlg = nullptr;
+	BCRYPT_HASH_HANDLE hHash = nullptr;
+
+	NTSTATUS status = BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, nullptr, 0);
+
+	if (!BCRYPT_SUCCESS(status))
+	{
+		out_error = "BCryptOpenAlgorithmProvider failed";
+		return false;
+	}
+
+	DWORD hashLen = 0;
+	DWORD cbData = 0;
+	status = BCryptGetProperty(hAlg, BCRYPT_HASH_LENGTH, (PUCHAR)&hashLen, sizeof(hashLen), &cbData, 0);
+
+	if (!BCRYPT_SUCCESS(status))
+	{
+		BCryptCloseAlgorithmProvider(hAlg, 0);
+		out_error = "BCryptGetProperty failed";
+		return false;
+	}
+
+	status = BCryptCreateHash(hAlg, &hHash, nullptr, 0, nullptr, 0, 0);
+
+	if (!BCRYPT_SUCCESS(status))
+	{
+		BCryptCloseAlgorithmProvider(hAlg, 0);
+		out_error = "BCryptCreateHash failed";
+		return false;
+	}
+
+	bool ok = true;
+	std::vector<char> buffer(64 * 1024);
+
+	while (file)
+	{
+		file.read(buffer.data(), (std::streamsize)buffer.size());
+		std::streamsize got = file.gcount();
+
+		if (got > 0)
+		{
+			status = BCryptHashData(hHash, (PUCHAR)buffer.data(), (ULONG)got, 0);
+
+			if (!BCRYPT_SUCCESS(status))
+			{
+				out_error = "BCryptHashData failed";
+				ok = false;
+				break;
+			}
+		}
+	}
+
+	if (ok)
+	{
+		std::vector<unsigned char> digest(hashLen);
+		status = BCryptFinishHash(hHash, digest.data(), hashLen, 0);
+
+		if (BCRYPT_SUCCESS(status))
+		{
+			static const char *hex = "0123456789abcdef";
+			out_hexDigest.clear();
+			out_hexDigest.reserve((size_t)hashLen * 2);
+
+			for (unsigned char b : digest)
+			{
+				out_hexDigest.push_back(hex[b >> 4]);
+				out_hexDigest.push_back(hex[b & 0x0F]);
+			}
+		}
+		else
+		{
+			out_error = "BCryptFinishHash failed";
+			ok = false;
+		}
+	}
+
+	BCryptDestroyHash(hHash);
+	BCryptCloseAlgorithmProvider(hAlg, 0);
+	return ok;
 }
