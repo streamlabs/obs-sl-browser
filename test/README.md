@@ -172,4 +172,5 @@ test/
     report.mjs     console, json and JUnit output
   suites/
     smoke/         the plugin comes up and answers
+    dual-output-api/ the vertical canvas api and its isolation
 ```
