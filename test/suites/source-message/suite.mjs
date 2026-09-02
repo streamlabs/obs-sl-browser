@@ -46,10 +46,6 @@ const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 const received = (events, who) =>
 	events.filter((e) => e.who === who && e.event === "RECEIVED");
 
-/** Deliveries that reached a source other than the one their payload names. */
-const strays = (events) =>
-	events.filter((e) => e.event === "RECEIVED" && e.data?.target && e.data.target !== e.who);
-
 export default {
 	name: "source-message",
 	description: "browsersource_sendMessage reaches the right browser source, and only it",
@@ -58,6 +54,19 @@ export default {
 
 	async run({ cdp, observer, say }) {
 		const r = results();
+
+		// nonce -> the payload that was sent under it. Routing is judged against this rather
+		// than against the target field that came back, so a delivery cannot clear the check
+		// by arriving with a damaged or missing target - and the error-path probes, whose "{}"
+		// carries no nonce, are correctly not treated as misrouted.
+		const sent = new Map();
+
+		const strays = (events) =>
+			events.filter((e) => {
+				if (e.event !== "RECEIVED") return false;
+				const addressed = sent.get(e.data?.nonce);
+				return addressed !== undefined && addressed.target !== e.who;
+			});
 
 		// A browser source can take anywhere from ten seconds to over a minute to load its
 		// page after OBS starts, and nothing announces when it has.
@@ -78,7 +87,10 @@ export default {
 		// browser - and so a stale delivery from an earlier send cannot be mistaken for this one.
 		for (const target of TARGETS) {
 			const nonce = `${Date.now()}-${target}`;
-			const payload = JSON.stringify({ target, nonce, tricky: TRICKY });
+			const body = { target, nonce, tricky: TRICKY };
+			const payload = JSON.stringify(body);
+
+			sent.set(nonce, body);
 
 			await r.step(`${target}: the send is accepted`, async () => {
 				const res = await cdp.call("browsersource_sendMessage", target, payload);
@@ -96,12 +108,17 @@ export default {
 				if (!arrived) return `no RECEIVED carrying nonce ${nonce} within 30s`;
 			});
 
-			await r.step(`${target}: the payload survives JSON escaping byte for byte`, async () => {
+			// Every field, not just the tricky one: a payload that lost a field on the way is
+			// damage too, and comparing only what is expected to be awkward would miss it.
+			await r.step(`${target}: the payload survives byte for byte`, async () => {
 				const hit = received(observer.events, target).find((e) => e.data?.nonce === nonce);
 				if (!hit) return "nothing arrived to compare";
-				if (hit.data.tricky !== TRICKY) {
-					return `mangled: ${JSON.stringify(hit.data.tricky)} != ${JSON.stringify(TRICKY)}`;
-				}
+				const { detailKeys, ...got } = hit.data;
+				const fields = [...new Set([...Object.keys(body), ...Object.keys(got)])];
+				const diffs = fields
+					.filter((k) => got[k] !== body[k])
+					.map((k) => `${k}: ${JSON.stringify(got[k])} != ${JSON.stringify(body[k])}`);
+				if (diffs.length) return `mangled - ${diffs.join("; ")}`;
 			});
 
 			// The exact key set, not just the presence of "message": an extra field in the
@@ -116,7 +133,7 @@ export default {
 			});
 
 			// The routing assertion, and the reason each send carries its own nonce: a copy
-			// landing on another source is identified by the payload it carries, not by a
+			// landing on another source is identified by which send it belongs to, not by a
 			// count taken around this send. Each page reports over its own HTTP request, so a
 			// misrouted copy can arrive after the addressee did - hence the settle before the
 			// absence is believed, and the sweep after the loop for anything later still.
@@ -137,7 +154,7 @@ export default {
 		await r.step("no payload ever reached a source it was not addressed to", async () => {
 			const bad = strays(observer.events);
 			if (bad.length) {
-				return bad.map((e) => `${e.data.target} -> ${e.who}`).join(", ");
+				return bad.map((e) => `${sent.get(e.data.nonce).target} -> ${e.who}`).join(", ");
 			}
 		});
 
