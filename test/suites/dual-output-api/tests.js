@@ -3,8 +3,8 @@
  *
  * Runs inside the Streamlabs browser page, which is the only context where the
  * plugin injects window.slabsGlobal. Two things drive it:
- *   - tests/dual-output-api.html  loads this with a <script> tag and renders the results
- *   - tests/run-api-tests.mjs     injects this over CDP and prints the results to a console
+ *   - page.html loads this with a <script> tag and renders the results
+ *   - suite.mjs injects this over CDP and folds the results into a run
  *
  * Both call __slDualTests.run(). Keep this file free of module syntax and of
  * anything browser-only: CDP evaluates it as a classic script.
@@ -15,33 +15,13 @@
 
   var V = "vertical";
   var PREFIX = "__slt_";
-  var CALL_TIMEOUT_MS = 5000;
 
-  /* Every api function takes a callback as its first argument and hands it a
-     JSON string. Setters answer with an empty string on success, so "no error
-     key" is the success signal. */
-  function call(fn) {
-    var args = Array.prototype.slice.call(arguments, 1);
-    return new Promise(function (resolve) {
-      var g = window.slabsGlobal;
-      if (!g || typeof g[fn] !== "function") {
-        resolve({ __missing: fn });
-        return;
-      }
-      var settled = false;
-      var timer = setTimeout(function () {
-        if (!settled) { settled = true; resolve({ __timeout: fn }); }
-      }, CALL_TIMEOUT_MS);
-
-      g[fn].apply(g, [function (json) {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (!json) { resolve({}); return; }
-        try { resolve(JSON.parse(json)); }
-        catch (e) { resolve({ __raw: String(json) }); }
-      }].concat(args));
-    });
+  /* The harness installs window.__slt (test/harness/inpage.js) before a suite runs, and it
+     already wraps the callback-and-JSON-string convention every api function uses. Resolves
+     to {__missing}, {__timeout} or {__raw} rather than rejecting; a setter answering with an
+     empty string parses to {}. */
+  function call() {
+    return window.__slt.call.apply(null, arguments);
   }
 
   function names(arr) {
