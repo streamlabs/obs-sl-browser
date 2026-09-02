@@ -5,8 +5,6 @@
 <h3 id="who"></h3>
 <div id="log"></div>
 <script>
-const OBSERVER = 'http://127.0.0.1:28951/report';
-
 // Which OBS source this page expects to be running in. The scene collection puts it in
 // the URL, so the page knows its own identity without a reply path to ask over.
 const WHO = new URLSearchParams(location.search).get('who') || '?';
@@ -17,7 +15,9 @@ document.getElementById('who').textContent = SOURCE_NAME;
 function report(event, data) {
 	document.getElementById('log').insertAdjacentHTML(
 		'beforeend', '<div>' + event + ': ' + JSON.stringify(data) + '</div>');
-	return fetch(OBSERVER, {
+	// location.origin, not a hardcoded port: this page is served by the harness, whose
+	// port is ephemeral and different on every run.
+	return fetch(location.origin + '/report', {
 		method: 'POST',
 		headers: {'content-type': 'application/json'},
 		body: JSON.stringify({who: SOURCE_NAME, event: event, data: data})

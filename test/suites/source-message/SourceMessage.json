@@ -6,14 +6,14 @@
             "name": "Scene"
         }
     ],
-    "name": "SourceMessageE2E",
+    "name": "SourceMessage",
     "sources": [
         {
             "name": "MsgSourceA",
             "id": "browser_source",
             "versioned_id": "browser_source",
             "settings": {
-                "url": "http://127.0.0.1:28951/source.html?who=A",
+                "url": "{{BASE_URL}}/source.html?who=A",
                 "width": 640,
                 "height": 360,
                 "reroute_audio": false,
@@ -43,7 +43,7 @@
             "id": "browser_source",
             "versioned_id": "browser_source",
             "settings": {
-                "url": "http://127.0.0.1:28951/source.html?who=B",
+                "url": "{{BASE_URL}}/source.html?who=B",
                 "width": 640,
                 "height": 360,
                 "reroute_audio": false,
@@ -73,7 +73,7 @@
             "id": "browser_source",
             "versioned_id": "browser_source",
             "settings": {
-                "url": "http://127.0.0.1:28951/source.html?who=Hidden",
+                "url": "{{BASE_URL}}/source.html?who=Hidden",
                 "width": 640,
                 "height": 360,
                 "reroute_audio": false,
