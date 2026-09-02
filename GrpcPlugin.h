@@ -2,6 +2,7 @@
 
 #include "sl_browser_api.grpc.pb.h"
 
+#include <atomic>
 #include <filesystem>
 
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
@@ -36,13 +37,22 @@ public:
 
 	void stop();
 
-	auto getClient() const { return m_clientObj.get(); }
+	// Null until connectToClient() has published the channel. The grpc server starts accepting
+	// requests in startServer(), which is a browser launch and a connect handshake earlier, so
+	// every caller has to expect null rather than assume startup finished in order.
+	grpc_plugin_objClient *getClient() const
+	{
+		return m_clientReady.load(std::memory_order_acquire) ? m_clientObj.get() : nullptr;
+	}
+
+	bool clientReady() const { return m_clientReady.load(std::memory_order_acquire); }
 
 private:
 	GrpcPlugin();
 	~GrpcPlugin();
 
 	int32_t m_listenPort{0};
+	std::atomic<bool> m_clientReady{false};
 
 	std::wstring m_modulePath;
 	std::unique_ptr<grpc::Server> m_server;
