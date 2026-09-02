@@ -207,7 +207,10 @@ void obs_module_post_load(void)
 	QObject::connect(action, &QAction::triggered, [=]() {
 
 		// Has to be run in a seperate thread because bringing to foreground will take over input msg and we're in the middle of using it
-		std::thread([&]() { GrpcPlugin::instance().getClient()->send_windowToggleVisibility(); }).detach();
+		std::thread([&]() {
+			if (auto *client = GrpcPlugin::instance().getClient())
+				client->send_windowToggleVisibility();
+		}).detach();
 	});
 
 	window->menuBar()->addAction(action);
