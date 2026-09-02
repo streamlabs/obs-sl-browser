@@ -40,8 +40,12 @@ window.addEventListener('messageFromApp', function (e) {
 		return;
 	}
 
-	// Report the envelope too, so a regression in the wrapper shape is visible and not
-	// silently swallowed by the JSON.parse above.
-	report('RECEIVED', Object.assign({detailKeys: Object.keys(detail)}, parsed));
+	// Report the envelope and the undecoded message too, so a regression in the wrapper
+	// shape - or a re-encoding of the message that happens to parse the same - is visible
+	// and not silently swallowed by the JSON.parse above.
+	report('RECEIVED', Object.assign({}, parsed, {
+		detailKeys: Object.keys(detail),
+		raw: detail.message
+	}));
 });
 </script>

@@ -55,17 +55,17 @@ export default {
 	async run({ cdp, observer, say }) {
 		const r = results();
 
-		// nonce -> the payload that was sent under it. Routing is judged against this rather
-		// than against the target field that came back, so a delivery cannot clear the check
-		// by arriving with a damaged or missing target - and the error-path probes, whose "{}"
-		// carries no nonce, are correctly not treated as misrouted.
+		// nonce -> the source the payload was addressed to. Routing is judged against this
+		// rather than against the target field that came back, so a delivery cannot clear the
+		// check by arriving with a damaged or missing target - and the error-path probes,
+		// whose "{}" carries no nonce, are correctly not treated as misrouted.
 		const sent = new Map();
 
 		const strays = (events) =>
 			events.filter((e) => {
 				if (e.event !== "RECEIVED") return false;
-				const addressed = sent.get(e.data?.nonce);
-				return addressed !== undefined && addressed.target !== e.who;
+				const addressee = sent.get(e.data?.nonce);
+				return addressee !== undefined && addressee !== e.who;
 			});
 
 		// A browser source can take anywhere from ten seconds to over a minute to load its
@@ -87,10 +87,9 @@ export default {
 		// browser - and so a stale delivery from an earlier send cannot be mistaken for this one.
 		for (const target of TARGETS) {
 			const nonce = `${Date.now()}-${target}`;
-			const body = { target, nonce, tricky: TRICKY };
-			const payload = JSON.stringify(body);
+			const payload = JSON.stringify({ target, nonce, tricky: TRICKY });
 
-			sent.set(nonce, body);
+			sent.set(nonce, target);
 
 			await r.step(`${target}: the send is accepted`, async () => {
 				const res = await cdp.call("browsersource_sendMessage", target, payload);
@@ -108,17 +107,16 @@ export default {
 				if (!arrived) return `no RECEIVED carrying nonce ${nonce} within 30s`;
 			});
 
-			// Every field, not just the tricky one: a payload that lost a field on the way is
-			// damage too, and comparing only what is expected to be awkward would miss it.
+			// The undecoded string, not the fields parsed out of it. The third argument is
+			// opaque to the plugin, so anything that changes its bytes is a regression even
+			// when it happens to parse the same: an escaped non-ASCII character in place of the
+			// literal, a reserialization, a change in spacing. Comparing fields passes all three.
 			await r.step(`${target}: the payload survives byte for byte`, async () => {
 				const hit = received(observer.events, target).find((e) => e.data?.nonce === nonce);
 				if (!hit) return "nothing arrived to compare";
-				const { detailKeys, ...got } = hit.data;
-				const fields = [...new Set([...Object.keys(body), ...Object.keys(got)])];
-				const diffs = fields
-					.filter((k) => got[k] !== body[k])
-					.map((k) => `${k}: ${JSON.stringify(got[k])} != ${JSON.stringify(body[k])}`);
-				if (diffs.length) return `mangled - ${diffs.join("; ")}`;
+				if (hit.data.raw !== payload) {
+					return `mangled - got ${JSON.stringify(hit.data.raw)}, sent ${JSON.stringify(payload)}`;
+				}
 			});
 
 			// The exact key set, not just the presence of "message": an extra field in the
@@ -154,7 +152,7 @@ export default {
 		await r.step("no payload ever reached a source it was not addressed to", async () => {
 			const bad = strays(observer.events);
 			if (bad.length) {
-				return bad.map((e) => `${sent.get(e.data.nonce).target} -> ${e.who}`).join(", ");
+				return bad.map((e) => `${sent.get(e.data.nonce)} -> ${e.who}`).join(", ");
 			}
 		});
 
