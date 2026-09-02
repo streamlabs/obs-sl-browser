@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>source message sender</title>
+<body style="background:#102030;color:#9cf;font:13px monospace;margin:8px">
+<h3>browsersource_sendMessage</h3>
+<div id="log"></div>
+<script src="/_harness/inpage.js"></script>
+<script>
+// The sending happens from suite.mjs over CDP, in this page's context - so this page has
+// nothing to do but exist, be attachable, and carry slabsGlobal. The harness makes the
+// priming call that GrpcBrowser needs before any callback can come back (see inpage.js).
+document.getElementById('log').textContent =
+	'slabsGlobal: ' + typeof window.slabsGlobal +
+	' / browsersource_sendMessage: ' +
+	typeof (window.slabsGlobal && window.slabsGlobal.browsersource_sendMessage);
+</script>
