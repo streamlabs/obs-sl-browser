@@ -105,6 +105,10 @@ bool GrpcPlugin::startServer(int32_t listenPort)
 bool GrpcPlugin::connectToClient(int32_t portNumber)
 {
 	m_clientObj = std::make_unique<grpc_plugin_objClient>(grpc::CreateChannel("localhost:" + std::to_string(portNumber), grpc::InsecureChannelCredentials()));
+
+	// Release, paired with the acquire in getClient(): the worker thread reads m_clientObj
+	// without the main thread's lock, so the pointer has to be visible before the flag is.
+	m_clientReady.store(m_clientObj != nullptr, std::memory_order_release);
 	return m_clientObj != nullptr;
 }
 
@@ -117,6 +121,7 @@ void GrpcPlugin::stop()
 		m_server.reset();
 	}
 
+	m_clientReady.store(false, std::memory_order_release);
 	m_clientObj = nullptr;
 	m_serverObj = nullptr;
 	m_builder = nullptr;
