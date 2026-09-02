@@ -3906,58 +3906,91 @@ void PluginJsHandler::JS_DUALOUTPUT_SET_OUTPUT_MODE(const json11::Json &params, 
 
 void PluginJsHandler::JS_DUALOUTPUT_SET_STREAM_SETTINGS(const json11::Json &params, std::string &out_jsonReturn)
 {
-	std::string server = params["param2"].string_value();
-	std::string key = params["param3"].string_value();
-	std::string username = params["param5"].string_value();
-	std::string password = params["param6"].string_value();
-	std::string encoder_id = params["param7"].string_value();
-	int video_bitrate = params["param8"].int_value();
-	int audio_bitrate = params["param9"].int_value();
-	int audio_track = params["param10"].int_value();
+	// Presence is the whole contract here: a field that was passed is applied, a field that was not
+	//	is left alone. Nothing is inferred from the value, so "" clears a stored string instead of
+	//	being indistinguishable from an argument nobody supplied - which had left the api with no way
+	//	to remove a stream key at all - and 0 is a rejected bitrate rather than a silent no-op.
+	const auto &p_server = params["param2"];
+	const auto &p_key = params["param3"];
+	const auto &p_use_auth = params["param4"];
+	const auto &p_username = params["param5"];
+	const auto &p_password = params["param6"];
+	const auto &p_encoder = params["param7"];
+	const auto &p_video_bitrate = params["param8"];
+	const auto &p_audio_bitrate = params["param9"];
+	const auto &p_audio_track = params["param10"];
+	const auto &p_auto_start = params["param11"];
 
-	// A boolean has no empty or zero form, so an omitted one is told apart by its type rather than
-	//	its value. Without this a partial update silently switches both of these off.
-	bool has_use_auth = params["param4"].is_bool();
-	bool has_auto_start = params["param11"].is_bool();
-	bool use_auth = params["param4"].bool_value();
-	bool auto_start = params["param11"].bool_value();
+	if (p_video_bitrate.is_number() && p_video_bitrate.int_value() <= 0)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "video_bitrate must be greater than 0"}})).dump();
+		return;
+	}
+
+	if (p_audio_bitrate.is_number() && p_audio_bitrate.int_value() <= 0)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "audio_bitrate must be greater than 0"}})).dump();
+		return;
+	}
 
 	// Rejected rather than clamped: SlDualStreamOutput::start clamps to the same bound, so storing
 	//	an out-of-range track would have getStreamSettings report a track that is not the one encoded.
-	if (audio_track > (int)MAX_AUDIO_MIXES)
+	if (p_audio_track.is_number() && (p_audio_track.int_value() < 1 || p_audio_track.int_value() > (int)MAX_AUDIO_MIXES))
 	{
 		out_jsonReturn = Json(Json::object({{"error", "audio_track must be between 1 and " + std::to_string(MAX_AUDIO_MIXES)}})).dump();
 		return;
 	}
 
-	onUiThread([server, key, has_use_auth, use_auth, username, password, encoder_id, video_bitrate, audio_bitrate, audio_track, has_auto_start, auto_start, &out_jsonReturn]() {
+	const bool has_server = p_server.is_string();
+	const bool has_key = p_key.is_string();
+	const bool has_username = p_username.is_string();
+	const bool has_password = p_password.is_string();
+	const bool has_encoder = p_encoder.is_string();
+	const bool has_use_auth = p_use_auth.is_bool();
+	const bool has_auto_start = p_auto_start.is_bool();
+	const bool has_video_bitrate = p_video_bitrate.is_number();
+	const bool has_audio_bitrate = p_audio_bitrate.is_number();
+	const bool has_audio_track = p_audio_track.is_number();
+
+	std::string server = p_server.string_value();
+	std::string key = p_key.string_value();
+	std::string username = p_username.string_value();
+	std::string password = p_password.string_value();
+	std::string encoder_id = p_encoder.string_value();
+	int video_bitrate = p_video_bitrate.int_value();
+	int audio_bitrate = p_audio_bitrate.int_value();
+	int audio_track = p_audio_track.int_value();
+	bool use_auth = p_use_auth.bool_value();
+	bool auto_start = p_auto_start.bool_value();
+
+	onUiThread([=, &out_jsonReturn]() {
 		SlDualOutput &dual = SlDualOutput::instance();
 		SlDualConfig cfg = dual.config();
 
-		// Absent strings, numerics and booleans keep the stored value rather than writing a broken
-		// one, which is what makes a partial update safe - the contract JavascriptApi.h states.
-		if (!server.empty())
+		if (has_server)
 			cfg.server = server;
 
-		if (!key.empty())
+		if (has_key)
 			cfg.key = key;
 
-		if (!username.empty())
+		if (has_username)
 			cfg.authUsername = username;
 
-		if (!password.empty())
+		if (has_password)
 			cfg.authPassword = password;
 
-		if (!encoder_id.empty())
+		// The one string that cannot be cleared: an empty encoder id is not a valid encode, and the
+		//	stored value already falls back to obs_x264 when the named encoder is unavailable.
+		if (has_encoder && !encoder_id.empty())
 			cfg.encoderId = encoder_id;
 
-		if (video_bitrate > 0)
+		if (has_video_bitrate)
 			cfg.videoBitrateKbps = video_bitrate;
 
-		if (audio_bitrate > 0)
+		if (has_audio_bitrate)
 			cfg.audioBitrateKbps = audio_bitrate;
 
-		if (audio_track > 0)
+		if (has_audio_track)
 			cfg.audioTrack = audio_track;
 
 		if (has_use_auth)
@@ -4021,8 +4054,15 @@ void PluginJsHandler::JS_DUALOUTPUT_START_STREAM(const json11::Json &params, std
 			return;
 		}
 
-		// Reports only that the output was accepted; the connection result arrives asynchronously.
-		dual.startStream();
+		// Acceptance is synchronous and can fail - the service, the encoders or obs_output_start
+		//	itself - and none of that would show in stream_state, which would just read "idle".
+		if (!dual.startStream())
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Failed to start the vertical output, see the OBS log for the reason"}})).dump();
+			return;
+		}
+
+		// Past here it is accepted only; the connection result arrives asynchronously.
 		out_jsonReturn = Json(Json::object({{"stream_state", dual.streamState()}})).dump();
 	});
 }

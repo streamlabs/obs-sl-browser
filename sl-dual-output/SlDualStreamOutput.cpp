@@ -65,11 +65,16 @@ bool SlDualStreamOutput::active() const
 
 bool SlDualStreamOutput::start(const SlDualConfig& config, video_t* canvasVideo)
 {
+	const SlDualStreamState state = m_state.load();
+
 	// let the previous stop finish
-	if (m_state.load() == SlDualStreamState::Stopping)
+	if (state == SlDualStreamState::Stopping)
 		return false;
 
-	if (active())
+	// Already in use, so a repeated start is a no-op rather than a restart. The tracked state, not
+	// obs_output_active(): that is false while an attempt is still connecting, and falling through
+	// would reach releaseAll() below and tear down the output already in flight.
+	if (state != SlDualStreamState::Idle || active())
 		return true;
 
 	if (!canvasVideo)
@@ -172,22 +177,41 @@ bool SlDualStreamOutput::start(const SlDualConfig& config, video_t* canvasVideo)
 
 void SlDualStreamOutput::requestStop()
 {
-	if (m_output && obs_output_active(m_output))
-	{
-		setState(SlDualStreamState::Stopping, "Stopping");
-		obs_output_stop(m_output);
-	}
-	else
+	const SlDualStreamState state = m_state.load();
+
+	if (!m_output || state == SlDualStreamState::Idle)
 	{
 		setState(SlDualStreamState::Idle, "Stopped");
+		return;
 	}
+
+	if (state == SlDualStreamState::Stopping)
+		return;
+
+	setState(SlDualStreamState::Stopping, "Stopping");
+
+	if (obs_output_active(m_output))
+	{
+		// the stop signal carries us to Idle
+		obs_output_stop(m_output);
+		return;
+	}
+
+	// Connecting, but not active yet, so there is no running output for a stop signal to come from.
+	// Reporting Idle and walking away would leave the attempt to go live after we said it stopped.
+	obs_output_force_stop(m_output);
+	disconnectSignals();
+	releaseAll();
+	setState(SlDualStreamState::Idle, "Stopped");
 }
 
 void SlDualStreamOutput::hardStop()
 {
 	disconnectSignals();
 
-	if (m_output && obs_output_active(m_output))
+	// Every output that exists, not just an active one: this runs when the canvas is about to be
+	// detached, and an attempt still connecting must be cancelled before its components go away.
+	if (m_output)
 		obs_output_force_stop(m_output);
 
 	releaseAll();

@@ -184,11 +184,10 @@ bool SlDualOutput::startStream()
 	if (!available())
 		return false;
 
-	m_controller->startStream();
-
-	// Whether the output was accepted, not whether it has connected - connecting is asynchronous,
-	// so an is-it-active check here would report false for a start that is going perfectly well.
-	return m_controller->streamBusy();
+	// What the start itself said, not a state sampled after it. streamBusy() was wrong both ways:
+	// true for a Stopping output whose start had just been rejected, and it says nothing about
+	// whether this call was the one accepted.
+	return m_controller->startStream();
 }
 
 bool SlDualOutput::stopStream()

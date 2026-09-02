@@ -101,8 +101,7 @@ bool SlDualCanvas::create(uint32_t width, uint32_t height)
 	if (m_canvas)
 		return resetVideo(width, height);
 
-	m_width = alignedWidth(width);
-	m_height = alignedHeight(height);
+	setSize(alignedWidth(width), alignedHeight(height));
 	return attach();
 }
 
@@ -113,7 +112,9 @@ bool SlDualCanvas::attach()
 
 	obs_video_info ovi;
 
-	if (!buildVideoInfo(ovi, m_width, m_height))
+	const Size current = size();
+
+	if (!buildVideoInfo(ovi, current.width, current.height))
 	{
 		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "main video not initialized, cannot create canvas");
 		return false;
@@ -144,7 +145,7 @@ bool SlDualCanvas::attach()
 			return false;
 		}
 
-		blog(LOG_INFO, SL_DUAL_LOG_PREFIX "adopted canvas '%s' (%ux%u)", kCanvasName, m_width, m_height);
+		blog(LOG_INFO, SL_DUAL_LOG_PREFIX "adopted canvas '%s' (%ux%u)", kCanvasName, current.width, current.height);
 	}
 	else
 	{
@@ -157,7 +158,7 @@ bool SlDualCanvas::attach()
 			return false;
 		}
 
-		blog(LOG_INFO, SL_DUAL_LOG_PREFIX "created canvas '%s' (%ux%u)", kCanvasName, m_width, m_height);
+		blog(LOG_INFO, SL_DUAL_LOG_PREFIX "created canvas '%s' (%ux%u)", kCanvasName, current.width, current.height);
 	}
 
 	return true;
@@ -231,14 +232,15 @@ bool SlDualCanvas::resetVideo(uint32_t width, uint32_t height)
 
 	if (!m_canvas)
 	{
-		m_width = w;
-		m_height = h;
+		setSize(w, h);
 
 		// applied on next attach
 		return true;
 	}
 
-	if (w == m_width && h == m_height)
+	const Size current = size();
+
+	if (w == current.width && h == current.height)
 		return true;
 
 	obs_video_info ovi;
@@ -252,11 +254,11 @@ bool SlDualCanvas::resetVideo(uint32_t width, uint32_t height)
 		return false;
 	}
 
-	m_width = w;
-	m_height = h;
+	setSize(w, h);
 
 	if (m_transition)
-		obs_transition_set_size(m_transition, m_width, m_height);
+		obs_transition_set_size(m_transition, w, h);
+
 	return true;
 }
 
@@ -363,7 +365,8 @@ void SlDualCanvas::setTransition(obs_source_t* transition)
 
 	if (m_transition)
 	{
-		obs_transition_set_size(m_transition, m_width, m_height);
+		const Size current = size();
+		obs_transition_set_size(m_transition, current.width, current.height);
 
 		// Same live swap the main dock's SetTransition does; plain set when nothing was showing yet.
 		// Unguarded by design: swap_begin/swap_end is what hands a running transition over, and the frontend
@@ -512,12 +515,14 @@ void SlDualCanvas::applyFillTransform(obs_sceneitem_t* item) const
 	obs_sceneitem_get_info2(item, &info);
 
 	info.rot = 0.0f;
-	vec2_set(&info.pos, (float)m_width * 0.5f, (float)m_height * 0.5f);
+	const Size current = size();
+
+	vec2_set(&info.pos, (float)current.width * 0.5f, (float)current.height * 0.5f);
 	vec2_set(&info.scale, 1.0f, 1.0f);
 	info.alignment = OBS_ALIGN_CENTER;
 	info.bounds_type = OBS_BOUNDS_SCALE_OUTER;
 	info.bounds_alignment = OBS_ALIGN_CENTER;
-	vec2_set(&info.bounds, (float)m_width, (float)m_height);
+	vec2_set(&info.bounds, (float)current.width, (float)current.height);
 
 	obs_sceneitem_set_info2(item, &info);
 }
@@ -546,18 +551,24 @@ void SlDualCanvas::verifyChannelIntegrity()
 
 void SlDualCanvas::renderPreview(uint32_t cx, uint32_t cy)
 {
-	if (!m_canvas || !m_width || !m_height || !cx || !cy)
+	// Graphics thread. One snapshot, used for the whole frame - re-reading per use is what let a
+	// resize land halfway through and skew the projection against the viewport.
+	const Size canvasSize = size();
+	const uint32_t w = canvasSize.width;
+	const uint32_t h = canvasSize.height;
+
+	if (!m_canvas || !w || !h || !cx || !cy)
 		return;
 
-	float scale = std::min((float)cx / (float)m_width, (float)cy / (float)m_height);
-	uint32_t vw = (uint32_t)((float)m_width * scale);
-	uint32_t vh = (uint32_t)((float)m_height * scale);
+	float scale = std::min((float)cx / (float)w, (float)cy / (float)h);
+	uint32_t vw = (uint32_t)((float)w * scale);
+	uint32_t vh = (uint32_t)((float)h * scale);
 	int x = ((int)cx - (int)vw) / 2;
 	int y = ((int)cy - (int)vh) / 2;
 
 	gs_viewport_push();
 	gs_projection_push();
-	gs_ortho(0.0f, (float)m_width, 0.0f, (float)m_height, -100.0f, 100.0f);
+	gs_ortho(0.0f, (float)w, 0.0f, (float)h, -100.0f, 100.0f);
 	gs_set_viewport(x, y, (int)vw, (int)vh);
 
 	// Black backdrop behind the canvas, like the main preview's DrawBackdrop.
@@ -568,7 +579,7 @@ void SlDualCanvas::renderPreview(uint32_t cx, uint32_t cy)
 	gs_effect_set_vec4(color, &black);
 
 	while (gs_effect_loop(solid, "Solid"))
-		gs_draw_quadf(NULL, 0, (float)m_width, (float)m_height);
+		gs_draw_quadf(NULL, 0, (float)w, (float)h);
 
 	obs_canvas_render(m_canvas);
 
@@ -584,20 +595,20 @@ void SlDualCanvas::renderPreview(uint32_t cx, uint32_t cy)
 		gs_matrix_push();
 
 		// top
-		gs_draw_quadf(NULL, 0, (float)m_width, t);
-		gs_matrix_translate3f(0.0f, (float)m_height - t, 0.0f);
+		gs_draw_quadf(NULL, 0, (float)w, t);
+		gs_matrix_translate3f(0.0f, (float)h - t, 0.0f);
 
 		// bottom
-		gs_draw_quadf(NULL, 0, (float)m_width, t);
+		gs_draw_quadf(NULL, 0, (float)w, t);
 		gs_matrix_pop();
 		gs_matrix_push();
 
 		// left
-		gs_draw_quadf(NULL, 0, t, (float)m_height);
-		gs_matrix_translate3f((float)m_width - t, 0.0f, 0.0f);
+		gs_draw_quadf(NULL, 0, t, (float)h);
+		gs_matrix_translate3f((float)w - t, 0.0f, 0.0f);
 
 		// right
-		gs_draw_quadf(NULL, 0, t, (float)m_height);
+		gs_draw_quadf(NULL, 0, t, (float)h);
 		gs_matrix_pop();
 	}
 

@@ -552,8 +552,10 @@ public:
 			//	'encoderId' is an obs encoder id ("obs_x264", "jim_nvenc", ...); it falls back to obs_x264 if unavailable.
 			//	'audioTrack' is 1-based and selects which of the main audio mixes to encode - there is no separate vertical audio.
 			//		Out of range is an error rather than a clamp, so the reported track is always the one encoded.
-			//	Empty strings, non-positive numbers and omitted booleans keep the stored value, so a partial update is safe.
-			//		There is deliberately no way to clear a stored string this way; send a new value instead.
+			//	Every argument is optional and presence is what counts: pass one and it is applied, leave it out
+			//		(undefined) and the stored value is kept, so a partial update is safe. Nothing is inferred from
+			//		the value itself - "" clears a stored string, and a bitrate of 0 is an error rather than ignored.
+			//		'encoderId' is the exception, having no meaningful empty value; "" leaves it alone.
 			//	'autoStart' starts and stops this output with the main OBS stream.
 			{"dualoutput_setStreamSettings", JS_DUALOUTPUT_SET_STREAM_SETTINGS},
 

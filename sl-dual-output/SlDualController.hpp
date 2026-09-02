@@ -36,7 +36,9 @@ public: // lifecycle (called by the facade)
 	void shutdown();
 
 public: // actions, UI thread (dock / editor / settings dialog)
-	void startStream();
+	// True when the output was accepted, which includes one that was already running. False when
+	// the canvas, config or output mode refused it, or the output itself did.
+	bool startStream();
 	void stopStream();
 
 	// Anything other than Idle. Deliberately not obs_output_active(), which is false while the

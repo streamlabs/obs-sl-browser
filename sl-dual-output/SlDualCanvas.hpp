@@ -8,6 +8,7 @@
 
 #include <obs.h>
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -34,8 +35,23 @@ public:
 
 	bool valid() const { return m_canvas != nullptr; }
 	video_t* video() const;
-	uint32_t width() const { return m_width; }
-	uint32_t height() const { return m_height; }
+
+	struct Size
+	{
+		uint32_t width;
+		uint32_t height;
+	};
+
+	// Both halves in one read. The draw callback must use this rather than width() and height()
+	// separately, or a frame can pair a new width with the height it had before.
+	Size size() const
+	{
+		const uint64_t packed = m_size.load(std::memory_order_acquire);
+		return {(uint32_t)(packed >> 32), (uint32_t)(packed & 0xffffffffu)};
+	}
+
+	uint32_t width() const { return size().width; }
+	uint32_t height() const { return size().height; }
 	obs_canvas_t* canvasHandle() const { return m_canvas; }
 
 	// Scenes. UI thread.
@@ -91,6 +107,14 @@ private:
 	// strong reference
 	obs_scene_t* m_activeScene = nullptr;
 
-	uint32_t m_width = 0;
-	uint32_t m_height = 0;
+	// (width << 32) | height. resetVideo() writes this from the UI thread while renderPreview() and
+	// SlDualEditor read it from the graphics thread's draw callback, so it is one atomic rather than
+	// two plain fields - both to make the pair consistent and because the unsynchronised read was
+	// undefined behaviour regardless of how benign it looked.
+	std::atomic<uint64_t> m_size{0};
+
+	void setSize(uint32_t width, uint32_t height)
+	{
+		m_size.store(((uint64_t)width << 32) | height, std::memory_order_release);
+	}
 };

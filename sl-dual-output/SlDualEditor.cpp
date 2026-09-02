@@ -968,7 +968,7 @@ SlDualEditor::~SlDualEditor()
 void SlDualEditor::setViewSize(const QSizeF& sizeLogical, qreal dpr)
 {
 	m_viewSize = sizeLogical;
-	m_dpr = dpr > 0.0 ? dpr : 1.0;
+	m_dpr.store(dpr > 0.0 ? (float)dpr : 1.0f, std::memory_order_release);
 }
 
 void SlDualEditor::reset(bool clearUndo)
@@ -1018,7 +1018,10 @@ SlDualEditor::ViewMap SlDualEditor::viewMapFor(uint32_t cx, uint32_t cy) const
 
 SlDualEditor::ViewMap SlDualEditor::viewMap() const
 {
-	return viewMapFor((uint32_t)(m_viewSize.width() * m_dpr), (uint32_t)(m_viewSize.height() * m_dpr));
+	// One read, used for both axes.
+	const float dpr = pixelRatio();
+
+	return viewMapFor((uint32_t)(m_viewSize.width() * dpr), (uint32_t)(m_viewSize.height() * dpr));
 }
 
 bool SlDualEditor::widgetToCanvas(const QPointF& p, struct vec2& out) const
@@ -1028,7 +1031,9 @@ bool SlDualEditor::widgetToCanvas(const QPointF& p, struct vec2& out) const
 	if (!map.valid)
 		return false;
 
-	vec2_set(&out, ((float)(p.x() * m_dpr) - map.offX) / map.scale, ((float)(p.y() * m_dpr) - map.offY) / map.scale);
+	const float dpr = pixelRatio();
+
+	vec2_set(&out, ((float)(p.x() * dpr) - map.offX) / map.scale, ((float)(p.y() * dpr) - map.offY) / map.scale);
 	return true;
 }
 

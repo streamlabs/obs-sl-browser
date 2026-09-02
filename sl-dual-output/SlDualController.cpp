@@ -162,19 +162,19 @@ void SlDualController::shutdown()
 * Actions
 */
 
-void SlDualController::startStream()
+bool SlDualController::startStream()
 {
 	if (!canvas || !canvas->valid() || !output || !config.enabled)
-		return;
+		return false;
 
 	// OBS's multitrack path already sends this canvas; a second encode would double it.
 	if (config.outputMode == SlDualOutputMode::EnhancedBroadcasting)
 	{
 		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "start ignored: output mode is enhanced_broadcasting");
-		return;
+		return false;
 	}
 
-	output->start(config, canvas->video());
+	return output->start(config, canvas->video());
 }
 
 void SlDualController::stopStream()
@@ -254,6 +254,10 @@ void SlDualController::setEnabled(bool enabled)
 		refreshTransitionUi();
 	}
 
+	// Releases the multitrack claim on the way out, and re-takes it on the way back in if the mode
+	// still asks for it. Without this, disabling left OBS streaming the canvas.
+	applyOutputModeSetting();
+
 	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "%s", enabled ? "enabled" : "disabled");
 	obs_frontend_save();
 }
@@ -287,7 +291,10 @@ void SlDualController::applyOutputModeSetting()
 	const char* current = config_get_string(profile, "Stream1", "MultitrackExtraCanvas");
 	std::string want;
 
-	if (config.outputMode == SlDualOutputMode::EnhancedBroadcasting)
+	// config.enabled matters as much as the mode: disabling dual output only stops our own encode,
+	// so leaving the canvas claimed here would have OBS go on streaming a canvas the user switched
+	// off - and re-claim it at startup. setEnabled() calls back in to apply this.
+	if (config.enabled && config.outputMode == SlDualOutputMode::EnhancedBroadcasting)
 		want = ours;
 	else if (current && strcmp(current, ours) == 0)
 		want.clear();

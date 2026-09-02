@@ -240,9 +240,10 @@
      non-empty server and key, so it never exercised the case where an empty string was assigned
      straight over a stored credential. */
   test("a partial update keeps the values it omits", function () {
-    // Only the video bitrate is supplied; everything else is the documented "keep stored value".
+    // Only the video bitrate is supplied. Everything else is left out entirely - an empty string
+    // is now a request to clear, which is the next test.
     return call("dualoutput_setStreamSettings",
-      "", "", undefined, "", "", "", 4200, 0, 0, undefined).then(function (r) {
+      undefined, undefined, undefined, undefined, undefined, undefined, 4200).then(function (r) {
       checkOk(r, "partial setStreamSettings");
       return call("dualoutput_getStreamSettings");
     }).then(function (got) {
@@ -259,8 +260,36 @@
     });
   });
 
+  /* The other half of presence-means-intent, and the reason it exists: with an empty string
+     indistinguishable from an omitted argument there was no way to remove a stored stream key. */
+  test("an empty string clears a stored value", function () {
+    return call("dualoutput_setStreamSettings", undefined, "").then(function (r) {
+      checkOk(r, "setStreamSettings clearing the key");
+      return call("dualoutput_getStreamSettings");
+    }).then(function (got) {
+      checkOk(got, "getStreamSettings after clearing");
+      check(got.key === "", "key was not cleared, got: " + JSON.stringify(got.key));
+      check(got.server === "rtmp://127.0.0.1/slt", "clearing the key also disturbed the server");
+      return call("dualoutput_setStreamSettings", undefined, "slt-key");
+    }).then(function (r) {
+      checkOk(r, "restoring the key");
+    });
+  });
+
+  test("a bitrate of zero is refused, not ignored", function () {
+    return call("dualoutput_setStreamSettings", undefined, undefined, undefined, undefined, undefined, undefined, 0)
+      .then(function (r) {
+        check(!!r.error, "expected an error for video_bitrate 0, got: " + JSON.stringify(r));
+        return call("dualoutput_getStreamSettings");
+      }).then(function (got) {
+        checkOk(got, "getStreamSettings after a refused bitrate");
+        check(got.video_bitrate === 4200, "a refused bitrate still changed the stored one, got: " + got.video_bitrate);
+      });
+  });
+
   test("an out of range audio track is refused, not clamped", function () {
-    return call("dualoutput_setStreamSettings", "", "", undefined, "", "", "", 0, 0, 99, undefined)
+    return call("dualoutput_setStreamSettings", undefined, undefined, undefined, undefined, undefined, undefined,
+                undefined, undefined, 99)
       .then(function (r) {
         check(!!r.error, "expected an error for audio track 99, got: " + JSON.stringify(r));
         return call("dualoutput_getStreamSettings");
@@ -325,8 +354,8 @@
       if (!ctx.modeBefore) ctx.modeBefore = s.output_mode;
       // Nothing is listening there. startStream returns once the output is accepted, not once it
       // connects, and "starting" is already not "idle" - which is all the guard looks at.
-      return call("dualoutput_setStreamSettings",
-        "rtmp://127.0.0.1:1/none", "k", undefined, "", "", "", 0, 0, 0, undefined);
+      // Server and key only - everything else keeps whatever the earlier tests left.
+      return call("dualoutput_setStreamSettings", "rtmp://127.0.0.1:1/none", "k");
     }).then(function (r) {
       checkOk(r, "setStreamSettings for the live check");
       return call("dualoutput_startStream");
@@ -348,13 +377,33 @@
 
   /* ----------------------------------------------------------- cleanup --- */
 
+  /* Resolves once the output reports idle, or when the budget runs out - cleanup carries on either
+     way, since a stuck output is the suite's problem to report, not a reason to abandon tidying. */
+  function waitForIdle(budgetMs) {
+    var deadline = Date.now() + budgetMs;
+
+    function poll() {
+      return call("dualoutput_getState").then(function (s) {
+        if (s.error || s.stream_state === "idle") return null;
+        if (Date.now() >= deadline) return null;
+        return new Promise(function (r) { setTimeout(r, 100); }).then(poll);
+      });
+    }
+
+    return poll();
+  }
+
   function cleanup(ctx) {
     var removed = [];
     ctx = ctx || {};
 
     // Before anything else: a live output would make the setCanvasSize restore below fail, and a
-    // test that threw part way through its live section may have left one running.
+    // test that threw part way through its live section may have left one running. stopStream
+    // returns when stopping is *requested*, so the wait matters - without it the restore races the
+    // teardown and its error is swallowed.
     return call("dualoutput_stopStream").then(function () {
+      return waitForIdle(8000);
+    }).then(function () {
       return call("obs_enum_scenes", V);
     }).then(function (list) {
       var doomed = names(list).filter(function (n) { return n.indexOf(PREFIX) === 0; });
@@ -390,9 +439,16 @@
     }).then(function () {
       if (!ctx.settingsBefore) return null;
       var b = ctx.settingsBefore;
-      return call("dualoutput_setStreamSettings", b.server || "", b.key || "", !!b.use_auth,
+      // Exact, including fields that started empty: "" clears, so the originals go back whatever
+      // they were. Bitrates and the track are only sent if they were valid, since 0 is now refused
+      // and would abort the whole restore.
+      return call("dualoutput_setStreamSettings",
+        b.server || "", b.key || "", !!b.use_auth,
         b.username || "", b.password || "", b.encoder_id || "",
-        b.video_bitrate || 0, b.audio_bitrate || 0, b.audio_track || 0, !!b.auto_start);
+        b.video_bitrate > 0 ? b.video_bitrate : undefined,
+        b.audio_bitrate > 0 ? b.audio_bitrate : undefined,
+        b.audio_track > 0 ? b.audio_track : undefined,
+        !!b.auto_start);
     }).then(function () { return removed; });
   }
 

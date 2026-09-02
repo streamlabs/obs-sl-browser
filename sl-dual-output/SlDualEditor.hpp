@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 // Module-internal.
 // Interactive editing on the dual canvas preview, ported from obs-studio's OBSBasicPreview (frontend/widgets/OBSBasicPreview.cpp,
 //	GPL-2.0-or-later) and adapted to operate on the dual canvas's active scene instead of the main program scene.
@@ -105,7 +107,8 @@ private:
 	ViewMap viewMap() const;
 	ViewMap viewMapFor(uint32_t cx, uint32_t cy) const;
 	bool widgetToCanvas(const QPointF& p, struct vec2& out) const;
-	float pixelRatio() const { return (float)m_dpr; }
+	// Read from the draw callback, written by setViewSize() on the UI thread.
+	float pixelRatio() const { return m_dpr.load(std::memory_order_acquire); }
 
 	// borrowed active scene
 	obs_scene_t* scene() const;
@@ -169,7 +172,9 @@ private:
 	QWidget* m_widget = nullptr;
 
 	QSizeF m_viewSize;
-	qreal m_dpr = 1.0;
+	// Atomic for the same reason as SlDualCanvas::m_size: mouse and resize events retune this on the
+	// UI thread while the graphics thread reads it through pixelRatio() on every preview frame.
+	std::atomic<float> m_dpr{1.0f};
 
 	// Interaction state (mirrors OBSBasicPreview member-for-member)
 	obs_sceneitem_crop m_startCrop = {};
