@@ -195,6 +195,17 @@ void PluginJsHandler::workerThread()
 {
 	while (m_running)
 	{
+		using namespace std::chrono;
+
+		// A request can arrive before connectToClient() has published the channel we answer on.
+		// Leave it queued rather than computing a reply with nowhere to send it - the browser is
+		// waiting on a callback, so dropping one is a hang and running one early was a crash.
+		if (!GrpcPlugin::instance().clientReady())
+		{
+			std::this_thread::sleep_for(1ms);
+			continue;
+		}
+
 		std::vector<std::pair<std::string, std::string>> latestBatch;
 
 		{
@@ -204,7 +215,6 @@ void PluginJsHandler::workerThread()
 
 		if (latestBatch.empty())
 		{
-			using namespace std::chrono;
 			std::this_thread::sleep_for(1ms);
 		}
 		else
@@ -380,7 +390,12 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 
 	// We're done, send callback
 	if (param1Value.int_value() > 0)
-		GrpcPlugin::instance().getClient()->send_executeCallback(param1Value.int_value(), jsonReturnStr);
+	{
+		if (auto *client = GrpcPlugin::instance().getClient())
+			client->send_executeCallback(param1Value.int_value(), jsonReturnStr);
+		else
+			blog(LOG_ERROR, "PluginJsHandler::executeApiRequest no channel to answer %s on", funcName.c_str());
+	}
 }
 
 void PluginJsHandler::JS_QT_GET_COOKIE_VALUE(const json11::Json &params, std::string &out_jsonReturn)
