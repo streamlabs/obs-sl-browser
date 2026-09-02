@@ -200,11 +200,7 @@ void SlDualCanvas::ensureScenes(const SlDualConfig& config)
 
 void SlDualCanvas::detach()
 {
-	if (m_activeScene)
-	{
-		obs_scene_release(m_activeScene);
-		m_activeScene = nullptr;
-	}
+	swapActiveScene(nullptr);
 
 	if (m_transition)
 	{
@@ -402,6 +398,36 @@ void SlDualCanvas::deselectAllInActive()
 		nullptr);
 }
 
+// Takes ownership of `next` (already referenced, or null) and releases whatever it replaces.
+// Every swap goes through here so activeSceneRef() can never see a pointer mid-replacement.
+void SlDualCanvas::swapActiveScene(obs_scene_t* next)
+{
+	obs_scene_t* previous = nullptr;
+
+	{
+		std::lock_guard<std::mutex> lock(m_activeSceneMutex);
+		previous = m_activeScene;
+		m_activeScene = next;
+	}
+
+	// Released outside the lock: the graphics thread may still hold its own reference, and dropping
+	// the last one can run teardown we have no business doing with the lock held.
+	if (previous)
+		obs_scene_release(previous);
+}
+
+obs_scene_t* SlDualCanvas::activeScene() const
+{
+	std::lock_guard<std::mutex> lock(m_activeSceneMutex);
+	return m_activeScene;
+}
+
+obs_scene_t* SlDualCanvas::activeSceneRef() const
+{
+	std::lock_guard<std::mutex> lock(m_activeSceneMutex);
+	return m_activeScene ? obs_scene_get_ref(m_activeScene) : nullptr;
+}
+
 bool SlDualCanvas::setActiveScene(const std::string& name)
 {
 	if (!m_canvas)
@@ -422,9 +448,7 @@ bool SlDualCanvas::setActiveScene(const std::string& name)
 
 	obs_source_t* previous = m_activeScene ? obs_scene_get_source(m_activeScene) : nullptr;
 
-	if (m_activeScene)
-		obs_scene_release(m_activeScene);
-	m_activeScene = scene;
+	swapActiveScene(scene);
 	transitionToActive(previous);
 	return true;
 }
@@ -450,9 +474,7 @@ bool SlDualCanvas::createScene(const std::string& name)
 
 	deselectAllInActive();
 
-	if (m_activeScene)
-		obs_scene_release(m_activeScene);
-	m_activeScene = obs_scene_get_ref(scene);
+	swapActiveScene(obs_scene_get_ref(scene));
 
 	// creation ref; the canvas (SCENE_REF) keeps it alive
 	obs_scene_release(scene);
@@ -469,8 +491,15 @@ bool SlDualCanvas::removeActiveScene()
 	if (sceneNames().size() <= 1)
 		return false;
 
-	obs_scene_t* dying = m_activeScene;
-	m_activeScene = nullptr;
+	// Same lock as every other swap; this one keeps the reference rather than releasing it, so it
+	// takes the pointer out under the lock instead of going through swapActiveScene.
+	obs_scene_t* dying = nullptr;
+
+	{
+		std::lock_guard<std::mutex> lock(m_activeSceneMutex);
+		dying = m_activeScene;
+		m_activeScene = nullptr;
+	}
 
 	// Without a transition the channel would render the dying scene; with one, the transition holds its own ref and fades it out.
 	if (!m_transition)

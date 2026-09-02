@@ -73,6 +73,15 @@ static std::string unknownCanvasError(const std::string& canvasName)
 	return Json(Json::object({{"error", "Unknown canvas '" + canvasName + "', expected \"\" or \"vertical\""}})).dump();
 }
 
+// Vertical edits are not persisted unless the frontend is told something changed - SlDualUndo.cpp
+// schedules this after every edit made through the dock, and the api path has to do the same or the
+// change is lost at the next collection load. Main-canvas edits are OBS's own to save.
+static void saveVerticalEdit(const std::string& canvasName)
+{
+	if (isVerticalCanvas(canvasName))
+		obs_frontend_save();
+}
+
 // New reference, or null. Empty canvas keeps the historical main-canvas behaviour.
 // An unrecognised name resolves nothing rather than falling back to main: a typo must not silently edit the wrong canvas.
 static obs_source_t* resolveSceneSource(const std::string& canvasName, const std::string& sceneName)
@@ -1698,6 +1707,7 @@ void PluginJsHandler::JS_SCENE_ADD(const json11::Json& params, std::string& out_
 				}
 
 				obs_sceneitem_t *scene_item = obs_scene_add(scene_obj, source);
+				saveVerticalEdit(canvas_name);
 				if (!scene_item)
 					out_jsonReturn = Json(Json::object({{"error", "Failed to add source to scene"}})).dump();
 			}
@@ -2713,6 +2723,7 @@ void PluginJsHandler::JS_SET_SCENEITEM_POS(const json11::Json &params, std::stri
 				pos.x = x;
 				pos.y = y;
 				obs_sceneitem_set_pos(scene_item, &pos);
+				saveVerticalEdit(canvas_name);
 			}
 		},
 		Qt::BlockingQueuedConnection);
@@ -2759,6 +2770,7 @@ void PluginJsHandler::JS_SET_SCENEITEM_VISIBILITY(const json11::Json &params, st
 				}
 
 				obs_sceneitem_set_visible(scene_item, is_visible);
+				saveVerticalEdit(canvas_name);
 			}
 		},
 		Qt::BlockingQueuedConnection);
@@ -2805,6 +2817,7 @@ void PluginJsHandler::JS_SET_SCENEITEM_ROT(const json11::Json &params, std::stri
 				}
 
 				obs_sceneitem_set_rot(scene_item, rotation);
+				saveVerticalEdit(canvas_name);
 			}
 		},
 		Qt::BlockingQueuedConnection);
@@ -2858,6 +2871,7 @@ void PluginJsHandler::JS_SET_SCENEITEM_CROP(const json11::Json &params, std::str
 
 				struct obs_sceneitem_crop crop = {left, top, right, bottom};
 				obs_sceneitem_set_crop(scene_item, &crop);
+				saveVerticalEdit(canvas_name);
 			}
 		},
 		Qt::BlockingQueuedConnection);
@@ -2904,6 +2918,7 @@ void PluginJsHandler::JS_SET_SCENEITEM_SCALE_FILTER(const json11::Json &params, 
 				}
 
 				obs_sceneitem_set_scale_filter(scene_item, (obs_scale_type)scale_type);
+				saveVerticalEdit(canvas_name);
 			}
 		},
 		Qt::BlockingQueuedConnection);
@@ -2950,6 +2965,7 @@ void PluginJsHandler::JS_SET_SCENEITEM_BLENDING_MODE(const json11::Json &params,
 				}
 
 				obs_sceneitem_set_blending_mode(scene_item, (obs_blending_type)blending_type);
+				saveVerticalEdit(canvas_name);
 			}
 		},
 		Qt::BlockingQueuedConnection);
@@ -2997,6 +3013,7 @@ void PluginJsHandler::JS_SET_SCENEITEM_BLENDING_METHOD(const json11::Json &param
 
 				// Assuming obs_sceneitem_set_blending_method exists and accepts an enum type for blending method.
 				obs_sceneitem_set_blending_method(scene_item, (obs_blending_method)blending_method);
+				saveVerticalEdit(canvas_name);
 			}
 		},
 		Qt::BlockingQueuedConnection);
@@ -3047,6 +3064,7 @@ void PluginJsHandler::JS_SET_SCALE(const json11::Json &params, std::string &out_
 				// Assuming obs_sceneitem_set_scale exists and can set x and y scale values.
 				vec2 scale = {x_scale, y_scale};
 				obs_sceneitem_set_scale(scene_item, &scale);
+				saveVerticalEdit(canvas_name);
 			}
 		},
 		Qt::BlockingQueuedConnection);
@@ -3823,11 +3841,32 @@ void PluginJsHandler::JS_DUALOUTPUT_GET_STATE(const json11::Json &params, std::s
 		for (const std::string &name : dual.sceneNames())
 			scenes.push_back(Json(name));
 
-		// Handing the canvas to the multitrack path does nothing unless the main stream is actually using it.
+		// Handing the canvas to the multitrack path does nothing unless the main stream is actually
+		//	using it, and the profile flag alone does not decide that: OBS only builds a multitrack
+		//	output when the service is rtmp_custom or advertises a configuration url. Without that
+		//	second half, a frontend told eb_available would pick the mode, our own rtmp output would
+		//	be stood down, and nothing would carry the vertical canvas at all.
 		bool ebAvailable = false;
 
 		if (config_t *profile = obs_frontend_get_profile_config())
 			ebAvailable = config_get_bool(profile, "Stream1", "EnableMultitrackVideo");
+
+		if (ebAvailable)
+		{
+			// Borrowed, like the other obs_frontend_get_streaming_service() callers here.
+			obs_service_t *service = obs_frontend_get_streaming_service();
+			const char *serviceId = service ? obs_service_get_id(service) : nullptr;
+			bool serviceSupports = serviceId && strcmp(serviceId, "rtmp_custom") == 0;
+
+			if (!serviceSupports && service)
+			{
+				OBSDataAutoRelease settings = obs_service_get_settings(service);
+				const char *url = obs_data_get_string(settings, "multitrack_video_configuration_url");
+				serviceSupports = url && *url;
+			}
+
+			ebAvailable = serviceSupports;
+		}
 
 		out_jsonReturn = Json(Json::object({
 			{"available", dual.available()},
@@ -3900,7 +3939,23 @@ void PluginJsHandler::JS_DUALOUTPUT_SET_OUTPUT_MODE(const json11::Json &params, 
 	}
 
 	onUiThread([mode, &out_jsonReturn]() {
-		out_jsonReturn = SlDualOutput::instance().setOutputMode(slDualOutputModeFromString(mode)) ? dualSuccess() : dualUnavailableError();
+		SlDualOutput &dual = SlDualOutput::instance();
+
+		if (dual.setOutputMode(slDualOutputModeFromString(mode)))
+		{
+			out_jsonReturn = dualSuccess();
+			return;
+		}
+
+		// "Unavailable" is only right when dual output is not there at all; a refusal because the
+		//	main stream is live is a different answer and the caller can act on it.
+		if (!dual.available())
+		{
+			out_jsonReturn = dualUnavailableError();
+			return;
+		}
+
+		out_jsonReturn = Json(Json::object({{"error", "Output mode cannot change while the main OBS stream is live"}})).dump();
 	});
 }
 

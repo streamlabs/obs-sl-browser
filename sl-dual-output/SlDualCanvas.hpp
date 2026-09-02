@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -42,24 +43,29 @@ public:
 		uint32_t height;
 	};
 
-	// Both halves in one read. The draw callback must use this rather than width() and height()
-	// separately, or a frame can pair a new width with the height it had before.
+	// The only way to read the dimensions, deliberately. Separate width() and height() accessors
+	// existed and every caller used them as a pair, which meant two loads and a window in which a
+	// resize could land between them - the packed field below cannot help if the pair is split.
 	Size size() const
 	{
 		const uint64_t packed = m_size.load(std::memory_order_acquire);
 		return {(uint32_t)(packed >> 32), (uint32_t)(packed & 0xffffffffu)};
 	}
 
-	uint32_t width() const { return size().width; }
-	uint32_t height() const { return size().height; }
 	obs_canvas_t* canvasHandle() const { return m_canvas; }
 
 	// Scenes. UI thread.
 	std::vector<std::string> sceneNames() const;
 	std::string activeSceneName() const;
 
-	// borrowed
-	obs_scene_t* activeScene() const { return m_activeScene; }
+	// Borrowed, UI thread only: the pointer is only valid while nothing swaps the active scene,
+	// which is the caller's own thread.
+	obs_scene_t* activeScene() const;
+
+	// A strong reference the caller must release, or null. The graphics thread enumerates the
+	// active scene while the UI thread may be replacing and releasing it, so the draw callback
+	// needs the scene held for the frame rather than a pointer that can go away mid-enumeration.
+	obs_scene_t* activeSceneRef() const;
 	bool setActiveScene(const std::string& name);
 
 	// becomes active
@@ -104,8 +110,12 @@ private:
 	obs_source_t* m_transition = nullptr;
 	int m_transitionDurationMs = 300;
 
-	// strong reference
+	// strong reference, guarded by m_activeSceneMutex - swapped on the UI thread, referenced from
+	// the graphics thread through activeSceneRef()
 	obs_scene_t* m_activeScene = nullptr;
+	mutable std::mutex m_activeSceneMutex;
+
+	void swapActiveScene(obs_scene_t* next);
 
 	// (width << 32) | height. resetVideo() writes this from the UI thread while renderPreview() and
 	// SlDualEditor read it from the graphics thread's draw callback, so it is one atomic rather than

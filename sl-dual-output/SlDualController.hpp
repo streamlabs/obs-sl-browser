@@ -56,7 +56,8 @@ public: // actions, UI thread (dock / editor / settings dialog)
 	// Gates the docks and streaming; the canvas stays registered so its scenes persist.
 	void setEnabled(bool enabled);
 
-	void setOutputMode(SlDualOutputMode mode);
+	// False when the main OBS stream is live, since the switch cannot take effect until it stops.
+	bool setOutputMode(SlDualOutputMode mode);
 
 	void transitionSelect(const std::string& name);
 	void transitionSetDuration(int ms);

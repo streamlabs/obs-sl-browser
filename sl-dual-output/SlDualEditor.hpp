@@ -110,6 +110,29 @@ private:
 	// Read from the draw callback, written by setViewSize() on the UI thread.
 	float pixelRatio() const { return m_dpr.load(std::memory_order_acquire); }
 
+	// Everything the graphics thread is allowed to know about the rubber-band selection.
+	struct SelectionOverlay
+	{
+		bool active = false;
+		struct vec2 start = {};
+		struct vec2 mouse = {};
+	};
+
+	// One consistent copy per frame. The three fields behind this are UI-thread working state,
+	// written in pieces across a mouse handler, so the draw callback gets a finished copy published
+	// under m_selectMutex instead - which makes the read safe and stops a frame catching a start
+	// position whose matching mouse position has not landed yet.
+	SelectionOverlay overlaySnapshot() const
+	{
+		std::lock_guard<std::mutex> lock(m_selectMutex);
+		return m_overlay;
+	}
+
+	// Copies the working fields into the published snapshot. Takes m_selectMutex, so it must never
+	// be called from inside a scope that already holds it - the mouse handlers publish from a scope
+	// guard, which runs after any inner lock_guard has been destroyed.
+	void publishOverlay();
+
 	// borrowed active scene
 	obs_scene_t* scene() const;
 	vec2 canvasSize() const;
@@ -206,6 +229,9 @@ private:
 	float m_groupRot = 0.0f;
 
 	mutable std::mutex m_selectMutex;
+
+	// guarded by m_selectMutex
+	SelectionOverlay m_overlay;
 
 	// borrowed
 	std::vector<obs_sceneitem_t*> m_hoveredPreviewItems;

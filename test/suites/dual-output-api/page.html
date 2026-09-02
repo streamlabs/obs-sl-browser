@@ -96,10 +96,15 @@ runBtn.addEventListener("click", function () {
 });
 
 cleanupBtn.addEventListener("click", function () {
-  cleanupBtn.disabled = true;
-  __slDualTests.cleanup().then(function (removed) {
-    row({ status: "info", name: "cleanup", why: removed.length ? "removed: " + removed.join(", ") : "nothing to remove" });
-    cleanupBtn.disabled = false;
+  // Both controls, not just this one: cleanup deletes scenes and restores settings, so a run
+  // started underneath it would interleave with that and could be restored over.
+  runBtn.disabled = cleanupBtn.disabled = true;
+  __slDualTests.cleanup().then(function (r) {
+    var what = r.removed.length ? "removed: " + r.removed.join(", ") : "nothing to remove";
+    row(r.problems.length
+      ? { status: "fail", name: "cleanup", why: r.problems.join("; ") + " (" + what + ")" }
+      : { status: "info", name: "cleanup", why: what });
+    runBtn.disabled = cleanupBtn.disabled = false;
   });
 });
 

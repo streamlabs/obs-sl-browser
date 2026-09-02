@@ -103,8 +103,9 @@ void SlDualController::ensureCanvas()
 
 	if (canvas->create(config.canvasWidth, config.canvasHeight))
 	{
-		config.canvasWidth = canvas->width();
-		config.canvasHeight = canvas->height();
+		const SlDualCanvas::Size created = canvas->size();
+		config.canvasWidth = created.width;
+		config.canvasHeight = created.height;
 
 		bool firstSeed = !config.seeded;
 
@@ -213,8 +214,10 @@ void SlDualController::applySettings(const SlDualConfig& next)
 	else if (canvas)
 	{
 		canvas->resetVideo(config.canvasWidth, config.canvasHeight);
-		config.canvasWidth = canvas->width();
-		config.canvasHeight = canvas->height();
+
+		const SlDualCanvas::Size applied = canvas->size();
+		config.canvasWidth = applied.width;
+		config.canvasHeight = applied.height;
 	}
 
 	applyOutputModeSetting();
@@ -262,10 +265,21 @@ void SlDualController::setEnabled(bool enabled)
 	obs_frontend_save();
 }
 
-void SlDualController::setOutputMode(SlDualOutputMode mode)
+bool SlDualController::setOutputMode(SlDualOutputMode mode)
 {
 	if (config.outputMode == mode)
-		return;
+		return true;
+
+	// OBS reads MultitrackExtraCanvas when it prepares the main stream, so once that stream is
+	// running the claim cannot be taken back by clearing the profile value - the canvas stays
+	// attached to the multitrack output. Allowing the switch anyway would let startStream() bring
+	// our own encode up alongside it and send the canvas twice, which is the one thing this mode
+	// exists to prevent. Refused until the main stream stops, the same way a resize is.
+	if (obs_frontend_streaming_active())
+	{
+		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "output mode change refused: the main stream is live");
+		return false;
+	}
 
 	// Never leave our own encode running while handing the canvas to the multitrack path.
 	if (mode == SlDualOutputMode::EnhancedBroadcasting && output)
@@ -274,6 +288,7 @@ void SlDualController::setOutputMode(SlDualOutputMode mode)
 	config.outputMode = mode;
 	applyOutputModeSetting();
 	obs_frontend_save();
+	return true;
 }
 
 void SlDualController::applyOutputModeSetting()

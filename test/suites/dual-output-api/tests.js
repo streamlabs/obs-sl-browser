@@ -377,15 +377,18 @@
 
   /* ----------------------------------------------------------- cleanup --- */
 
-  /* Resolves once the output reports idle, or when the budget runs out - cleanup carries on either
-     way, since a stuck output is the suite's problem to report, not a reason to abandon tidying. */
+  /* Resolves true once the output reports idle, false if the budget runs out. Cleanup carries on
+     either way - a stuck output is not a reason to abandon tidying - but the caller has to know,
+     because everything after this depends on the output being down and would otherwise fail
+     silently while the run still reported green. */
   function waitForIdle(budgetMs) {
     var deadline = Date.now() + budgetMs;
 
     function poll() {
       return call("dualoutput_getState").then(function (s) {
-        if (s.error || s.stream_state === "idle") return null;
-        if (Date.now() >= deadline) return null;
+        if (s.error) return false;
+        if (s.stream_state === "idle") return true;
+        if (Date.now() >= deadline) return false;
         return new Promise(function (r) { setTimeout(r, 100); }).then(poll);
       });
     }
@@ -395,7 +398,17 @@
 
   function cleanup(ctx) {
     var removed = [];
+    var problems = [];
     ctx = ctx || {};
+
+    // A restore that answered with an error left the setting where the tests put it, which is
+    // exactly the thing cleanup claims not to do. Recorded rather than thrown, so the rest still runs.
+    function restore(what, promise) {
+      return promise.then(function (r) {
+        if (r && r.error) problems.push(what + ": " + r.error);
+        return r;
+      });
+    }
 
     // Before anything else: a live output would make the setCanvasSize restore below fail, and a
     // test that threw part way through its live section may have left one running. stopStream
@@ -403,7 +416,8 @@
     // teardown and its error is swallowed.
     return call("dualoutput_stopStream").then(function () {
       return waitForIdle(8000);
-    }).then(function () {
+    }).then(function (idle) {
+      if (!idle) problems.push("the output never reached idle, so the restores below were made against a live one");
       return call("obs_enum_scenes", V);
     }).then(function (list) {
       var doomed = names(list).filter(function (n) { return n.indexOf(PREFIX) === 0; });
@@ -432,24 +446,24 @@
       return ctx.sourceName ? call("obs_source_destroy", ctx.sourceName) : null;
     }).then(function () {
       return ctx.sizeBefore
-        ? call("dualoutput_setCanvasSize", ctx.sizeBefore.width, ctx.sizeBefore.height)
+        ? restore("canvas size", call("dualoutput_setCanvasSize", ctx.sizeBefore.width, ctx.sizeBefore.height))
         : null;
     }).then(function () {
-      return ctx.modeBefore ? call("dualoutput_setOutputMode", ctx.modeBefore) : null;
+      return ctx.modeBefore ? restore("output mode", call("dualoutput_setOutputMode", ctx.modeBefore)) : null;
     }).then(function () {
       if (!ctx.settingsBefore) return null;
       var b = ctx.settingsBefore;
       // Exact, including fields that started empty: "" clears, so the originals go back whatever
       // they were. Bitrates and the track are only sent if they were valid, since 0 is now refused
       // and would abort the whole restore.
-      return call("dualoutput_setStreamSettings",
+      return restore("stream settings", call("dualoutput_setStreamSettings",
         b.server || "", b.key || "", !!b.use_auth,
         b.username || "", b.password || "", b.encoder_id || "",
         b.video_bitrate > 0 ? b.video_bitrate : undefined,
         b.audio_bitrate > 0 ? b.audio_bitrate : undefined,
         b.audio_track > 0 ? b.audio_track : undefined,
-        !!b.auto_start);
-    }).then(function () { return removed; });
+        !!b.auto_start));
+    }).then(function () { return { removed: removed, problems: problems }; });
   }
 
   /* ------------------------------------------------------------ runner --- */
@@ -476,8 +490,13 @@
     }, Promise.resolve());
 
     return chain.then(function () {
-      return cleanup(ctx).then(function (removed) {
-        record("info", "cleanup", removed.length ? "removed: " + removed.join(", ") : "nothing to remove");
+      return cleanup(ctx).then(function (r) {
+        var what = r.removed.length ? "removed: " + r.removed.join(", ") : "nothing to remove";
+
+        // A cleanup that could not restore is a failure, not a footnote: the next run starts from
+        // whatever this one left behind.
+        if (r.problems.length) record("fail", "cleanup", r.problems.join("; ") + " (" + what + ")");
+        else record("info", "cleanup", what);
       }).catch(function (e) {
         record("fail", "cleanup", String(e));
       });

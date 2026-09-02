@@ -22,9 +22,13 @@
  * partial update, enhanced_broadcasting refusing startStream, and size alignment.
  *
  * Safety: scenes are created with a __slt_ prefix and removed afterwards; canvas size, output
- * mode and stream settings are snapshotted and restored. No stream is started against a real
- * endpoint - the settings test writes rtmp://127.0.0.1, and the only startStream call is the
- * one asserted to be refused.
+ * mode and stream settings are snapshotted and restored, empty originals included.
+ *
+ * Two startStream calls, neither of which reaches a real endpoint. One is asserted to be refused
+ * in enhanced_broadcasting mode. The other genuinely starts an output, against
+ * rtmp://127.0.0.1:1/none where nothing is listening, to check a resize is refused while it runs -
+ * so a manual run does briefly bring an output up and stop it again. The settings tests write
+ * rtmp://127.0.0.1 and never start it.
  */
 
 import { join } from "node:path";

@@ -175,8 +175,7 @@ bool SlDualOutput::setOutputMode(SlDualOutputMode mode)
 	if (!m_controller)
 		return false;
 
-	m_controller->setOutputMode(mode);
-	return m_controller->config.outputMode == mode;
+	return m_controller->setOutputMode(mode);
 }
 
 bool SlDualOutput::startStream()

@@ -984,6 +984,7 @@ void SlDualEditor::reset(bool clearUndo)
 	std::lock_guard<std::mutex> lock(m_selectMutex);
 	m_hoveredPreviewItems.clear();
 	m_selectedItems.clear();
+	m_overlay = {};
 
 	if (clearUndo)
 		m_undo.clear();
@@ -1001,8 +1002,12 @@ SlDualEditor::ViewMap SlDualEditor::viewMapFor(uint32_t cx, uint32_t cy) const
 	if (!canvas || !canvas->valid())
 		return map;
 
-	map.canvasW = canvas->width();
-	map.canvasH = canvas->height();
+	// One snapshot. Two accessors meant two loads, which is exactly the split SlDualCanvas::size()
+	// exists to prevent - a resize between them pairs the new width with the old height.
+	const SlDualCanvas::Size canvasSize = canvas->size();
+
+	map.canvasW = canvasSize.width;
+	map.canvasH = canvasSize.height;
 	map.cxDisp = (float)cx;
 	map.cyDisp = (float)cy;
 
@@ -1047,7 +1052,9 @@ vec2 SlDualEditor::canvasSize() const
 {
 	vec2 size;
 	SlDualCanvas* canvas = m_controller.canvas.get();
-	vec2_set(&size, canvas ? (float)canvas->width() : 0.0f, canvas ? (float)canvas->height() : 0.0f);
+	const SlDualCanvas::Size cs = canvas ? canvas->size() : SlDualCanvas::Size{0, 0};
+
+	vec2_set(&size, (float)cs.width, (float)cs.height);
 	return size;
 }
 
@@ -1770,8 +1777,33 @@ void SlDualEditor::rotateItem(const struct vec2& pos, Qt::KeyboardModifiers mods
 * Mouse events
 */
 
+void SlDualEditor::publishOverlay()
+{
+	std::lock_guard<std::mutex> lock(m_selectMutex);
+	m_overlay = {m_selectionBox, m_startPos, m_mousePos};
+}
+
+namespace {
+
+template<typename Fn> struct ScopeExit
+{
+	Fn fn;
+	~ScopeExit() { fn(); }
+};
+
+template<typename Fn> ScopeExit<Fn> onScopeExit(Fn fn)
+{
+	return {std::move(fn)};
+}
+
+}
+
 void SlDualEditor::mousePress(const QPointF& pos, Qt::MouseButton button, Qt::KeyboardModifiers mods)
 {
+	// Publishes on every exit path, early returns included. Declared first, so it runs last -
+	// after any lock_guard the handler took in an inner scope.
+	auto publishOnExit = onScopeExit([this] { publishOverlay(); });
+
 	if (!scene())
 		return;
 
@@ -1825,6 +1857,10 @@ void SlDualEditor::mousePress(const QPointF& pos, Qt::MouseButton button, Qt::Ke
 
 void SlDualEditor::mouseMove(const QPointF& pos, bool buttonDown, Qt::KeyboardModifiers mods)
 {
+	// Publishes on every exit path, early returns included. Declared first, so it runs last -
+	// after any lock_guard the handler took in an inner scope.
+	auto publishOnExit = onScopeExit([this] { publishOverlay(); });
+
 	vec2 cpos;
 
 	if (!widgetToCanvas(pos, cpos))
@@ -1918,6 +1954,10 @@ void SlDualEditor::mouseMove(const QPointF& pos, bool buttonDown, Qt::KeyboardMo
 
 void SlDualEditor::mouseRelease(const QPointF& pos, Qt::MouseButton button, Qt::KeyboardModifiers mods)
 {
+	// Publishes on every exit path, early returns included. Declared first, so it runs last -
+	// after any lock_guard the handler took in an inner scope.
+	auto publishOnExit = onScopeExit([this] { publishOverlay(); });
+
 	if (button != Qt::LeftButton)
 		return;
 
@@ -2260,12 +2300,13 @@ void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* pa
 				obs_transform_info info;
 				obs_sceneitem_get_info2(item, &info);
 				info.rot = 0.0f;
-				vec2_set(&info.pos, (float)canvas->width() * 0.5f, (float)canvas->height() * 0.5f);
+				const SlDualCanvas::Size cs = canvas->size();
+				vec2_set(&info.pos, (float)cs.width * 0.5f, (float)cs.height * 0.5f);
 				vec2_set(&info.scale, 1.0f, 1.0f);
 				info.alignment = OBS_ALIGN_CENTER;
 				info.bounds_type = OBS_BOUNDS_SCALE_INNER;
 				info.bounds_alignment = OBS_ALIGN_CENTER;
-				vec2_set(&info.bounds, (float)canvas->width(), (float)canvas->height());
+				vec2_set(&info.bounds, (float)cs.width, (float)cs.height);
 				obs_sceneitem_set_info2(item, &info);
 			});
 		});
@@ -2276,7 +2317,9 @@ void SlDualEditor::buildItemMenu(QMenu& menu, obs_sceneitem_t* item, QWidget* pa
 				obs_transform_info info;
 				obs_sceneitem_get_info2(item, &info);
 				info.alignment = OBS_ALIGN_CENTER;
-				vec2_set(&info.pos, (float)canvas->width() * 0.5f, (float)canvas->height() * 0.5f);
+
+				const SlDualCanvas::Size cs = canvas->size();
+				vec2_set(&info.pos, (float)cs.width * 0.5f, (float)cs.height * 0.5f);
 				obs_sceneitem_set_info2(item, &info);
 			});
 		});
@@ -2425,7 +2468,9 @@ void SlDualEditor::placeNewItem(obs_sceneitem_t* item)
 	obs_transform_info info;
 	obs_sceneitem_get_info2(item, &info);
 	info.alignment = OBS_ALIGN_CENTER;
-	vec2_set(&info.pos, (float)canvas->width() * 0.5f, (float)canvas->height() * 0.5f);
+
+	const SlDualCanvas::Size cs = canvas->size();
+	vec2_set(&info.pos, (float)cs.width * 0.5f, (float)cs.height * 0.5f);
 	obs_sceneitem_set_info2(item, &info);
 
 	obs_scene_t* s = obs_sceneitem_get_scene(item);
@@ -3194,10 +3239,19 @@ void SlDualEditor::drawSelectionBox(float x1, float y1, float x2, float y2)
 
 void SlDualEditor::drawSceneEditing(const ViewMap& map)
 {
-	obs_scene_t* s = scene();
+	// Graphics thread: a held reference for the frame, not the borrowed pointer scene() returns.
+	// The UI thread can switch the active scene while obs_scene_enum_items walks this one.
+	SlDualCanvas* canvas = m_controller.canvas.get();
+	obs_scene_t* s = canvas ? canvas->activeSceneRef() : nullptr;
 
 	if (!s)
 		return;
+
+	struct SceneRef
+	{
+		obs_scene_t* scene;
+		~SceneRef() { obs_scene_release(scene); }
+	} sceneRef{s};
 
 	SlDrawCtx ctx{this, pixelRatio(), accessibilityColor("SelectRed", 1.0f, 0.0f, 0.0f),
 		      accessibilityColor("SelectGreen", 0.0f, 1.0f, 0.0f),
@@ -3208,13 +3262,16 @@ void SlDualEditor::drawSceneEditing(const ViewMap& map)
 	obs_scene_enum_items(s, drawSelectedItemProc, &ctx);
 	gs_matrix_pop();
 
-	if (m_selectionBox)
+	const SelectionOverlay overlay = overlaySnapshot();
+
+	if (overlay.active)
 	{
 		gs_effect_t* solid = obs_get_base_effect(OBS_EFFECT_SOLID);
 
 		while (gs_effect_loop(solid, "Solid"))
 		{
-			drawSelectionBox(m_startPos.x * map.scale, m_startPos.y * map.scale, m_mousePos.x * map.scale, m_mousePos.y * map.scale);
+			drawSelectionBox(overlay.start.x * map.scale, overlay.start.y * map.scale, overlay.mouse.x * map.scale,
+					 overlay.mouse.y * map.scale);
 		}
 	}
 
