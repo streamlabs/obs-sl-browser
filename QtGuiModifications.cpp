@@ -173,7 +173,10 @@ void QtGuiModifications::onStartStreamingRequest()
 	if (!m_jsToCallOnStreamClick.empty())
 	{
 		// Run thread as to not block
-		std::thread([&]() { GrpcPlugin::instance().getClient()->send_executeJavascript(m_jsToCallOnStreamClick); }).detach();
+		std::thread([&]() {
+			if (auto *client = GrpcPlugin::instance().getClient())
+				client->send_executeJavascript(m_jsToCallOnStreamClick);
+		}).detach();
 		return;
 	}
 
