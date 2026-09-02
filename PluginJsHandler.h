@@ -117,6 +117,7 @@ private:
 	void JS_SOURCE_FILTER_ADD(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_QT_GET_COOKIE_VALUE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_BROWSERSOURCE_SEND_MESSAGE(const json11::Json &params, std::string &out_jsonReturn);
 
 	// Dual output. Scene and source editing on the dual canvas goes through the obs_* calls above with a trailing
 	//	canvas argument; these cover what has no main-canvas equivalent.

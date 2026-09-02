@@ -102,6 +102,7 @@ public:
 		JS_DUALOUTPUT_START_STREAM,
 		JS_DUALOUTPUT_STOP_STREAM,
 		JS_DUALOUTPUT_REMOVE_SCENE,
+		JS_BROWSERSOURCE_SEND_MESSAGE,
 	};
 
 public:
@@ -572,6 +573,17 @@ public:
 			// .(@function(arg1), @sceneName)
 			//	Removes a scene from the vertical canvas. Fails on the last remaining scene.
 			{"dualoutput_removeScene", JS_DUALOUTPUT_REMOVE_SCENE},
+
+			/**
+			* Browser sources
+			*/
+
+			// .(@function(arg1), @sourceName, @messageStr)
+			//	Sends messageStr one way to a page in an OBS browser source, arriving as a
+			//	messageFromApp CustomEvent with detail {"message": messageStr}, the same shape
+			//	Streamlabs Desktop sends. No reply path, dropped if the source has no live page.
+			//		Example arg1 = { "success": true } or { "success": true, "warning": "." } or { "error": "." }
+			{"browsersource_sendMessage", JS_BROWSERSOURCE_SEND_MESSAGE},
 
 		};
 

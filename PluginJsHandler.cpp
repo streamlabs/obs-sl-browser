@@ -381,6 +381,7 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_SOURCE_FILTER_ADD: JS_SOURCE_FILTER_ADD(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SOURCE_FILTER_REMOVE: JS_SOURCE_FILTER_REMOVE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_QT_GET_COOKIE_VALUE: JS_QT_GET_COOKIE_VALUE(jsonParams, jsonReturnStr); break;			
+		case JavascriptApi::JS_BROWSERSOURCE_SEND_MESSAGE: JS_BROWSERSOURCE_SEND_MESSAGE(jsonParams, jsonReturnStr); break;
 		default: jsonReturnStr = Json(Json::object{{"error", "Unknown Javascript Function"}}).dump(); break;
 	}
 
@@ -4004,4 +4005,61 @@ void PluginJsHandler::JS_DUALOUTPUT_REMOVE_SCENE(const json11::Json &params, std
 		// The canvas refuses to drop its last scene, which is the usual reason this fails.
 		out_jsonReturn = dual.sceneRemove(scene_name) ? dualSuccess() : Json(Json::object({{"error", "Failed to remove scene " + scene_name}})).dump();
 	});
+}
+
+void PluginJsHandler::JS_BROWSERSOURCE_SEND_MESSAGE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const std::string sourceName = params["param2"].string_value();
+	const std::string message = params["param3"].string_value();
+
+	if (sourceName.empty())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "param2 (sourceName) is required"}})).dump();
+		return;
+	}
+
+	OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
+
+	if (!source)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Did not find a source with name " + sourceName}})).dump();
+		return;
+	}
+
+	const char *sourceId = obs_source_get_id(source);
+
+	if (!sourceId || std::string(sourceId) != "browser_source")
+	{
+		out_jsonReturn = Json(Json::object({{"error", sourceName + " is not a browser source"}})).dump();
+		return;
+	}
+
+	// Desktop's MessageToBrowser envelope, overlays are written against this exact shape.
+	const std::string payload = Json(Json::object({{"message", message}})).dump();
+
+	// javascript_event queues a CEF task itself, so no main thread hop.
+	calldata_t cd;
+	calldata_init(&cd);
+	calldata_set_string(&cd, "eventName", "messageFromApp");
+	calldata_set_string(&cd, "jsonString", payload.c_str());
+
+	const bool delivered = proc_handler_call(obs_source_get_proc_handler(source), "javascript_event", &cd);
+	calldata_free(&cd);
+
+	if (!delivered)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "javascript_event is unavailable, OBS 29.1.0 or newer is required"}})).dump();
+		return;
+	}
+
+	OBSDataAutoRelease settings = obs_source_get_settings(source);
+
+	if (obs_data_get_bool(settings, "shutdown") && !obs_source_showing(source))
+	{
+		const std::string warning = sourceName + " is hidden and set to shut down when not visible, so no page is running to receive this";
+		out_jsonReturn = Json(Json::object({{"success", true}, {"warning", warning}})).dump();
+		return;
+	}
+
+	out_jsonReturn = Json(Json::object({{"success", true}})).dump();
 }

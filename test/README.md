@@ -173,4 +173,5 @@ test/
   suites/
     smoke/         the plugin comes up and answers
     dual-output-api/ the vertical canvas api and its isolation
+    source-message/ browsersource_sendMessage reaches the right browser source
 ```
