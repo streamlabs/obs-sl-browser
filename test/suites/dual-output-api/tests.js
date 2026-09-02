@@ -118,6 +118,35 @@
     });
   });
 
+  /* Deleting a background scene used to select it first, which put it on air through the transition
+     and then left whichever scene sorted first on air after the delete. */
+  test("removing a background vertical scene leaves the active one on air", function () {
+    var doomed = PREFIX + "bg";
+    var active;
+
+    return call("obs_get_current_scene", V).then(function (r) {
+      active = checkOk(r, "current vertical scene").name;
+      return call("obs_create_scene", doomed, V);
+    }).then(function (r) {
+      checkOk(r, "create the background scene");
+
+      // creation makes it active; put the original back so the removal is of a background scene
+      return call("obs_set_current_scene", active, V);
+    }).then(function (r) {
+      checkOk(r, "restore the active scene");
+      return call("dualoutput_removeScene", doomed);
+    }).then(function (r) {
+      checkOk(r, "removeScene");
+      return call("obs_enum_scenes", V);
+    }).then(function (listed) {
+      check(names(listed).indexOf(doomed) === -1, "the background scene is still listed");
+      return call("obs_get_current_scene", V);
+    }).then(function (r) {
+      checkOk(r, "current vertical scene after the removal");
+      check(r.name === active, "the active scene changed from '" + active + "' to '" + r.name + "'");
+    });
+  });
+
   test("an unrecognised canvas name is refused, not redirected", function () {
     var bogus = PREFIX + "bogus";
     return call("obs_create_scene", bogus, "verticle").then(function (res) {

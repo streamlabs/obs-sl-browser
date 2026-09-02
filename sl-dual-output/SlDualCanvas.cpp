@@ -515,6 +515,29 @@ bool SlDualCanvas::removeActiveScene()
 	return true;
 }
 
+bool SlDualCanvas::removeScene(const std::string& name)
+{
+	if (!m_canvas || name.empty())
+		return false;
+
+	if (activeSceneName() == name)
+		return removeActiveScene();
+
+	// never remove the last scene
+	if (sceneNames().size() <= 1)
+		return false;
+
+	obs_scene_t* scene = findSceneByName(name);
+
+	if (!scene)
+		return false;
+
+	// Not on air and not in the channel, so the active scene and the running transition are untouched.
+	obs_canvas_scene_remove(scene);
+	obs_scene_release(scene);
+	return true;
+}
+
 bool SlDualCanvas::renameActiveScene(const std::string& newName)
 {
 	if (!m_canvas || !m_activeScene || newName.empty())

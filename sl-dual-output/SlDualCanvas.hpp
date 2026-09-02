@@ -73,6 +73,10 @@ public:
 
 	// refuses to remove the last scene
 	bool removeActiveScene();
+
+	// Removes any scene by name. A background scene goes without disturbing the active one, so deleting
+	// it never puts it on air; the active scene still goes through removeActiveScene().
+	bool removeScene(const std::string& name);
 	bool renameActiveScene(const std::string& newName);
 
 	// Channel 0 holds the transition (like the main output's channel 0); scene switches obs_transition_start through it.

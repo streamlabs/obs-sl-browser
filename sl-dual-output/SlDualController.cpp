@@ -228,18 +228,29 @@ void SlDualController::applySettings(const SlDualConfig& next)
 
 		// setEnabled saves; let it run against the already-applied config.
 		config.enabled = wasEnabled;
-		setEnabled(want);
-		return;
+
+		// A refusal leaves `enabled` where it was, but everything else in this config still has to persist.
+		if (setEnabled(want))
+			return;
 	}
 
 	// persist promptly via the save callback
 	obs_frontend_save();
 }
 
-void SlDualController::setEnabled(bool enabled)
+bool SlDualController::setEnabled(bool enabled)
 {
 	if (config.enabled == enabled)
-		return;
+		return true;
+
+	// The multitrack path picked the canvas up when the main stream was prepared, so releasing the
+	// claim here cannot take it back - the canvas would go on streaming with the docks gone and the
+	// api reporting it off. Refused until the main stream stops, the same way a mode change is.
+	if (!enabled && config.outputMode == SlDualOutputMode::EnhancedBroadcasting && obs_frontend_streaming_active())
+	{
+		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "disable refused: the main stream is carrying the canvas");
+		return false;
+	}
 
 	config.enabled = enabled;
 
@@ -263,6 +274,7 @@ void SlDualController::setEnabled(bool enabled)
 
 	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "%s", enabled ? "enabled" : "disabled");
 	obs_frontend_save();
+	return true;
 }
 
 bool SlDualController::setOutputMode(SlDualOutputMode mode)
@@ -391,17 +403,21 @@ bool SlDualController::sceneRemove(const std::string& name)
 	if (!canvas || name.empty())
 		return false;
 
-	std::vector<std::string> names = canvas->sceneNames();
+	// Selecting the target first would run the transition and leave a different scene on air after the
+	// delete; a background scene is removed where it stands.
+	if (canvas->activeSceneName() == name)
+	{
+		sceneRemoveActive();
+		return canvas->activeSceneName() != name;
+	}
 
-	if (std::find(names.begin(), names.end(), name) == names.end())
+	if (!canvas->removeScene(name))
 		return false;
 
-	// Removal is defined on the active scene; select it first.
-	if (canvas->activeSceneName() != name && !canvas->setActiveScene(name))
-		return false;
-
-	sceneRemoveActive();
-	return canvas->activeSceneName() != name;
+	config.sceneOrder.erase(std::remove(config.sceneOrder.begin(), config.sceneOrder.end(), name), config.sceneOrder.end());
+	obs_frontend_save();
+	refreshSceneUi();
+	return true;
 }
 
 bool SlDualController::sceneRenameActive(const std::string& name)
@@ -558,7 +574,13 @@ void SlDualController::onCollectionChanging()
 
 void SlDualController::onCollectionChanged()
 {
-	// If the new collection carried our settings, the save callback has already applied them to `config` during load.
+	// The save callback has already applied this collection's settings to `config` during load, defaults
+	// included, so `enabled` can differ from the collection we came from and the docks have to follow it.
+	if (config.enabled && !dock)
+		createDocks();
+	else if (!config.enabled && dock)
+		removeDocks();
+
 	ensureCanvas();
 	refreshSceneUi();
 
@@ -623,7 +645,22 @@ void SlDualController::onSaveLoad(obs_data_t* saveData, bool saving)
 			applyLoadedData(data);
 			obs_data_release(data);
 		}
+		else
+		{
+			// These settings belong to the collection, so a collection that carries none gets the
+			// defaults - not whatever the previous one left in `config`, which would then be written
+			// into this collection's file at the next save. Stream credentials included.
+			resetConfigToDefaults();
+
+			if (transitions)
+				transitions->rebuild(config);
+		}
 	}
+}
+
+void SlDualController::resetConfigToDefaults()
+{
+	config = SlDualConfig();
 }
 
 obs_data_t* SlDualController::buildSaveData() const
@@ -683,8 +720,11 @@ obs_data_t* SlDualController::buildSaveData() const
 
 void SlDualController::applyLoadedData(obs_data_t* d)
 {
+	// The loaded object is the whole truth for this collection: start from the defaults so an older
+	// save's missing keys come back as defaults rather than as the previously loaded collection's values.
+	resetConfigToDefaults();
 
-	// Absent keys fall back to the current values.
+	// Absent keys fall back to the defaults set above.
 	obs_data_set_default_int(d, "canvas_width", config.canvasWidth);
 	obs_data_set_default_int(d, "canvas_height", config.canvasHeight);
 	obs_data_set_default_string(d, "active_scene", config.activeScene.c_str());

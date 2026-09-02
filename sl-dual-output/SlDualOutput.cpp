@@ -163,16 +163,17 @@ bool SlDualOutput::applyConfig(const SlDualConfig& next)
 
 bool SlDualOutput::setEnabled(bool enabled)
 {
-	if (!m_controller)
+	if (!available())
 		return false;
 
-	m_controller->setEnabled(enabled);
-	return true;
+	return m_controller->setEnabled(enabled);
 }
 
 bool SlDualOutput::setOutputMode(SlDualOutputMode mode)
 {
-	if (!m_controller)
+	// available(), not just the controller: with the canvas detached the mode cannot be handed to the
+	// multitrack path, and the load that ends the detached window overwrites it anyway.
+	if (!available())
 		return false;
 
 	return m_controller->setOutputMode(mode);

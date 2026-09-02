@@ -54,7 +54,8 @@ public: // actions, UI thread (dock / editor / settings dialog)
 	bool sceneRenameActive(const std::string& name);
 
 	// Gates the docks and streaming; the canvas stays registered so its scenes persist.
-	void setEnabled(bool enabled);
+	// False when a disable is refused because an enhanced-broadcasting main stream is carrying the canvas.
+	bool setEnabled(bool enabled);
 
 	// False when the main OBS stream is live, since the switch cannot take effect until it stops.
 	bool setOutputMode(SlDualOutputMode mode);
@@ -94,6 +95,9 @@ private: // persistence (scene collection, key "sl-dual-output")
 	obs_data_t* buildSaveData() const;
 	void applyLoadedData(obs_data_t* data);
 	void restoreFromCollectionFile();
+
+	// Every load starts here: the settings are per collection, so nothing may survive from the last one.
+	void resetConfigToDefaults();
 
 private: // docks
 	void createDocks();

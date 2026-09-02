@@ -3534,7 +3534,14 @@ void PluginJsHandler::JS_ENUM_SCENES(const json11::Json &params, std::string &ou
 
 			obs_canvas_enum_scenes(canvas, enumScenesProc, &sourcesList);
 #else
-			(void)canvas_name;
+			// Stub build: there is no vertical canvas, and obs_enum_scenes would answer for "vertical"
+			// with the main canvas's scenes. Same empty answer the enabled build gives when the canvas is gone.
+			if (isVerticalCanvas(canvas_name))
+			{
+				out_jsonReturn = Json(Json::array()).dump();
+				return;
+			}
+
 			obs_enum_scenes(enumScenesProc, &sourcesList);
 #endif
 
@@ -3886,7 +3893,23 @@ void PluginJsHandler::JS_DUALOUTPUT_SET_ENABLED(const json11::Json &params, std:
 	bool enabled = params["param2"].bool_value();
 
 	onUiThread([enabled, &out_jsonReturn]() {
-		out_jsonReturn = SlDualOutput::instance().setEnabled(enabled) ? dualSuccess() : dualUnavailableError();
+		SlDualOutput &dual = SlDualOutput::instance();
+
+		if (dual.setEnabled(enabled))
+		{
+			out_jsonReturn = dualSuccess();
+			return;
+		}
+
+		// "Unavailable" is only right when dual output is not there at all; a refusal because the
+		//	main stream is carrying the canvas is a different answer and the caller can act on it.
+		if (!dual.available())
+		{
+			out_jsonReturn = dualUnavailableError();
+			return;
+		}
+
+		out_jsonReturn = Json(Json::object({{"error", "Dual output cannot be disabled while the main OBS stream is carrying the vertical canvas"}})).dump();
 	});
 }
 

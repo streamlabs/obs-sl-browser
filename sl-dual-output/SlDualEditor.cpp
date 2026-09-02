@@ -3168,6 +3168,24 @@ bool SlDualEditor::drawSelectedOverflowProc(obs_scene_t*, obs_sceneitem_t* item,
 	return true;
 }
 
+// Graphics thread: the UI thread can replace and release the active scene mid-frame, so every overlay
+// pass holds its own reference for the whole pass instead of the borrowed pointer scene() returns.
+struct SlActiveSceneRef
+{
+	explicit SlActiveSceneRef(SlDualCanvas* canvas) : scene(canvas ? canvas->activeSceneRef() : nullptr) {}
+
+	~SlActiveSceneRef()
+	{
+		if (scene)
+			obs_scene_release(scene);
+	}
+
+	SlActiveSceneRef(const SlActiveSceneRef&) = delete;
+	SlActiveSceneRef& operator=(const SlActiveSceneRef&) = delete;
+
+	obs_scene_t* scene;
+};
+
 void SlDualEditor::drawOverflow(const ViewMap& map)
 {
 	if (userConfigBool("BasicWindow", "OverflowHidden"))
@@ -3185,7 +3203,8 @@ void SlDualEditor::drawOverflow(const ViewMap& map)
 	if (!m_overflowTexture)
 		return;
 
-	obs_scene_t* s = scene();
+	SlActiveSceneRef held(m_controller.canvas.get());
+	obs_scene_t* s = held.scene;
 
 	if (!s)
 		return;
@@ -3239,19 +3258,11 @@ void SlDualEditor::drawSelectionBox(float x1, float y1, float x2, float y2)
 
 void SlDualEditor::drawSceneEditing(const ViewMap& map)
 {
-	// Graphics thread: a held reference for the frame, not the borrowed pointer scene() returns.
-	// The UI thread can switch the active scene while obs_scene_enum_items walks this one.
-	SlDualCanvas* canvas = m_controller.canvas.get();
-	obs_scene_t* s = canvas ? canvas->activeSceneRef() : nullptr;
+	SlActiveSceneRef held(m_controller.canvas.get());
+	obs_scene_t* s = held.scene;
 
 	if (!s)
 		return;
-
-	struct SceneRef
-	{
-		obs_scene_t* scene;
-		~SceneRef() { obs_scene_release(scene); }
-	} sceneRef{s};
 
 	SlDrawCtx ctx{this, pixelRatio(), accessibilityColor("SelectRed", 1.0f, 0.0f, 0.0f),
 		      accessibilityColor("SelectGreen", 0.0f, 1.0f, 0.0f),
@@ -3416,7 +3427,8 @@ void SlDualEditor::renderSpacingHelper(int index, struct vec3& start, struct vec
 
 void SlDualEditor::drawSpacingHelpers(const ViewMap& map)
 {
-	obs_scene_t* s = scene();
+	SlActiveSceneRef held(m_controller.canvas.get());
+	obs_scene_t* s = held.scene;
 
 	if (!s)
 		return;
