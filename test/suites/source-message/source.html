@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>source message receiver</title>
+<body style="background:#111;color:#0f0;font:13px monospace;margin:8px">
+<h3 id="who"></h3>
+<div id="log"></div>
+<script>
+// Which OBS source this page expects to be running in. The scene collection puts it in
+// the URL, so the page knows its own identity without a reply path to ask over.
+const WHO = new URLSearchParams(location.search).get('who') || '?';
+const SOURCE_NAME = 'MsgSource' + WHO;
+
+document.getElementById('who').textContent = SOURCE_NAME;
+
+function report(event, data) {
+	document.getElementById('log').insertAdjacentHTML(
+		'beforeend', '<div>' + event + ': ' + JSON.stringify(data) + '</div>');
+	// location.origin, not a hardcoded port: this page is served by the harness, whose
+	// port is ephemeral and different on every run.
+	return fetch(location.origin + '/report', {
+		method: 'POST',
+		headers: {'content-type': 'application/json'},
+		body: JSON.stringify({who: SOURCE_NAME, event: event, data: data})
+	}).catch(function (e) { return null; });
+}
+
+report('LOADED', {});
+
+// Exactly how a Streamlabs Desktop overlay listens, with no plugin-specific helper: the
+// event is messageFromApp and detail is {message: "<string the app sent>"}. If this page
+// works here it works unchanged on Desktop, which is the whole point of the contract.
+window.addEventListener('messageFromApp', function (e) {
+	const detail = e.detail || {};
+	let parsed = null;
+
+	try {
+		parsed = JSON.parse(detail.message);
+	} catch (err) {
+		report('UNPARSEABLE', {detail: detail, error: String(err)});
+		return;
+	}
+
+	// Report the envelope and the undecoded message too, so a regression in the wrapper
+	// shape - or a re-encoding of the message that happens to parse the same - is visible
+	// and not silently swallowed by the JSON.parse above.
+	report('RECEIVED', Object.assign({}, parsed, {
+		detailKeys: Object.keys(detail),
+		raw: detail.message
+	}));
+});
+</script>
