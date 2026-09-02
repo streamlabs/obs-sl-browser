@@ -36,8 +36,19 @@ const TARGETS = ["MsgSourceA", "MsgSourceB"];
 // CustomEvent('name', <json>) expression it hands to context->Eval.
 const TRICKY = "quote \" apostrophe ' backslash \\ newline \n tab \t unicode ✓";
 
+// How long a misrouted copy is given to show up after the addressee's report. Both pages
+// report over their own HTTP request to the same local server, so the skew being covered is
+// scheduling, not the network.
+const SETTLE_MS = 2000;
+
+const settle = (ms) => new Promise((r) => setTimeout(r, ms));
+
 const received = (events, who) =>
 	events.filter((e) => e.who === who && e.event === "RECEIVED");
+
+/** Deliveries that reached a source other than the one their payload names. */
+const strays = (events) =>
+	events.filter((e) => e.event === "RECEIVED" && e.data?.target && e.data.target !== e.who);
 
 export default {
 	name: "source-message",
@@ -69,8 +80,6 @@ export default {
 			const nonce = `${Date.now()}-${target}`;
 			const payload = JSON.stringify({ target, nonce, tricky: TRICKY });
 
-			const before = Object.fromEntries(TARGETS.map((t) => [t, received(observer.events, t).length]));
-
 			await r.step(`${target}: the send is accepted`, async () => {
 				const res = await cdp.call("browsersource_sendMessage", target, payload);
 				if (res.__missing) return "browsersource_sendMessage is not exposed";
@@ -95,21 +104,42 @@ export default {
 				}
 			});
 
+			// The exact key set, not just the presence of "message": an extra field in the
+			// wrapper is a change to the contract a Desktop overlay is written against.
 			await r.step(`${target}: the envelope is {"message": "..."} `, async () => {
 				const hit = received(observer.events, target).find((e) => e.data?.nonce === nonce);
 				if (!hit) return "nothing arrived to inspect";
-				const keys = hit.data.detailKeys || [];
-				if (!keys.includes("message")) return `detail keys were ${JSON.stringify(keys)}`;
+				const keys = [...(hit.data.detailKeys || [])].sort();
+				if (keys.length !== 1 || keys[0] !== "message") {
+					return `detail keys were ${JSON.stringify(keys)}, expected exactly ["message"]`;
+				}
 			});
 
-			// The routing assertion, and the reason each source gets its own send: nobody else
-			// may have received anything while this one did.
+			// The routing assertion, and the reason each send carries its own nonce: a copy
+			// landing on another source is identified by the payload it carries, not by a
+			// count taken around this send. Each page reports over its own HTTP request, so a
+			// misrouted copy can arrive after the addressee did - hence the settle before the
+			// absence is believed, and the sweep after the loop for anything later still.
+			await settle(SETTLE_MS);
+
 			await r.step(`${target}: no other source received it`, async () => {
-				const others = TARGETS.filter((t) => t !== target);
-				const noisy = others.filter((t) => received(observer.events, t).length > before[t]);
-				if (noisy.length) return `also delivered to ${noisy.join(", ")}`;
+				const noisy = strays(observer.events)
+					.filter((e) => e.data?.nonce === nonce)
+					.map((e) => e.who);
+				if (noisy.length) return `also delivered to ${[...new Set(noisy)].join(", ")}`;
 			});
 		}
+
+		// The loop's per-send check can only see as far as its own settle window. This catches
+		// a copy that arrived during a later send, or after the last one.
+		await settle(SETTLE_MS);
+
+		await r.step("no payload ever reached a source it was not addressed to", async () => {
+			const bad = strays(observer.events);
+			if (bad.length) {
+				return bad.map((e) => `${e.data.target} -> ${e.who}`).join(", ");
+			}
+		});
 
 		await r.step("nothing anywhere failed to parse", async () => {
 			const bad = observer.events.filter((e) => e.event === "UNPARSEABLE");
