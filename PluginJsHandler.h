@@ -121,6 +121,7 @@ private:
 	void JS_SOURCE_FILTER_ADD(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_QT_GET_COOKIE_VALUE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_BROWSERSOURCE_SEND_MESSAGE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_PATH_JOIN(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_ENV_VAR(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_MKDIR(const json11::Json &params, std::string &out_jsonReturn);

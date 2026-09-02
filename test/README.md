@@ -172,4 +172,5 @@ test/
     report.mjs     console, json and JUnit output
   suites/
     smoke/         the plugin comes up and answers
+    source-message/ browsersource_sendMessage reaches the right browser source
 ```

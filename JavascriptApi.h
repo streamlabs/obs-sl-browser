@@ -93,6 +93,7 @@ public:
 		JS_QT_GET_COOKIE_VALUE,
 		JS_BROWSER_SET_HIDDEN_STATE,
 		JS_RUN_STREAMLABS_EXE,
+		JS_BROWSERSOURCE_SEND_MESSAGE,
 		JS_PATH_JOIN,
 		JS_GET_ENV_VAR,
 		JS_MKDIR,
@@ -569,6 +570,17 @@ public:
 			//		Example arg1 = { "branch": '29.1.0', "git_sha": 'abcdefg...', "rev": '10' }
 			//	DEV NOTE: THIS FUNCTION CAN NEVER BE RENAMED !!
 			{"sl_getVersionInfo", JS_SL_VERSION_INFO},
+
+			/***
+			* Browser sources
+			*/
+
+			// .(@function(arg1), @sourceName, @messageStr)
+			//	Sends messageStr one way to a page in an OBS browser source, arriving as a
+			//	messageFromApp CustomEvent with detail {"message": messageStr}, the same shape
+			//	Streamlabs Desktop sends. No reply path, dropped if the source has no live page.
+			//		Example arg1 = { "success": true } or { "success": true, "warning": "." } or { "error": "." }
+			{"browsersource_sendMessage", JS_BROWSERSOURCE_SEND_MESSAGE},
 
 		};
 
