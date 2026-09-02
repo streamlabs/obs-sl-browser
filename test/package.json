@@ -1,0 +1,13 @@
+{
+  "name": "obs-sl-browser-test",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end suites for the sl-browser plugin. No dependencies by design.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node run.mjs",
+    "check": "node check.mjs"
+  }
+}
