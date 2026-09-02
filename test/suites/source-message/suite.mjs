@@ -188,9 +188,24 @@ export default {
 				if (!res.warning) return "expected a warning field explaining nothing was delivered";
 			});
 
-		// There is deliberately no malformed-payload probe: the third argument is an opaque
-		// string and the plugin builds the JSON envelope around it, so there is nothing a
-		// caller can pass that is invalid.
+		// Opaque does not mean untyped. json11's string_value() answers "" for a missing or
+		// non-string param3, so without a type check these two would deliver an empty message
+		// and report success - on a one-way api, where the return value is the only signal
+		// the caller ever gets.
+		await probe("an omitted message is an error", ["MsgSourceA"],
+			(res) => (res.error ? undefined : `expected an error, got ${JSON.stringify(res)}`));
+
+		await probe("a message that is not a string is an error", ["MsgSourceA", 42],
+			(res) => (res.error ? undefined : `expected an error, got ${JSON.stringify(res)}`));
+
+		// The other side of that check: "" is a string, and sending it is a caller's business.
+		// Addressed to the source with no live page, so asserting this delivers nothing.
+		await probe("an explicitly empty message is accepted", ["MsgSourceHidden", ""],
+			(res) => (res.error ? `expected success, got error: ${res.error}` : undefined));
+
+		// There is deliberately no malformed-payload probe beyond that: past the type check the
+		// third argument is opaque, and the plugin builds the JSON envelope around it, so there
+		// is nothing further a caller can pass that is invalid.
 
 		return r.list;
 	},

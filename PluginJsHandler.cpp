@@ -3571,13 +3571,23 @@ void PluginJsHandler::loadFonts()
 void PluginJsHandler::JS_BROWSERSOURCE_SEND_MESSAGE(const json11::Json &params, std::string &out_jsonReturn)
 {
 	const std::string sourceName = params["param2"].string_value();
-	const std::string message = params["param3"].string_value();
 
 	if (sourceName.empty())
 	{
 		out_jsonReturn = Json(Json::object({{"error", "param2 (sourceName) is required"}})).dump();
 		return;
 	}
+
+	// An omitted or non-string message would otherwise become "" and be delivered as one.
+	// Nothing later can contradict that: the channel is one way, so this return value is the
+	// only signal the caller gets. An explicit "" is still a string, and still allowed.
+	if (!params["param3"].is_string())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "param3 (message) must be a string"}})).dump();
+		return;
+	}
+
+	const std::string message = params["param3"].string_value();
 
 	OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
 
