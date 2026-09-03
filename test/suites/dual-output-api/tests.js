@@ -36,6 +36,7 @@
   function checkOk(res, what) {
     if (res.__missing) throw new Fail(what + ": function not exposed (" + res.__missing + ")");
     if (res.__timeout) throw new Fail(what + ": callback never fired");
+    if (res.__raw !== undefined) throw new Fail(what + ": callback returned non-JSON: " + res.__raw);
     if (res.error) throw new Fail(what + ": " + res.error);
     return res;
   }

@@ -4306,6 +4306,14 @@ void PluginJsHandler::JS_DUALOUTPUT_GET_STATE(const json11::Json &params, std::s
 
 void PluginJsHandler::JS_DUALOUTPUT_SET_ENABLED(const json11::Json &params, std::string &out_jsonReturn)
 {
+	// Checked rather than coerced: bool_value() answers false for a missing or misspelled argument,
+	// so a malformed call would tear down the output and remove the docks while looking deliberate.
+	if (!params["param2"].is_bool())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "param2 (enabled) must be a boolean"}})).dump();
+		return;
+	}
+
 	bool enabled = params["param2"].bool_value();
 
 	onUiThread([enabled, &out_jsonReturn]() {

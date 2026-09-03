@@ -195,7 +195,9 @@ SlDualConfig SlDualOutput::config() const
 
 bool SlDualOutput::applyConfig(const SlDualConfig &next)
 {
-	if (!m_controller)
+	// available(), like the other mutating entry points: with the canvas detached mid-collection-load
+	// this would report success and write settings the incoming collection is about to overwrite.
+	if (!available())
 		return false;
 
 	m_controller->applySettings(next);
