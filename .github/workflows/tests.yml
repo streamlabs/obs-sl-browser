@@ -127,10 +127,33 @@ jobs:
       - name: Install gRPC
         run: ./obs-sl-browser/ci/install_deps.cmd
 
-      # The same recipe as ci/pipeline.ps1, copied rather than called: that script also
-      # writes to S3, pushes symbols and needs release secrets, none of which belong in a
-      # test run. Keeping them separate means a change here cannot break the release path.
-      - name: Clone OBS and graft the plugin in
+      # Published by .github/workflows/obs-prebuild.yml. A miss is not a failure - the job
+      # just falls back to building OBS itself, exactly as it did before.
+      - name: Restore the prebuilt OBS
+        id: prebuilt
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name=$(bash obs-sl-browser/CI/archive_name.sh)
+          if gh release download obs-prebuilt -R "$GITHUB_REPOSITORY" -p "$name" -D . 2>/dev/null; then
+            zstd -dc "$name" | tar -xf -
+            rm -f "$name"
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+            echo "Restored \`$name\`" >> "$GITHUB_STEP_SUMMARY"
+            # Stamped now so the post-build check can prove obs.dll was never relinked.
+            echo "obsdll=$(stat -c %Y obs-studio/build_x64/libobs/RelWithDebInfo/obs.dll)" >> "$GITHUB_OUTPUT"
+            cat obs-studio/.prebuild-manifest.json 2>/dev/null || true
+          else
+            echo "hit=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$name is not published - building OBS from scratch. Run the 'OBS prebuild' workflow to create it."
+          fi
+
+      # Only reached on a miss. The same recipe as ci/pipeline.ps1, copied rather than called:
+      # that script also writes to S3, pushes symbols and needs release secrets, none of which
+      # belong in a test run. Keeping them separate means a change here cannot break release.
+      - name: Clone OBS
+        if: steps.prebuilt.outputs.hit == 'false'
         run: |
           $ver = (Get-Content obs-sl-browser\obs.ver -Raw).Trim()
           git clone --recursive --branch $ver https://github.com/obsproject/obs-studio.git
@@ -138,23 +161,19 @@ jobs:
           Set-Location obs-studio
           git submodule update --init --recursive
 
+      - name: Graft the plugin in
+        run: |
+          Set-Location obs-studio
           $f = '.\plugins\CMakeLists.txt'
           $c = Get-Content $f
           Set-Content $f -Value ($c[0], 'add_subdirectory(obs-sl-browser)', $c[1..($c.Length - 1)])
-
           Copy-Item -Path '..\obs-sl-browser' -Destination '.\plugins\obs-sl-browser' -Recurse
 
-          $presets = Get-Content .\CMakePresets.json -Raw | ConvertFrom-Json
-          foreach ($p in $presets.configurePresets) {
-              if ($p.name -ne 'windows-x64') { continue }
-              if (-not $p.cacheVariables) { $p | Add-Member -MemberType NoteProperty -Name cacheVariables -Value @{} }
-              $p.cacheVariables | Add-Member -MemberType NoteProperty -Name CMAKE_COMPILE_WARNING_AS_ERROR `
-                -Value @{ type = 'BOOL'; value = $false } -Force
-          }
-          $presets | ConvertTo-Json -Depth 100 | Set-Content .\CMakePresets.json
-
-      # About fifteen minutes, all of it OBS rather than the plugin. Worth caching the build
-      # tree if that ever becomes the thing people wait on.
+      # The two -D flags are passed here rather than patched into CMakePresets.json so that a
+      # restored tree and a from-scratch tree are configured identically. OBS_VERSION_OVERRIDE
+      # is not cosmetic: without it versionconfig.cmake runs `git describe --dirty=-modified`,
+      # the graft above dirties the tree, OBS_VERSION flips to 31.1.2-modified, and obsversion.c
+      # recompiles and relinks obs.dll on every single run.
       - name: Build
         env:
           Protobuf_DIR: ${{ github.workspace }}\grpc_dist\cmake
@@ -163,10 +182,43 @@ jobs:
           utf8_range_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\utf8_range
         run: |
           Set-Location obs-studio
-          cmake --preset windows-x64
+          $ver = (Get-Content ..\obs-sl-browser\obs.ver -Raw).Trim()
+          cmake --preset windows-x64 -DCMAKE_COMPILE_WARNING_AS_ERROR=OFF -DOBS_VERSION_OVERRIDE=$ver
           if ($LASTEXITCODE -ne 0) { throw "configure failed" }
-          cmake --build --preset windows-x64
+
+          if ('${{ steps.prebuilt.outputs.hit }}' -eq 'true') {
+              # OBS is already built in the restored tree; only the plugin needs compiling.
+              cmake --build build_x64 --config RelWithDebInfo `
+                --target sl-browser-plugin sl-browser sl-browser-page | Tee-Object -FilePath build.log
+          } else {
+              cmake --build --preset windows-x64 | Tee-Object -FilePath build.log
+          }
           if ($LASTEXITCODE -ne 0) { throw "build failed" }
+
+      # The archive only pays off while nothing on the OBS side recompiles. If that regresses
+      # the job still passes, just slowly, so it would rot unnoticed. Say it out loud instead.
+      - name: Check the archive still avoids an OBS rebuild
+        if: steps.prebuilt.outputs.hit == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          # obs.dll's mtime is the exact signal: if the restored libobs was relinked, the
+          # archive stopped paying for itself. The compile list is only for diagnosis.
+          before='${{ steps.prebuilt.outputs.obsdll }}'
+          after=$(stat -c %Y obs-studio/build_x64/libobs/RelWithDebInfo/obs.dll)
+          if [ "$before" = "$after" ]; then
+            echo "obs.dll untouched - the archive is doing its job." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::warning::libobs was relinked, so the archive is stale or the toolchain moved. Bump ARCHIVE_VERSION in CI/archive_name.sh and re-run the 'OBS prebuild' workflow."
+          {
+            echo "### Archive no longer avoiding an OBS rebuild"
+            echo
+            echo "\`obs.dll\` was relinked during this run. Sources compiled:"
+            echo '```'
+            grep -oE '^\s{2,}[A-Za-z0-9_./-]+\.(c|cpp)$' obs-studio/build.log | sort -u | head -40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install into the rundir
         run: |
