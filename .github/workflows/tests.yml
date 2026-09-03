@@ -1,5 +1,8 @@
 name: Tests
 
+# The steps are one line each on purpose. The work lives in CI/, so it can be read, reviewed
+# and run outside of Actions.
+
 on:
   pull_request:
   push:
@@ -32,7 +35,7 @@ jobs:
 
   # Under a minute, no build. Reports every first-party file clang-format would change and
   # uploads the patch that fixes them. Non-blocking while the pre-existing drift is worked
-  # off - drop the two continue-on-error lines to turn it into a real gate.
+  # off - drop continue-on-error to turn it into a real gate.
   #
   # The version is pinned on purpose. .clang-format predates it and asks for "8 or later",
   # but 19.1.5 is what reproduces the style this repo was last formatted with, and 18 and 19
@@ -55,42 +58,7 @@ jobs:
       - name: Check formatting
         id: check
         continue-on-error: true
-        run: |
-          # deps/ is vendored third party (minizip, json11), never formatted to this config.
-          # Gating it would mean the job could never pass. builds/ is not tracked.
-          mapfile -t files < <(git ls-files -- '*.cpp' '*.h' '*.hpp' | grep -v '^deps/')
-
-          # Line-level annotations so violations show up on the Files tab. Capped: GitHub
-          # renders only the first handful per run anyway.
-          clang-format --dry-run "${files[@]}" 2> warnings.txt || true
-          grep -E ':[0-9]+:[0-9]+: warning:' warnings.txt | head -n 20 |
-            sed -nE 's|^(.+):([0-9]+):([0-9]+): warning: (.*)$|::warning file=\1,line=\2,col=\3::\4|p'
-
-          clang-format -i "${files[@]}"
-
-          if git diff --quiet; then
-            echo "All ${#files[@]} first-party files match .clang-format ($CLANG_FORMAT_VERSION)." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          git diff > clang-format.patch
-          {
-            echo "### clang-format $CLANG_FORMAT_VERSION"
-            echo
-            echo "$(git diff --name-only | wc -l) of ${#files[@]} first-party files need reformatting."
-            echo
-            echo "Download the **clang-format-patch** artifact and \`git apply clang-format.patch\`, or run:"
-            echo
-            echo '```'
-            echo "pip install clang-format==$CLANG_FORMAT_VERSION"
-            echo "git ls-files -- '*.cpp' '*.h' '*.hpp' | grep -v '^deps/' | xargs clang-format -i"
-            echo '```'
-            echo
-            echo "| File | Lines |"
-            echo "| --- | ---: |"
-            git diff --numstat | awk '{print $1+$2, $3}' | sort -rn | awk '{printf "| %s | %s |\n", $2, $1}'
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit 1
+        run: bash CI/check_format.sh
 
       - name: Upload the fixup patch
         if: steps.check.outcome == 'failure'
@@ -125,117 +93,44 @@ jobs:
           key: grpc-${{ env.GRPC_VERSION }}-windows-2022
 
       - name: Install gRPC
-        run: ./obs-sl-browser/ci/install_deps.cmd
+        run: ./obs-sl-browser/CI/install_deps.cmd
 
       # Published by .github/workflows/obs-prebuild.yml. A miss is not a failure - the job
-      # just falls back to building OBS itself, exactly as it did before.
+      # falls back to building OBS itself, exactly as it did before this existed.
       - name: Restore the prebuilt OBS
         id: prebuilt
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          name=$(bash obs-sl-browser/CI/archive_name.sh)
-          if gh release download obs-prebuilt -R "$GITHUB_REPOSITORY" -p "$name" -D . 2>/dev/null; then
-            zstd -dc "$name" | tar -xf -
-            rm -f "$name"
-            echo "hit=true" >> "$GITHUB_OUTPUT"
-            echo "Restored \`$name\`" >> "$GITHUB_STEP_SUMMARY"
-            # Stamped now so the post-build check can prove obs.dll was never relinked.
-            echo "obsdll=$(stat -c %Y obs-studio/build_x64/libobs/RelWithDebInfo/obs.dll)" >> "$GITHUB_OUTPUT"
-            cat obs-studio/.prebuild-manifest.json 2>/dev/null || true
-          else
-            echo "hit=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::$name is not published - building OBS from scratch. Run the 'OBS prebuild' workflow to create it."
-          fi
+        run: bash obs-sl-browser/CI/obs_archive.sh restore
 
-      # Only reached on a miss. The same recipe as ci/pipeline.ps1, copied rather than called:
-      # that script also writes to S3, pushes symbols and needs release secrets, none of which
-      # belong in a test run. Keeping them separate means a change here cannot break release.
       - name: Clone OBS
         if: steps.prebuilt.outputs.hit == 'false'
-        run: |
-          $ver = (Get-Content obs-sl-browser\obs.ver -Raw).Trim()
-          git clone --recursive --branch $ver https://github.com/obsproject/obs-studio.git
-          if ($LASTEXITCODE -ne 0) { throw "clone failed" }
-          Set-Location obs-studio
-          git submodule update --init --recursive
+        run: ./obs-sl-browser/CI/clone_obs.ps1
 
       - name: Graft the plugin in
-        run: |
-          Set-Location obs-studio
-          $f = '.\plugins\CMakeLists.txt'
-          $c = Get-Content $f
-          Set-Content $f -Value ($c[0], 'add_subdirectory(obs-sl-browser)', $c[1..($c.Length - 1)])
-          Copy-Item -Path '..\obs-sl-browser' -Destination '.\plugins\obs-sl-browser' -Recurse
+        run: ./obs-sl-browser/CI/graft_plugin.ps1
 
-      # The two -D flags are passed here rather than patched into CMakePresets.json so that a
-      # restored tree and a from-scratch tree are configured identically. OBS_VERSION_OVERRIDE
-      # is not cosmetic: without it versionconfig.cmake runs `git describe --dirty=-modified`,
-      # the graft above dirties the tree, OBS_VERSION flips to 31.1.2-modified, and obsversion.c
-      # recompiles and relinks obs.dll on every single run.
       - name: Build
         env:
           Protobuf_DIR: ${{ github.workspace }}\grpc_dist\cmake
           absl_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\absl
           gRPC_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\grpc
           utf8_range_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\utf8_range
-        run: |
-          Set-Location obs-studio
-          $ver = (Get-Content ..\obs-sl-browser\obs.ver -Raw).Trim()
-          if ($ver -notmatch '^\d+\.\d+\.\d+') { throw "obs.ver gave no usable version: '$ver'" }
+        run: >
+          ./obs-sl-browser/CI/build_plugin.ps1
+          ${{ steps.prebuilt.outputs.hit == 'true' && '-PluginOnly' || '' }}
 
-          # The override must be quoted. PowerShell parses an unquoted token that starts with
-          # a dash as a parameter and does not expand variables inside it, so
-          # -DOBS_VERSION_OVERRIDE=$ver reaches cmake as the literal string '$ver' - which is
-          # DEFINED but does not match <MAJOR>.<MINOR>.<PATCH>, and versionconfig.cmake aborts.
-          cmake --preset windows-x64 -DCMAKE_COMPILE_WARNING_AS_ERROR=OFF "-DOBS_VERSION_OVERRIDE=$ver"
-          if ($LASTEXITCODE -ne 0) { throw "configure failed" }
-
-          if ('${{ steps.prebuilt.outputs.hit }}' -eq 'true') {
-              # OBS is already built in the restored tree; only the plugin needs compiling.
-              cmake --build build_x64 --config RelWithDebInfo `
-                --target sl-browser-plugin sl-browser sl-browser-page | Tee-Object -FilePath build.log
-          } else {
-              cmake --build --preset windows-x64 | Tee-Object -FilePath build.log
-          }
-          if ($LASTEXITCODE -ne 0) { throw "build failed" }
-
-      # The archive only pays off while nothing on the OBS side recompiles. If that regresses
-      # the job still passes, just slowly, so it would rot unnoticed. Say it out loud instead.
+      # Warns rather than fails: a stale archive is a performance problem, not a correctness
+      # one, but it would otherwise rot unnoticed behind a green run.
       - name: Check the archive still avoids an OBS rebuild
         if: steps.prebuilt.outputs.hit == 'true'
         continue-on-error: true
         shell: bash
-        run: |
-          # obs.dll's mtime is the exact signal: if the restored libobs was relinked, the
-          # archive stopped paying for itself. The compile list is only for diagnosis.
-          before='${{ steps.prebuilt.outputs.obsdll }}'
-          after=$(stat -c %Y obs-studio/build_x64/libobs/RelWithDebInfo/obs.dll)
-          if [ "$before" = "$after" ]; then
-            echo "obs.dll untouched - the archive is doing its job." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          echo "::warning::libobs was relinked, so the archive is stale or the toolchain moved. Bump ARCHIVE_VERSION in CI/archive_name.sh and re-run the 'OBS prebuild' workflow."
-          {
-            echo "### Archive no longer avoiding an OBS rebuild"
-            echo
-            echo "\`obs.dll\` was relinked during this run. Sources compiled:"
-            echo '```'
-            grep -oE '^\s{2,}[A-Za-z0-9_./-]+\.(c|cpp)$' obs-studio/build.log | sort -u | head -40
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: bash obs-sl-browser/CI/assert_no_obs_rebuild.sh "${{ steps.prebuilt.outputs.obsdll }}"
 
       - name: Install into the rundir
-        run: |
-          Set-Location obs-studio
-          # Explicit prefix only to keep the default C:\Program Files out of it; rundir is
-          # populated from an absolute OBS_OUTPUT_DIR either way. Same step as CI\dev_build.ps1 -Run.
-          cmake --install build_x64 --config RelWithDebInfo --prefix "$pwd\build_x64\install"
-          if ($LASTEXITCODE -ne 0) { throw "install failed" }
-          if (-not (Test-Path 'build_x64\rundir\RelWithDebInfo\bin\64bit\obs64.exe')) {
-              throw "no obs64.exe in the rundir after install"
-          }
+        run: ./obs-sl-browser/CI/install_rundir.ps1
 
       - name: Run the suites
         run: >
@@ -245,13 +140,7 @@ jobs:
 
       - name: Failure diagnostics
         if: failure()
-        run: |
-          $logs = "$pwd\obs-studio\build_x64\rundir\RelWithDebInfo\config\obs-studio\logs"
-          $log = Get-ChildItem $logs -Filter *.txt -ErrorAction SilentlyContinue |
-                   Sort-Object LastWriteTime | Select-Object -Last 1
-          if (-not $log) { Write-Host '::warning::OBS produced no log.'; exit 0 }
-          Write-Host "---- $($log.Name) ----"
-          Get-Content $log.FullName -Tail 120
+        run: ./obs-sl-browser/CI/obs_log_tail.ps1
 
       - uses: actions/upload-artifact@v7
         if: always()
