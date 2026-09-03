@@ -27,7 +27,7 @@ if [ "$before" = "$after" ]; then
     exit 0
 fi
 
-echo "::warning::libobs was relinked, so the archive is stale or the toolchain moved. Bump ARCHIVE_VERSION in CI/archive_name.sh and re-run the 'OBS prebuild' workflow."
+echo "::warning::libobs was relinked, so the archive is stale or the toolchain moved. Bump ARCHIVE_VERSION in CI/workflows/archive_name.sh; the next run with no archive under the new name will rebuild and republish it."
 {
     echo "### Archive no longer avoiding an OBS rebuild"
     echo

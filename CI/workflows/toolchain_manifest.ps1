@@ -17,7 +17,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $ver = (Get-Content (Join-Path $PluginDir 'obs.ver') -Raw).Trim()
-$archive = bash (Join-Path $PluginDir 'CI/archive_name.sh')
+$archive = bash (Join-Path $PluginDir 'CI/workflows/archive_name.sh')
 
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $vs = & $vswhere -latest -property catalog_productDisplayVersion

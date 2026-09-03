@@ -1,13 +1,18 @@
 name: Tests
 
-# The steps are one line each on purpose. The work lives in CI/, so it can be read, reviewed
-# and run outside of Actions.
+# Step bodies live in CI/workflows/, so they can be read, reviewed and run outside of Actions.
+# A step here should stay one line.
 
 on:
   pull_request:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      refresh_archive:
+        description: Ignore the published prebuilt OBS and rebuild it
+        type: boolean
+        default: false
 
 concurrency:
   group: tests-${{ github.ref }}
@@ -15,6 +20,7 @@ concurrency:
 
 env:
   GRPC_VERSION: v1.58.0
+  RELEASE_TAG: obs-prebuilt
 
 jobs:
   # Under a minute, no build. Catches the mistakes that would otherwise cost a fifteen-minute
@@ -58,7 +64,7 @@ jobs:
       - name: Check formatting
         id: check
         continue-on-error: true
-        run: bash CI/check_format.sh
+        run: bash CI/workflows/check_format.sh
 
       - name: Upload the fixup patch
         if: steps.check.outcome == 'failure'
@@ -67,10 +73,18 @@ jobs:
           name: clang-format-patch
           path: clang-format.patch
 
+  # OBS takes ~11 minutes to build and no pull request changes it, so this restores a
+  # published archive of an already-built OBS tree and compiles only the plugin. When nothing
+  # is published under the current name it builds OBS itself and publishes it, so the next
+  # run is fast. Both paths then graft the plugin into a tree that has never contained one.
   e2e:
     name: End-to-end
     runs-on: windows-2022
     timeout-minutes: 90
+    permissions:
+      # Only to publish the prebuilt OBS archive, and only ever when none is published under
+      # the current name - a pull request cannot overwrite an existing one.
+      contents: write
     steps:
       - uses: jwlawson/actions-setup-cmake@v2.2.0
         with:
@@ -95,42 +109,69 @@ jobs:
       - name: Install gRPC
         run: ./obs-sl-browser/CI/install_deps.cmd
 
-      # Published by .github/workflows/obs-prebuild.yml. A miss is not a failure - the job
-      # falls back to building OBS itself, exactly as it did before this existed.
       - name: Restore the prebuilt OBS
         id: prebuilt
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash obs-sl-browser/CI/obs_archive.sh restore
+          FORCE: ${{ inputs.refresh_archive }}
+        run: bash obs-sl-browser/CI/workflows/obs_archive.sh restore
 
+      # Nothing published under this name yet: build OBS on its own and publish it. Cloned at
+      # the workspace root so the tree lands on the path every later restore expects -
+      # CMakeCache.txt pins absolute paths, so they have to agree.
       - name: Clone OBS
         if: steps.prebuilt.outputs.hit == 'false'
-        run: ./obs-sl-browser/CI/clone_obs.ps1
+        run: ./obs-sl-browser/CI/workflows/clone_obs.ps1
+
+      - name: Build OBS
+        if: steps.prebuilt.outputs.hit == 'false'
+        run: ./obs-sl-browser/CI/workflows/build_obs.ps1
+
+      - name: Record the toolchain
+        if: steps.prebuilt.outputs.hit == 'false'
+        run: ./obs-sl-browser/CI/workflows/toolchain_manifest.ps1
+
+      - name: Archive OBS
+        if: steps.prebuilt.outputs.hit == 'false'
+        shell: bash
+        run: bash obs-sl-browser/CI/workflows/obs_archive.sh create
+
+      # Publishing is an optimisation for later runs, never a reason to fail this one.
+      - name: Publish the archive
+        if: steps.prebuilt.outputs.hit == 'false'
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash obs-sl-browser/CI/workflows/obs_archive.sh publish
+
+      # From here both paths are the same: an OBS tree with no plugin in it, already built.
+      - name: Stamp obs.dll
+        id: stamp
+        shell: bash
+        run: echo "obsdll=$(stat -c %Y obs-studio/build_x64/libobs/RelWithDebInfo/obs.dll)" >> "$GITHUB_OUTPUT"
 
       - name: Graft the plugin in
-        run: ./obs-sl-browser/CI/graft_plugin.ps1
+        run: ./obs-sl-browser/CI/workflows/graft_plugin.ps1
 
-      - name: Build
+      - name: Build the plugin
         env:
           Protobuf_DIR: ${{ github.workspace }}\grpc_dist\cmake
           absl_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\absl
           gRPC_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\grpc
           utf8_range_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\utf8_range
-        run: >
-          ./obs-sl-browser/CI/build_plugin.ps1
-          ${{ steps.prebuilt.outputs.hit == 'true' && '-PluginOnly' || '' }}
+        run: ./obs-sl-browser/CI/workflows/build_plugin.ps1 -PluginOnly
 
-      # Warns rather than fails: a stale archive is a performance problem, not a correctness
-      # one, but it would otherwise rot unnoticed behind a green run.
-      - name: Check the archive still avoids an OBS rebuild
-        if: steps.prebuilt.outputs.hit == 'true'
+      # Warns rather than fails: an OBS rebuild here is a performance problem, not a
+      # correctness one, but it would otherwise rot unnoticed behind a green run.
+      - name: Check nothing rebuilt OBS
         continue-on-error: true
         shell: bash
-        run: bash obs-sl-browser/CI/assert_no_obs_rebuild.sh "${{ steps.prebuilt.outputs.obsdll }}"
+        run: bash obs-sl-browser/CI/workflows/assert_no_obs_rebuild.sh "${{ steps.stamp.outputs.obsdll }}"
 
       - name: Install into the rundir
-        run: ./obs-sl-browser/CI/install_rundir.ps1
+        run: ./obs-sl-browser/CI/workflows/install_rundir.ps1
 
       - name: Run the suites
         run: >
@@ -140,7 +181,7 @@ jobs:
 
       - name: Failure diagnostics
         if: failure()
-        run: ./obs-sl-browser/CI/obs_log_tail.ps1
+        run: ./obs-sl-browser/CI/workflows/obs_log_tail.ps1
 
       - uses: actions/upload-artifact@v7
         if: always()
