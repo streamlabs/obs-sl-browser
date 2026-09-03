@@ -1,10 +1,18 @@
 name: Tests
 
+# Step bodies live in CI/workflows/, so they can be read, reviewed and run outside of Actions.
+# A step here should stay one line.
+
 on:
   pull_request:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      refresh_archive:
+        description: Ignore the published prebuilt OBS and rebuild it
+        type: boolean
+        default: false
 
 concurrency:
   group: tests-${{ github.ref }}
@@ -12,6 +20,7 @@ concurrency:
 
 env:
   GRPC_VERSION: v1.58.0
+  RELEASE_TAG: obs-prebuilt
 
 jobs:
   # Under a minute, no build. Catches the mistakes that would otherwise cost a fifteen-minute
@@ -22,92 +31,150 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
+      # Non-blocking for now: reports, never reds the PR. Drop continue-on-error to enforce.
       - run: node test/check.mjs
+        continue-on-error: true
 
+  # Under a minute, no build. Reports every first-party file clang-format would change and
+  # uploads the patch that fixes them. Non-blocking while the pre-existing drift is worked
+  # off - drop continue-on-error to turn it into a real gate.
+  #
+  # The version is pinned on purpose. .clang-format predates it and asks for "8 or later",
+  # but 19.1.5 is what reproduces the style this repo was last formatted with, and 18 and 19
+  # disagree on this config. Match it locally or you will fight this job.
+  format:
+    name: C++ format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLANG_FORMAT_VERSION: '19.1.5'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - run: pip install "clang-format==$CLANG_FORMAT_VERSION"
+
+      - name: Check formatting
+        id: check
+        continue-on-error: true
+        run: bash CI/workflows/check_format.sh
+
+      - name: Upload the fixup patch
+        if: steps.check.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: clang-format-patch
+          path: clang-format.patch
+
+  # OBS takes ~11 minutes to build and no pull request changes it, so this restores a
+  # published archive of an already-built OBS tree and compiles only the plugin. When nothing
+  # is published under the current name it builds OBS itself and publishes it, so the next
+  # run is fast. Both paths then graft the plugin into a tree that has never contained one.
   e2e:
     name: End-to-end
-    needs: check
     runs-on: windows-2022
     timeout-minutes: 90
+    permissions:
+      # Only to publish the prebuilt OBS archive, and only ever when none is published under
+      # the current name - a pull request cannot overwrite an existing one.
+      contents: write
     steps:
-      - uses: jwlawson/actions-setup-cmake@v1.14
+      - uses: jwlawson/actions-setup-cmake@v2.2.0
         with:
           cmake-version: '3.28.x'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
       # Checked out beside the OBS clone rather than at the workspace root, because the
       # plugin has to end up inside obs-studio\plugins to build.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: obs-sl-browser
 
       - name: Cache gRPC
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: grpc_dist
           key: grpc-${{ env.GRPC_VERSION }}-windows-2022
 
       - name: Install gRPC
-        run: ./obs-sl-browser/ci/install_deps.cmd
+        run: ./obs-sl-browser/CI/install_deps.cmd
 
-      # The same recipe as ci/pipeline.ps1, copied rather than called: that script also
-      # writes to S3, pushes symbols and needs release secrets, none of which belong in a
-      # test run. Keeping them separate means a change here cannot break the release path.
-      - name: Clone OBS and graft the plugin in
-        run: |
-          $ver = (Get-Content obs-sl-browser\obs.ver -Raw).Trim()
-          git clone --recursive --branch $ver https://github.com/obsproject/obs-studio.git
-          if ($LASTEXITCODE -ne 0) { throw "clone failed" }
-          Set-Location obs-studio
-          git submodule update --init --recursive
+      - name: Restore the prebuilt OBS
+        id: prebuilt
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.refresh_archive }}
+        run: bash obs-sl-browser/CI/workflows/obs_archive.sh restore
 
-          $f = '.\plugins\CMakeLists.txt'
-          $c = Get-Content $f
-          Set-Content $f -Value ($c[0], 'add_subdirectory(obs-sl-browser)', $c[1..($c.Length - 1)])
+      # Nothing published under this name yet: build OBS on its own and publish it. Cloned at
+      # the workspace root so the tree lands on the path every later restore expects -
+      # CMakeCache.txt pins absolute paths, so they have to agree.
+      - name: Clone OBS
+        if: steps.prebuilt.outputs.hit == 'false'
+        run: ./obs-sl-browser/CI/workflows/clone_obs.ps1
 
-          Copy-Item -Path '..\obs-sl-browser' -Destination '.\plugins\obs-sl-browser' -Recurse
+      - name: Build OBS
+        if: steps.prebuilt.outputs.hit == 'false'
+        run: ./obs-sl-browser/CI/workflows/build_obs.ps1
 
-          $presets = Get-Content .\CMakePresets.json -Raw | ConvertFrom-Json
-          foreach ($p in $presets.configurePresets) {
-              if ($p.name -ne 'windows-x64') { continue }
-              if (-not $p.cacheVariables) { $p | Add-Member -MemberType NoteProperty -Name cacheVariables -Value @{} }
-              $p.cacheVariables | Add-Member -MemberType NoteProperty -Name CMAKE_COMPILE_WARNING_AS_ERROR `
-                -Value @{ type = 'BOOL'; value = $false } -Force
-          }
-          $presets | ConvertTo-Json -Depth 100 | Set-Content .\CMakePresets.json
+      - name: Record the toolchain
+        if: steps.prebuilt.outputs.hit == 'false'
+        run: ./obs-sl-browser/CI/workflows/toolchain_manifest.ps1
 
-      # About fifteen minutes, all of it OBS rather than the plugin. Worth caching the build
-      # tree if that ever becomes the thing people wait on.
-      - name: Build
+      - name: Archive OBS
+        if: steps.prebuilt.outputs.hit == 'false'
+        shell: bash
+        run: bash obs-sl-browser/CI/workflows/obs_archive.sh create
+
+      # Publishing is an optimisation for later runs, never a reason to fail this one.
+      - name: Publish the archive
+        if: steps.prebuilt.outputs.hit == 'false'
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Needed here too, not just on the restore step: without it a forced refresh
+          # rebuilds OBS and then declines to replace the archive it was asked to refresh.
+          FORCE: ${{ inputs.refresh_archive }}
+        run: bash obs-sl-browser/CI/workflows/obs_archive.sh publish
+
+      # From here both paths are the same: an OBS tree with no plugin in it, already built.
+      - name: Stamp obs.dll
+        id: stamp
+        shell: bash
+        run: echo "obsdll=$(stat -c %Y obs-studio/build_x64/libobs/RelWithDebInfo/obs.dll)" >> "$GITHUB_OUTPUT"
+
+      - name: Graft the plugin in
+        run: ./obs-sl-browser/CI/workflows/graft_plugin.ps1
+
+      - name: Build the plugin
         env:
           Protobuf_DIR: ${{ github.workspace }}\grpc_dist\cmake
           absl_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\absl
           gRPC_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\grpc
           utf8_range_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\utf8_range
-        run: |
-          Set-Location obs-studio
-          cmake --preset windows-x64
-          if ($LASTEXITCODE -ne 0) { throw "configure failed" }
-          cmake --build --preset windows-x64
-          if ($LASTEXITCODE -ne 0) { throw "build failed" }
+        run: ./obs-sl-browser/CI/workflows/build_plugin.ps1 -PluginOnly
+
+      # Warns rather than fails: an OBS rebuild here is a performance problem, not a
+      # correctness one, but it would otherwise rot unnoticed behind a green run.
+      - name: Check nothing rebuilt OBS
+        continue-on-error: true
+        shell: bash
+        run: bash obs-sl-browser/CI/workflows/assert_no_obs_rebuild.sh "${{ steps.stamp.outputs.obsdll }}"
 
       - name: Install into the rundir
-        run: |
-          Set-Location obs-studio
-          # Explicit prefix only to keep the default C:\Program Files out of it; rundir is
-          # populated from an absolute OBS_OUTPUT_DIR either way. Same step as CI\dev_build.ps1 -Run.
-          cmake --install build_x64 --config RelWithDebInfo --prefix "$pwd\build_x64\install"
-          if ($LASTEXITCODE -ne 0) { throw "install failed" }
-          if (-not (Test-Path 'build_x64\rundir\RelWithDebInfo\bin\64bit\obs64.exe')) {
-              throw "no obs64.exe in the rundir after install"
-          }
+        run: ./obs-sl-browser/CI/workflows/install_rundir.ps1
 
       - name: Run the suites
         run: >
@@ -117,15 +184,9 @@ jobs:
 
       - name: Failure diagnostics
         if: failure()
-        run: |
-          $logs = "$pwd\obs-studio\build_x64\rundir\RelWithDebInfo\config\obs-studio\logs"
-          $log = Get-ChildItem $logs -Filter *.txt -ErrorAction SilentlyContinue |
-                   Sort-Object LastWriteTime | Select-Object -Last 1
-          if (-not $log) { Write-Host '::warning::OBS produced no log.'; exit 0 }
-          Write-Host "---- $($log.Name) ----"
-          Get-Content $log.FullName -Tail 120
+        run: ./obs-sl-browser/CI/workflows/obs_log_tail.ps1
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-results
