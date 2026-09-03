@@ -183,7 +183,13 @@ jobs:
         run: |
           Set-Location obs-studio
           $ver = (Get-Content ..\obs-sl-browser\obs.ver -Raw).Trim()
-          cmake --preset windows-x64 -DCMAKE_COMPILE_WARNING_AS_ERROR=OFF -DOBS_VERSION_OVERRIDE=$ver
+          if ($ver -notmatch '^\d+\.\d+\.\d+') { throw "obs.ver gave no usable version: '$ver'" }
+
+          # The override must be quoted. PowerShell parses an unquoted token that starts with
+          # a dash as a parameter and does not expand variables inside it, so
+          # -DOBS_VERSION_OVERRIDE=$ver reaches cmake as the literal string '$ver' - which is
+          # DEFINED but does not match <MAJOR>.<MINOR>.<PATCH>, and versionconfig.cmake aborts.
+          cmake --preset windows-x64 -DCMAKE_COMPILE_WARNING_AS_ERROR=OFF "-DOBS_VERSION_OVERRIDE=$ver"
           if ($LASTEXITCODE -ne 0) { throw "configure failed" }
 
           if ('${{ steps.prebuilt.outputs.hit }}' -eq 'true') {

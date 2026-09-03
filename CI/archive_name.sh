@@ -19,4 +19,14 @@ RUNNER_LABEL=windows-2022
 
 obs_version=$(tr -d '[:space:]' < "$(dirname "$0")/../obs.ver")
 
+# An empty or malformed version would otherwise become a plausible-looking name that simply
+# never matches a published asset, and every run would quietly fall back to a full build.
+case "$obs_version" in
+    [0-9]*.[0-9]*.[0-9]*) ;;
+    *)
+        echo "obs.ver gave no usable version: '${obs_version}'" >&2
+        exit 1
+        ;;
+esac
+
 echo "obs-${obs_version}-${BUILD_TYPE}-v${ARCHIVE_VERSION}-${RUNNER_LABEL}.tar.zst"
