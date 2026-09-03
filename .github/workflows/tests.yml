@@ -22,8 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       # Non-blocking for now: reports, never reds the PR. Drop continue-on-error to enforce.
@@ -44,9 +44,9 @@ jobs:
     env:
       CLANG_FORMAT_VERSION: '19.1.5'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -94,7 +94,7 @@ jobs:
 
       - name: Upload the fixup patch
         if: steps.check.outcome == 'failure'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: clang-format-patch
           path: clang-format.patch
@@ -104,22 +104,22 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 90
     steps:
-      - uses: jwlawson/actions-setup-cmake@v1.14
+      - uses: jwlawson/actions-setup-cmake@v2.2.0
         with:
           cmake-version: '3.28.x'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
       # Checked out beside the OBS clone rather than at the workspace root, because the
       # plugin has to end up inside obs-studio\plugins to build.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: obs-sl-browser
 
       - name: Cache gRPC
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: grpc_dist
           key: grpc-${{ env.GRPC_VERSION }}-windows-2022
@@ -195,7 +195,7 @@ jobs:
           Write-Host "---- $($log.Name) ----"
           Get-Content $log.FullName -Tail 120
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-results
