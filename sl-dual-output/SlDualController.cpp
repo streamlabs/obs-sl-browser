@@ -296,9 +296,12 @@ bool SlDualController::setOutputMode(SlDualOutputMode mode)
 		return false;
 	}
 
-	// Never leave our own encode running while handing the canvas to the multitrack path.
+	// Never leave our own encode running while handing the canvas to the multitrack path. hardStop
+	// rather than requestStop: the latter is asynchronous for a live output, so the claim below
+	// could be published while our encode was still winding down, and a main stream starting in
+	// that gap would carry the canvas alongside it - the one thing this mode exists to prevent.
 	if (mode == SlDualOutputMode::EnhancedBroadcasting && output)
-		output->requestStop();
+		output->hardStop();
 
 	config.outputMode = mode;
 	applyOutputModeSetting();
@@ -624,6 +627,14 @@ void SlDualController::onExit()
 
 void SlDualController::onOutputState(SlDualStreamState state, const std::string &msg)
 {
+	// These are queued to the UI thread, so one can arrive after the output it describes has been
+	// stopped or replaced: a Live queued just before hardStop() would otherwise land on top of the
+	// Idle that followed it and leave the dock contradicting the output. The output's own atomic
+	// state is the authority - anything disagreeing with it is stale, and the notification for
+	// whatever state won is already queued behind this one.
+	if (!output || output->state() != state)
+		return;
+
 	if (dock)
 		dock->setStreamState(state, msg);
 }
@@ -708,6 +719,12 @@ obs_data_t *SlDualController::buildSaveData() const
 	obs_data_array_release(customs);
 	obs_data_set_bool(d, "seeded", config.seeded);
 	obs_data_set_string(d, "server", config.server.c_str());
+
+	// Deliberate, and a known tradeoff: the key and password go in the scene collection rather than
+	// the profile, so that each collection can stream somewhere different. OBS keeps its own stream
+	// key in the profile instead, which is why exporting a collection is normally safe - here it is
+	// not, and an exported or shared collection carries live credentials in clear text. Moving them
+	// to profile storage would mean one key for every collection, which is not what this is for.
 	obs_data_set_string(d, "key", config.key.c_str());
 	obs_data_set_bool(d, "use_auth", config.useAuth);
 	obs_data_set_string(d, "auth_username", config.authUsername.c_str());

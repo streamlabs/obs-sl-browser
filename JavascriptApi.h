@@ -637,6 +637,10 @@ public:
 			//		the value itself - "" clears a stored string, and a bitrate of 0 is an error rather than ignored.
 			//		'encoderId' is the exception, having no meaningful empty value; "" leaves it alone.
 			//	'autoStart' starts and stops this output with the main OBS stream.
+			//	Note: these settings live in the scene collection, so that each collection can stream
+			//		somewhere different - which means 'key' and 'authPassword' are written into the
+			//		collection json in clear text. Exporting or sharing a scene collection therefore
+			//		discloses them. OBS's own stream key lives in the profile and is not affected.
 			{"dualoutput_setStreamSettings", JS_DUALOUTPUT_SET_STREAM_SETTINGS},
 
 			// .(@function(arg1))
