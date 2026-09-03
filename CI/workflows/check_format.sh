@@ -2,9 +2,9 @@
 #
 # Reports every first-party file clang-format would change and leaves a clang-format.patch
 # behind that fixes them. Run from the repo root. Exits 1 when anything needs reformatting;
-# the workflow marks that step continue-on-error so it reports without reding the PR.
+# the workflow marks that step continue-on-error so it reports without turning the PR red.
 #
-# Runnable locally:  CLANG_FORMAT_VERSION=19.1.5 CI/check_format.sh
+# Runnable locally:  CLANG_FORMAT_VERSION=19.1.5 CI/workflows/check_format.sh
 #
 set -uo pipefail
 
@@ -30,7 +30,10 @@ clang-format --dry-run "${files[@]}" 2> warnings.txt || true
 grep -E ':[0-9]+:[0-9]+: warning:' warnings.txt | head -n 20 |
     sed -nE 's|^(.+):([0-9]+):([0-9]+): warning: (.*)$|::warning file=\1,line=\2,col=\3::\4|p'
 
-clang-format -i "${files[@]}"
+if ! clang-format -i "${files[@]}"; then
+    echo "clang-format failed to run - not reporting a clean tree" >&2
+    exit 2
+fi
 
 if git diff --quiet; then
     echo "All ${#files[@]} first-party files match .clang-format ($version)." >> "$summary"

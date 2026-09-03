@@ -70,11 +70,28 @@ create)
 
 publish)
     if ! gh release view "$tag" -R "$repo" >/dev/null 2>&1; then
+        # Anchored to the default branch, not GITHUB_SHA: during a pull_request event that is
+        # the ephemeral merge commit, which belongs to no branch and makes for a tag nobody
+        # can find later.
+        default_branch=$(gh repo view "$repo" --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null)
         gh release create "$tag" -R "$repo" --prerelease \
-            --target "${GITHUB_SHA:-main}" \
+            --target "${default_branch:-main}" \
             --title "Prebuilt OBS trees" \
             --notes "Prebuilt OBS build trees for CI, published and consumed by the e2e job in tests.yml. Not a product release." || exit 1
     fi
+
+    # Re-checked here, not just at restore time: the OBS build sits between the two, so two
+    # runs that both missed can both arrive. Without this the later one clobbers an archive
+    # the earlier one already published, which is the overwrite this is supposed to prevent.
+    # They would be equivalent trees, but "a run never overwrites a published archive" is the
+    # property that makes publishing from a pull request safe, so keep it true.
+    if [ "${FORCE:-}" != "true" ] &&
+       gh release view "$tag" -R "$repo" --json assets --jq '.assets[].name' 2>/dev/null |
+         grep -qx "$name"; then
+        echo "::notice::$name was published by another run while this one was building. Keeping theirs."
+        exit 0
+    fi
+
     gh release upload "$tag" "$name" -R "$repo" --clobber || exit 1
     echo "Published \`$name\`" >> "$summary"
     echo "Published $name"

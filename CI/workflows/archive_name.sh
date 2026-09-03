@@ -22,12 +22,10 @@ obs_version=$(tr -d '[:space:]' < "$(dirname "$0")/../../obs.ver")
 
 # An empty or malformed version would otherwise become a plausible-looking name that simply
 # never matches a published asset, and every run would quietly fall back to a full build.
-case "$obs_version" in
-    [0-9]*.[0-9]*.[0-9]*) ;;
-    *)
-        echo "obs.ver gave no usable version: '${obs_version}'" >&2
-        exit 1
-        ;;
-esac
+# A glob will not do this: [0-9]*.[0-9]*.[0-9]* happily accepts 31x.1y.2garbage.
+if ! [[ $obs_version =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9]+)*$ ]]; then
+    echo "obs.ver gave no usable version: '${obs_version}'" >&2
+    exit 1
+fi
 
 echo "obs-${obs_version}-${BUILD_TYPE}-v${ARCHIVE_VERSION}-${RUNNER_LABEL}.tar.zst"
