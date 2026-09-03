@@ -5,7 +5,7 @@
 # loud instead. Warns rather than fails: a stale archive is a performance problem, not a
 # correctness one.
 #
-# Usage: CI/assert_no_obs_rebuild.sh <obs.dll mtime captured at restore time>
+# Usage: CI/workflows/assert_no_obs_rebuild.sh <obs.dll mtime captured at restore time>
 #
 # obs.dll's mtime is the exact signal. The compiled-source list is only for diagnosis.
 #

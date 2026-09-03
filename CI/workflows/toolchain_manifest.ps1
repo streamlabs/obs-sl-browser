@@ -22,8 +22,16 @@ $archive = bash (Join-Path $PluginDir 'CI/workflows/archive_name.sh')
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $vs = & $vswhere -latest -property catalog_productDisplayVersion
 
-$sdk = (Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\Include' -Directory |
-    Sort-Object Name | Select-Object -Last 1).Name
+# Read back what MSBuild actually targeted, not the newest SDK installed on the runner. The
+# OBS windows-x64 preset pins one (architecture: x64,version=10.0.22621), so an image that
+# also carries a newer SDK would otherwise be recorded as having built against it - and this
+# manifest exists purely to diagnose toolchain drift, so a wrong value is worse than none.
+$proj = Join-Path $ObsDir 'build_x64\libobs\libobs.vcxproj'
+$sdk = if (Test-Path $proj) {
+    (Select-String -Path $proj -Pattern '<WindowsTargetPlatformVersion>([^<]+)' |
+        Select-Object -First 1).Matches[0].Groups[1].Value
+}
+else { $null }
 
 $manifest = Join-Path $ObsDir '.prebuild-manifest.json'
 
