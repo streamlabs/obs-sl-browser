@@ -349,6 +349,7 @@ void SlDualController::sceneSetActive(const std::string &name)
 
 		if (dock)
 			dock->resetEditorState(false);
+		obs_frontend_save();
 	}
 
 	refreshSceneUi();
