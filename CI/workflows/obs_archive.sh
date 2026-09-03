@@ -80,19 +80,17 @@ publish)
             --notes "Prebuilt OBS build trees for CI, published and consumed by the e2e job in tests.yml. Not a product release." || exit 1
     fi
 
-    # Re-checked here, not just at restore time: the OBS build sits between the two, so two
-    # runs that both missed can both arrive. Without this the later one clobbers an archive
-    # the earlier one already published, which is the overwrite this is supposed to prevent.
-    # They would be equivalent trees, but "a run never overwrites a published archive" is the
-    # property that makes publishing from a pull request safe, so keep it true.
-    if [ "${FORCE:-}" != "true" ] &&
-       gh release view "$tag" -R "$repo" --json assets --jq '.assets[].name' 2>/dev/null |
-         grep -qx "$name"; then
-        echo "::notice::$name was published by another run while this one was building. Keeping theirs."
+    # Create-only unless a refresh was explicitly asked for. A check-then-upload pair cannot
+    # close this race whatever it checks: the OBS build sits between the restore and here, so
+    # two runs can both find nothing and both arrive. Letting the upload itself be the guard
+    # is what actually makes "a run never overwrites a published archive" true, which is the
+    # property that makes publishing from a pull request safe.
+    if [ "${FORCE:-}" = "true" ]; then
+        gh release upload "$tag" "$name" -R "$repo" --clobber || exit 1
+    elif ! gh release upload "$tag" "$name" -R "$repo"; then
+        echo "::notice::$name is already published - another run got there first. Keeping theirs."
         exit 0
     fi
-
-    gh release upload "$tag" "$name" -R "$repo" --clobber || exit 1
     echo "Published \`$name\`" >> "$summary"
     echo "Published $name"
     ;;

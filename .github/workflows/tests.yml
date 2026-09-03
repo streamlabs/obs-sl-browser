@@ -144,6 +144,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          # Needed here too, not just on the restore step: without it a forced refresh
+          # rebuilds OBS and then declines to replace the archive it was asked to refresh.
+          FORCE: ${{ inputs.refresh_archive }}
         run: bash obs-sl-browser/CI/workflows/obs_archive.sh publish
 
       # From here both paths are the same: an OBS tree with no plugin in it, already built.

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# The one place the prebuilt-OBS archive name is decided. obs-prebuild.yml publishes under
-# this name and tests.yml asks for it; if the two ever disagree every PR silently falls back
-# to a full OBS build, so they share this script rather than each formatting their own.
+# The one place the prebuilt-OBS archive name is decided. The e2e job in tests.yml both
+# publishes under this name and asks for it, so nothing here can disagree with itself - but
+# a name that drifts between runs means every run silently falls back to a full OBS build.
 #
 # Bump ARCHIVE_VERSION whenever anything about how OBS is built changes - compiler flags,
 # preset, the configure sequence, the set of directories the archive carries. Old archives
