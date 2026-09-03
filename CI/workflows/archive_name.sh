@@ -17,7 +17,8 @@ BUILD_TYPE=RelWithDebInfo
 # MSVC toolset, and a mismatched toolset means the restored tree rebuilds all of OBS.
 RUNNER_LABEL=windows-2022
 
-obs_version=$(tr -d '[:space:]' < "$(dirname "$0")/../obs.ver")
+# ../.. because this lives in CI/workflows/; obs.ver is at the repo root.
+obs_version=$(tr -d '[:space:]' < "$(dirname "$0")/../../obs.ver")
 
 # An empty or malformed version would otherwise become a plausible-looking name that simply
 # never matches a published asset, and every run would quietly fall back to a full build.
