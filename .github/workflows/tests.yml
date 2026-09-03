@@ -26,11 +26,81 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # Non-blocking for now: reports, never reds the PR. Drop continue-on-error to enforce.
       - run: node test/check.mjs
+        continue-on-error: true
+
+  # Under a minute, no build. Reports every first-party file clang-format would change and
+  # uploads the patch that fixes them. Non-blocking while the pre-existing drift is worked
+  # off - drop the two continue-on-error lines to turn it into a real gate.
+  #
+  # The version is pinned on purpose. .clang-format predates it and asks for "8 or later",
+  # but 19.1.5 is what reproduces the style this repo was last formatted with, and 18 and 19
+  # disagree on this config. Match it locally or you will fight this job.
+  format:
+    name: C++ format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLANG_FORMAT_VERSION: '19.1.5'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install "clang-format==$CLANG_FORMAT_VERSION"
+
+      - name: Check formatting
+        id: check
+        continue-on-error: true
+        run: |
+          # deps/ is vendored third party (minizip, json11), never formatted to this config.
+          # Gating it would mean the job could never pass. builds/ is not tracked.
+          mapfile -t files < <(git ls-files -- '*.cpp' '*.h' '*.hpp' | grep -v '^deps/')
+
+          # Line-level annotations so violations show up on the Files tab. Capped: GitHub
+          # renders only the first handful per run anyway.
+          clang-format --dry-run "${files[@]}" 2> warnings.txt || true
+          grep -E ':[0-9]+:[0-9]+: warning:' warnings.txt | head -n 20 |
+            sed -nE 's|^(.+):([0-9]+):([0-9]+): warning: (.*)$|::warning file=\1,line=\2,col=\3::\4|p'
+
+          clang-format -i "${files[@]}"
+
+          if git diff --quiet; then
+            echo "All ${#files[@]} first-party files match .clang-format ($CLANG_FORMAT_VERSION)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git diff > clang-format.patch
+          {
+            echo "### clang-format $CLANG_FORMAT_VERSION"
+            echo
+            echo "$(git diff --name-only | wc -l) of ${#files[@]} first-party files need reformatting."
+            echo
+            echo "Download the **clang-format-patch** artifact and \`git apply clang-format.patch\`, or run:"
+            echo
+            echo '```'
+            echo "pip install clang-format==$CLANG_FORMAT_VERSION"
+            echo "git ls-files -- '*.cpp' '*.h' '*.hpp' | grep -v '^deps/' | xargs clang-format -i"
+            echo '```'
+            echo
+            echo "| File | Lines |"
+            echo "| --- | ---: |"
+            git diff --numstat | awk '{print $1+$2, $3}' | sort -rn | awk '{printf "| %s | %s |\n", $2, $1}'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      - name: Upload the fixup patch
+        if: steps.check.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-format-patch
+          path: clang-format.patch
 
   e2e:
     name: End-to-end
-    needs: check
     runs-on: windows-2022
     timeout-minutes: 90
     steps:
