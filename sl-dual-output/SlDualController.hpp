@@ -44,6 +44,18 @@ public: // actions, UI thread (dock / editor / settings dialog)
 	// output is starting, reconnecting or stopping, and false for one that failed to connect - it
 	// answers "is it carrying data", where every caller here means "is it in use".
 	bool streamBusy() const;
+
+	// The same question for OBS's own stream, and deliberately not obs_frontend_streaming_active()
+	// on its own: that flag is set from the stream output's start signal, so it is false for the
+	// whole connect window - and OBS reads MultitrackExtraCanvas while preparing the stream, before
+	// it flips. Guarding on it alone lets a mode change land after the canvas has been claimed.
+	//
+	// Known and not closable from here: STREAMING_STARTING is itself emitted after
+	// SetupMultitrackVideo has read the profile value, and the frontend enum offers nothing
+	// earlier, so a few milliseconds either side of that read stay uncovered. Closing it properly
+	// would mean latching the claim for the whole attempt rather than guarding the setters.
+	bool mainStreamBusy() const;
+
 	void applySettings(const SlDualConfig &next);
 
 	void sceneSetActive(const std::string &name);
@@ -116,4 +128,6 @@ private:
 	bool m_callbacksRegistered = false;
 	bool m_exitCleanupDone = false;
 	bool m_restartOutputAfterCollectionChange = false;
+	// Set from STREAMING_STARTING and cleared at STOPPED, covering the window obs_frontend_streaming_active() misses.
+	bool m_mainStreamStarting = false;
 };

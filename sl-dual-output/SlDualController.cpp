@@ -187,6 +187,11 @@ bool SlDualController::streamBusy() const
 	return output && output->state() != SlDualStreamState::Idle;
 }
 
+bool SlDualController::mainStreamBusy() const
+{
+	return m_mainStreamStarting || obs_frontend_streaming_active();
+}
+
 void SlDualController::applySettings(const SlDualConfig &next)
 {
 	// Scene state is owned by the dock/editor; preserve it.
@@ -244,7 +249,7 @@ bool SlDualController::setEnabled(bool enabled)
 	// The multitrack path picked the canvas up when the main stream was prepared, so releasing the
 	// claim here cannot take it back - the canvas would go on streaming with the docks gone and the
 	// api reporting it off. Refused until the main stream stops, the same way a mode change is.
-	if (!enabled && config.outputMode == SlDualOutputMode::EnhancedBroadcasting && obs_frontend_streaming_active())
+	if (!enabled && config.outputMode == SlDualOutputMode::EnhancedBroadcasting && mainStreamBusy())
 	{
 		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "disable refused: the main stream is carrying the canvas");
 		return false;
@@ -285,7 +290,7 @@ bool SlDualController::setOutputMode(SlDualOutputMode mode)
 	// attached to the multitrack output. Allowing the switch anyway would let startStream() bring
 	// our own encode up alongside it and send the canvas twice, which is the one thing this mode
 	// exists to prevent. Refused until the main stream stops, the same way a resize is.
-	if (obs_frontend_streaming_active())
+	if (mainStreamBusy())
 	{
 		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "output mode change refused: the main stream is live");
 		return false;
@@ -492,6 +497,14 @@ void SlDualController::onFrontendEvent(enum obs_frontend_event event)
 {
 	switch (event)
 	{
+	case OBS_FRONTEND_EVENT_STREAMING_STARTING: {
+		m_mainStreamStarting = true;
+		break;
+	}
+	case OBS_FRONTEND_EVENT_STREAMING_STOPPED: {
+		m_mainStreamStarting = false;
+		break;
+	}
 	case OBS_FRONTEND_EVENT_STREAMING_STARTED: {
 		// Starting again over an output that is already starting or reconnecting would re-enter
 		//	SlDualStreamOutput::start, which guards only Stopping and an already-active output.

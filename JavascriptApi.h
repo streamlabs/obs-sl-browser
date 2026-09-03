@@ -607,6 +607,9 @@ public:
 			// .(@function(arg1), @bool_enabled)
 			//	Shows/hides the vertical docks and gates streaming. The canvas stays registered either way,
 			//		so its scenes survive a round trip through disabled.
+			//	Disabling is refused while the main stream is running in "enhanced_broadcasting" mode: OBS
+			//		picked the canvas up when it prepared that stream and will not let go mid-stream, so
+			//		reporting it disabled would be a lie. Stop the main stream first.
 			{"dualoutput_setEnabled", JS_DUALOUTPUT_SET_ENABLED},
 
 			// .(@function(arg1), @int_width, @int_height)
@@ -619,6 +622,9 @@ public:
 			//	"enhanced_broadcasting" - the canvas is handed to OBS as its Additional Canvas and the main
 			//		stream carries it; our own output is stopped and dualoutput_startStream is refused.
 			//	Only one of the two ever runs: both at once would encode and send the canvas twice.
+			//	Refused while the main stream is running, including while it is still connecting - OBS reads
+			//		the canvas claim once when it prepares the stream, so a switch after that point cannot
+			//		take effect and would let both outputs send at once. Stop the main stream first.
 			{"dualoutput_setOutputMode", JS_DUALOUTPUT_SET_OUTPUT_MODE},
 
 			// .(@function(arg1), @server, @key, @bool_use_auth, @username, @password, @encoderId, @int_videoBitrate, @int_audioBitrate, @int_audioTrack, @bool_autoStart)
