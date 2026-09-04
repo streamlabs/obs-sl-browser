@@ -1891,8 +1891,20 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 	const bool hideWindow = params["param3"].bool_value();
 
 	std::wstring folderPath = getDownloadsDir();
-	std::wstring wFileName(fileName.begin(), fileName.end());
-	std::wstring fullPath = folderPath + L"\\" + wFileName;
+
+	// Confined like every other path this api takes: only something we put in the Streamlabs
+	// folder may be launched. A name relative to that folder and an absolute path inside it -
+	// which is the shape fs_downloadZip hands back - both resolve; anything else is refused.
+	std::filesystem::path resolved;
+	std::string err;
+
+	if (!resolveWithinDownloads(folderPath, fileName, resolved, err))
+	{
+		out_jsonReturn = Json(Json::object({{"success", false}, {"error", err}})).dump();
+		return;
+	}
+
+	std::wstring fullPath = resolved.wstring();
 
 	// Tie the child's lifetime to ours: the launched exe is terminated if this (parent) process goes away.
 	HANDLE hJob = getChildJob();
@@ -4081,7 +4093,20 @@ bool PluginJsHandler::resolveWithinDownloads(const std::wstring &downloadsDir, c
 	}
 
 	std::filesystem::path root = std::filesystem::path(downloadsDir).lexically_normal();
-	std::filesystem::path candidate = (root / utf8_to_ws(inputPath)).lexically_normal();
+	std::filesystem::path candidate;
+
+	try
+	{
+		candidate = (root / utf8_to_ws(inputPath)).lexically_normal();
+	}
+	catch (const std::exception &)
+	{
+		// utf8_to_ws throws on input that is not valid utf-8, and a javascript string holding an
+		// unpaired surrogate reaches us as exactly that. Nothing catches it further up, so without
+		// this a malformed path from the page takes obs down instead of being refused.
+		out_error = "Invalid path (not valid utf-8): " + inputPath;
+		return false;
+	}
 
 	std::wstring rootStr = root.wstring();
 	std::wstring candStr = candidate.wstring();
