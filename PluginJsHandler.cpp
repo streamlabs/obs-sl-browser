@@ -1887,15 +1887,21 @@ HANDLE PluginJsHandler::getChildJob()
 // Release the children that have already exited. GetExitCodeProcess only queries the handle, so
 // this is cheap even over a map that has got out of hand - and STILL_ACTIVE is the same yardstick
 // sys_isProcessRunning answers with, so nothing is dropped that it would still call running.
+// A process handle is signalled once the process ends, so this answers the question exactly.
+// GetExitCodeProcess cannot: STILL_ACTIVE is 259, which is also a legal exit code, so a child
+// that exits with 259 would read as running for as long as the plugin is up.
+static bool isChildRunning(HANDLE process)
+{
+	return WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
+}
+
 size_t PluginJsHandler::reapExitedChildren()
 {
 	size_t reaped = 0;
 
 	for (auto it = m_childProcesses.begin(); it != m_childProcesses.end();)
 	{
-		DWORD exitCode = 0;
-
-		if (GetExitCodeProcess(it->second, &exitCode) && exitCode == STILL_ACTIVE)
+		if (isChildRunning(it->second))
 		{
 			++it;
 			continue;
@@ -1959,18 +1965,24 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 		m_childProcesses[pi.dwProcessId] = pi.hProcess;
 
 		// Nothing here on a normal launch: the branch is not taken until a caller has piled up
-		// kChildReapFloor of them without ever asking about one.
-		if (m_childProcesses.size() >= m_childReapAt)
+		// kChildReapAt of them without ever asking about one.
+		if (m_childProcesses.size() >= kChildReapAt)
 		{
 			const size_t reaped = reapExitedChildren();
 			const size_t live = m_childProcesses.size();
 
-			// Sweeping found nothing to release, so these really are all still running - which is
-			// worth saying out loud, because it is a caller leaking processes rather than handles.
-			if (live >= kChildReapFloor)
+			if (live >= m_childWarnAt)
+			{
+				// Sweeping released nothing like enough, so these really are still running: a
+				// caller leaking processes rather than handles, which is worth seeing in a log.
 				blog(LOG_WARNING, "PluginJsHandler::JS_RUN_STREAMLABS_EXE %zu child processes are still running (released %zu)", live, reaped);
-
-			m_childReapAt = (std::max)(kChildReapFloor, live * 2);
+				m_childWarnAt = live * 2;
+			}
+			else if (live < kChildReapAt)
+			{
+				// Drained. A fresh pile-up should say so again rather than inherit the old mark.
+				m_childWarnAt = kChildReapAt;
+			}
 		}
 
 		out_jsonReturn = Json(Json::object({{"success", true}, {"pid", (int)pi.dwProcessId}})).dump();
@@ -2748,15 +2760,13 @@ void PluginJsHandler::JS_IS_PROCESS_RUNNING(const Json &params, std::string &out
 
 	if (it != m_childProcesses.end())
 	{
-		DWORD exitCode = 0;
-
-		if (GetExitCodeProcess(it->second, &exitCode) && exitCode == STILL_ACTIVE)
+		if (isChildRunning(it->second))
 		{
 			running = true;
 		}
 		else
 		{
-			// Process has exited (or the handle is no longer queryable) - release it.
+			// Process has exited - release it.
 			CloseHandle(it->second);
 			m_childProcesses.erase(it);
 		}
@@ -4145,7 +4155,11 @@ bool PluginJsHandler::resolveWithinDownloads(const std::wstring &downloadsDir, c
 		// utf8_to_ws throws on input that is not valid utf-8, and a javascript string holding an
 		// unpaired surrogate reaches us as exactly that. Nothing catches it further up, so without
 		// this a malformed path from the page takes obs down instead of being refused.
-		out_error = "Invalid path (not valid utf-8): " + inputPath;
+		//
+		// The offending bytes are deliberately not quoted back: json11 emits string bytes as they
+		// are, so echoing them would make the reply itself invalid utf-8 and leave the transport
+		// to mangle or drop the very error it is carrying.
+		out_error = "Invalid path (not valid utf-8)";
 		return false;
 	}
 

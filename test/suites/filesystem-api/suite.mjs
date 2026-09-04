@@ -13,9 +13,10 @@
  * reason source-message reports over http rather than through the channel it is testing.
  *
  * Node also owns cleanup, because the sandbox root is the real Streamlabs folder with the
- * user's real data in it. Everything this suite creates goes in one uniquely named
- * subdirectory; the only thing removed outside it is a download folder that appeared during
- * the run and carries JS_DOWNLOAD_ZIP's all-digit name.
+ * user's real data in it. Almost everything this suite creates goes in one uniquely named
+ * subdirectory; the rest - the download directories fs_downloadZip names for itself, and the
+ * fixtures the escape probes are aimed at - is recorded path by path as it is created, and
+ * only those paths are ever removed. Nothing sweeps the root for things that look like ours.
  *
  * Api names are spelled out at each cdp.call rather than passed through a helper, because a
  * literal is what test/check.mjs scans for - a wrapper taking the name as a variable would
@@ -122,55 +123,76 @@ const mainWindow = (pid) => {
 /* ------------------------------------------------------------ containment --- */
 
 /*
- * Paths that must never resolve. Each one names a real place on disk, so the assertion is not
- * only that the call reported an error but that the file it would have written is not there.
+ * The places outside the root that the escape probes aim at. OUTSIDE_DIR is a sibling of the
+ * root whose name starts with the root's, which is the case resolveWithinDownloads goes out of
+ * its way to handle: a prefix compare without the separator check that follows it would read
+ * "...\StreamlabsOBS-1234" as being inside "...\StreamlabsOBS".
  *
- * The second is the case resolveWithinDownloads goes out of its way to handle: a sibling whose
- * name starts with the root's. A prefix compare without the separator check that follows it
- * would let "...\StreamlabsOBS-1234" through as being inside "...\StreamlabsOBS".
+ * PRESENT is created for real, with contents. That matters more than it looks: an unguarded
+ * fs_sha256 or fs_move pointed at something that does not exist still answers with an error,
+ * and a table that accepts any error as a refusal would pass against no guard at all. Aimed at
+ * a file that is really there, only a working guard can produce an error.
+ */
+const OUTSIDE_DIR = join(ROOT, "..", `StreamlabsOBS-${STAMP}`);
+const OUTSIDE_PRESENT = join(OUTSIDE_DIR, "present.txt");
+const OUTSIDE_PRESENT_BODY = "the guard is what has to stop this being read or moved";
+
+/*
+ * Each escape is one shape of path that must never resolve, in two flavours: one aimed at the
+ * file that exists, for the calls that read or consume a path, and one aimed at a name that
+ * does not, for the calls that create one. `lands` is what must not appear on disk afterwards.
  */
 const escapes = () => [
 	{
 		what: "a parent-directory traversal",
-		path: `..\\sltest-escape-${STAMP}.txt`,
+		present: `..\\StreamlabsOBS-${STAMP}\\present.txt`,
+		absent: `..\\sltest-escape-${STAMP}.txt`,
 		lands: join(ROOT, "..", `sltest-escape-${STAMP}.txt`),
 	},
 	{
 		what: "a sibling directory whose name starts with the root's",
-		path: `..\\StreamlabsOBS-${STAMP}\\escape.txt`,
-		lands: join(ROOT, "..", `StreamlabsOBS-${STAMP}`),
+		present: `..\\StreamlabsOBS-${STAMP}\\present.txt`,
+		absent: `..\\StreamlabsOBS-${STAMP}\\created.txt`,
+		lands: join(OUTSIDE_DIR, "created.txt"),
 	},
 	{
 		what: "an absolute path outside the root",
-		path: join(ROOT, "..", `sltest-abs-${STAMP}.txt`),
+		present: OUTSIDE_PRESENT,
+		absent: join(ROOT, "..", `sltest-abs-${STAMP}.txt`),
 		lands: join(ROOT, "..", `sltest-abs-${STAMP}.txt`),
 	},
 	{
+		// No target to aim at, so this one only asks whether an unusable path is refused.
 		what: "an empty path",
-		path: "",
+		present: "",
+		absent: "",
 		lands: null,
 	},
 ];
 
 /*
- * Every function that takes a path, and a plausible call to it. Each closure spells its own
- * api name out, so the table does not hide those names from test/check.mjs.
+ * Every function that takes a path, and a plausible call to it. Each closure spells its own api
+ * name out, so the table does not hide those names from test/check.mjs.
  *
- * fs_remove is called with force=true on purpose: "a missing path is not an error" must not
- * be allowed to swallow "this path is not yours".
+ * "aims" picks which flavour of the escape it is given: the calls that read or consume a path
+ * are aimed at the file that exists, so that removing the guard would make them succeed rather
+ * than fail for the unrelated reason that there was nothing there.
+ *
+ * fs_remove is called with force=true on purpose: "a missing path is not an error" must not be
+ * allowed to swallow "this path is not yours".
  *
  * fs_runSlExe is confined too but is not in here, because none of these paths is an exe: it
- * would answer "CreateProcess failed" whether or not it checked, and the table could not tell
- * a refusal from a failed launch. It gets a probe of its own, pointed at a real exe.
+ * would answer "CreateProcess failed" whether or not it checked. It gets a probe of its own,
+ * pointed at a real one.
  */
 const GUARDED = [
-	["fs_mkdir", (cdp, p) => cdp.call("fs_mkdir", p)],
-	["fs_exists", (cdp, p) => cdp.call("fs_exists", p)],
-	["fs_remove", (cdp, p) => cdp.call("fs_remove", p, true, true)],
-	["fs_move (source)", (cdp, p) => cdp.call("fs_move", p, P("moved-in"))],
-	["fs_move (destination)", (cdp, p) => cdp.call("fs_move", P("keep.txt"), p)],
-	["fs_sha256", (cdp, p) => cdp.call("fs_sha256", p)],
-	["fs_writeFile", (cdp, p) => cdp.call("fs_writeFile", p, "escaped", false)],
+	["fs_mkdir", "absent", (cdp, p) => cdp.call("fs_mkdir", p)],
+	["fs_writeFile", "absent", (cdp, p) => cdp.call("fs_writeFile", p, "escaped", false)],
+	["fs_move (destination)", "absent", (cdp, p) => cdp.call("fs_move", P("keep.txt"), p)],
+	["fs_exists", "present", (cdp, p) => cdp.call("fs_exists", p)],
+	["fs_sha256", "present", (cdp, p) => cdp.call("fs_sha256", p)],
+	["fs_remove", "present", (cdp, p) => cdp.call("fs_remove", p, true, true)],
+	["fs_move (source)", "present", (cdp, p) => cdp.call("fs_move", p, P("moved-in"))],
 ];
 
 /* ---------------------------------------------------------------- fixture --- */
@@ -196,7 +218,8 @@ export default {
 
 	async run({ cdp, say }) {
 		const r = results();
-		const launched = []; // pids fs_runSlExe handed back, so cleanup can be sure they are gone
+		const launched = []; // pids fs_runSlExe handed back that have not been stopped yet
+		const downloadDirs = []; // the directories fs_downloadZip made, noted as it made them
 		let zipServer = null;
 
 		if (!ROOT) {
@@ -204,9 +227,6 @@ export default {
 			return r.list;
 		}
 
-		// Anything in the root now is the user's, or a previous run's. Only names that appear
-		// during this run are ever removed.
-		const preexisting = new Set(existsSync(ROOT) ? readdirSync(ROOT) : []);
 		r.info("sandbox", A());
 
 		/* ------------------------------------------------ where the root is --- */
@@ -498,23 +518,35 @@ export default {
 				if (!existsSync(A("fwd.txt"))) return `it did not land at ${A("fwd.txt")}`;
 			});
 
+			// The file every "present" probe is aimed at. Written by node, outside the root, so
+			// that only the guard can be the reason a call fails to read or move it.
+			mkdirSync(OUTSIDE_DIR, { recursive: true });
+			writeFileSync(OUTSIDE_PRESENT, OUTSIDE_PRESENT_BODY);
+
 			for (const esc of escapes()) {
 				await r.step(`${esc.what} is refused by every function that takes a path`, async () => {
 					const allowed = [];
-					for (const [label, invoke] of GUARDED) {
-						const res = await invoke(cdp, esc.path);
+					for (const [label, aims, invoke] of GUARDED) {
+						const res = await invoke(cdp, aims === "present" ? esc.present : esc.absent);
 						const bad = diag(label, res);
 						if (bad) return bad;
 						if (!res.error) allowed.push(`${label} answered ${short(res)}`);
 					}
 
-					// Believing the error messages is not enough: the assertion is that the file is
-					// not there, whatever any of them said.
+					// Believing the error messages is not enough. Whatever they said, nothing may
+					// have been created outside the root, and the file that was already there has
+					// to still be there, unread is not checkable but unmoved and unchanged are.
 					const leaked = esc.lands && existsSync(esc.lands);
-					if (allowed.length) {
-						return allowed.join("; ") + (leaked ? ` - and ${esc.lands} exists` : "");
-					}
-					if (leaked) return `every call reported an error, yet ${esc.lands} exists`;
+					const lost = !existsSync(OUTSIDE_PRESENT) ||
+						readFileSync(OUTSIDE_PRESENT, "utf8") !== OUTSIDE_PRESENT_BODY;
+
+					const notes = [
+						...allowed,
+						leaked ? `${esc.lands} was created` : null,
+						lost ? `${OUTSIDE_PRESENT} was removed or altered` : null,
+					].filter(Boolean);
+
+					if (notes.length) return notes.join("; ");
 				});
 			}
 
@@ -573,6 +605,11 @@ export default {
 				if (!(await until(() => !isRunning(pid), { timeoutMs: 15000, everyMs: 250 }))) {
 					return `pid ${pid} is still running 15s after being stopped`;
 				}
+				// Cleanup has nothing left to do about this one, and must not go near the pid again:
+				// the plugin has closed its handle, so windows is free to hand the number to
+				// somebody else.
+				const at = launched.indexOf(pid);
+				if (at !== -1) launched.splice(at, 1);
 			};
 
 			let shown = null;
@@ -703,7 +740,10 @@ export default {
 				if (!existsSync(outside)) return "charmap.exe is not there to try to run";
 
 				const before = countByImage("charmap.exe");
-				const res = await cdp.call("fs_runSlExe", outside, true);
+				// Through start(), not a bare call: if the guard ever regresses this launch
+				// succeeds, and the pid has to be on the cleanup list before the step gives up on
+				// it - a test for a stray process must not leave one.
+				const res = await start(outside, true);
 				const bad = wantError("fs_runSlExe", res);
 				if (bad) return bad;
 
@@ -750,10 +790,29 @@ export default {
 				return paths.filter((p) => existsSync(p));
 			};
 
+			/*
+			 * Every download, with the directory it created noted at the time.
+			 *
+			 * JS_DOWNLOAD_ZIP names that directory after a thread id and a timestamp and does not
+			 * say which one it chose, and on the refusal path it answers with no paths at all. It
+			 * has to be identified from the difference across this one call: sweeping the root for
+			 * digit-named directories afterwards would also carry off one the real Streamlabs had
+			 * created in the meantime, in the folder holding the user's actual downloads.
+			 */
+			const downloadZip = async (...args) => {
+				const names = () => new Set(existsSync(ROOT) ? readdirSync(ROOT) : []);
+				const before = names();
+				const res = await cdp.call("fs_downloadZip", ...args);
+
+				const created = [...names()].filter((n) => !before.has(n)).map((n) => join(ROOT, n));
+				downloadDirs.push(...created);
+				return { res, created };
+			};
+
 			let transportWorks = false;
 
 			await r.step("fs_downloadZip downloads and unpacks with no checksum given", async () => {
-				const res = await cdp.call("fs_downloadZip", zipServer.url);
+				const { res } = await downloadZip(zipServer.url);
 				const bad = diag("fs_downloadZip", res);
 				if (bad) return bad;
 				if (!Array.isArray(res)) return `expected an array of paths, got ${short(res)}`;
@@ -778,7 +837,7 @@ export default {
 			};
 
 			await gate("a matching checksum is accepted, whatever its case", async () => {
-				const res = await cdp.call("fs_downloadZip", zipServer.url, digest.toUpperCase());
+				const { res } = await downloadZip(zipServer.url, digest.toUpperCase());
 				const bad = diag("fs_downloadZip", res);
 				if (bad) return bad;
 				if (!Array.isArray(res)) return `expected an array of paths, got ${short(res)}`;
@@ -786,19 +845,14 @@ export default {
 			});
 
 			await gate("a mismatched checksum refuses, and unpacks nothing", async () => {
-				const wrong = "0".repeat(64);
-				const before = new Set(existsSync(ROOT) ? readdirSync(ROOT) : []);
-
-				const res = await cdp.call("fs_downloadZip", zipServer.url, wrong);
+				const { res, created } = await downloadZip(zipServer.url, "0".repeat(64));
 				const bad = wantError("fs_downloadZip", res);
 				if (bad) return bad;
 
 				// The folder it downloaded into may hold download.zip and nothing else. Anything
 				// from the archive appearing in it means the gate ran after the unpacker.
-				const created = (existsSync(ROOT) ? readdirSync(ROOT) : []).filter((n) => !before.has(n));
 				for (const dir of created) {
-					const contents = readdirSync(join(ROOT, dir));
-					const extra = contents.filter((n) => n.toLowerCase() !== "download.zip");
+					const extra = readdirSync(dir).filter((n) => n.toLowerCase() !== "download.zip");
 					if (extra.length) return `${dir} also holds ${extra.join(", ")}`;
 				}
 			});
@@ -806,40 +860,71 @@ export default {
 			// The error names both digests. The one it computed has to be the fixture's, or the
 			// comparison passing is luck rather than the file being what it claims to be.
 			await gate("the refusal names the digest the file actually has", async () => {
-				const res = await cdp.call("fs_downloadZip", zipServer.url, "0".repeat(64));
+				const { res } = await downloadZip(zipServer.url, "0".repeat(64));
 				const bad = wantError("fs_downloadZip", res);
 				if (bad) return bad;
 				if (!String(res.error).includes(digest)) return `error was ${JSON.stringify(res.error)}, expected it to name ${digest}`;
+			});
+
+			/* -------------------------------------------------- a path that is not utf-8 --- */
+
+			/*
+			 * A javascript string may hold an unpaired surrogate, and what reaches the plugin then
+			 * is not valid utf-8. The conversion behind every path in this api throws on that, and
+			 * nothing above it catches, so this used to end the process.
+			 *
+			 * Which of "refused" or "sanitised somewhere in the transport" happens is not the
+			 * assertion - either is a fine answer. That the plugin is still answering afterwards
+			 * is. A crash shows up here as a callback that never fires.
+			 */
+			await r.step("a path that is not valid utf-8 does not take the plugin down", async () => {
+				const res = await cdp.call("fs_mkdir", `${SANDBOX}\\lone-\ud800-surrogate`);
+				const bad = diag("fs_mkdir", res);
+				if (bad) return bad;
+
+				const after = await cdp.call("sl_getVersionInfo");
+				if (diag("sl_getVersionInfo", after)) return "the plugin stopped answering after it";
 			});
 		} catch (e) {
 			r.fail("the suite ran to the end", String(e?.message || e).split("\n")[0]);
 		} finally {
 			await zipServer?.close();
 
-			// Nothing launched may outlive the suite. The job object would take them down with
-			// OBS anyway, but a leaked child holds runner.exe open and blocks the cleanup below.
+			/*
+			 * Anything still running has to go, or it holds runner.exe open and the sandbox will
+			 * not delete. Through the plugin rather than process.kill: sys_stopProcess works from
+			 * the handle it kept and refuses a pid it does not own, whereas a pid whose handle has
+			 * already been closed may by now belong to somebody else's process entirely. Only the
+			 * ones stopAndWait did not already account for are in this list.
+			 *
+			 * If the plugin cannot answer, the job object takes them down when OBS exits.
+			 */
 			for (const pid of launched) {
 				try {
-					process.kill(pid);
-				} catch { /* already gone, which is the point */ }
+					await cdp.call("sys_stopProcess", pid);
+				} catch { /* obs is already gone, and the job object has it */ }
 			}
 
 			rmSync(A(), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 
-			// Only what appeared during this run, and only under the name JS_DOWNLOAD_ZIP gives
-			// its folders: GetCurrentThreadId() followed by a millisecond timestamp.
-			for (const name of existsSync(ROOT) ? readdirSync(ROOT) : []) {
-				if (preexisting.has(name) || !/^\d+$/.test(name)) continue;
-				rmSync(join(ROOT, name), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+			// Only the directories this suite's own downloads created, recorded as they appeared.
+			for (const dir of downloadDirs) {
+				rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 			}
 
 			// Whatever the escape checks concluded, none of it may be left on disk.
+			rmSync(OUTSIDE_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 			for (const esc of escapes()) {
 				if (esc.lands) rmSync(esc.lands, { recursive: true, force: true });
 			}
 
-			r.check("nothing was left behind in the streamlabs folder", !existsSync(A()),
-				`${A()} is still on disk - a launched process may still be holding it open`);
+			// Everything this suite is known to have created, named individually - not "whatever
+			// is in the root that was not there before", which is the user's business.
+			const leftovers = [A(), OUTSIDE_DIR, ...downloadDirs, ...escapes().map((e) => e.lands)]
+				.filter((p) => p && existsSync(p));
+
+			r.check("nothing was left behind on disk", !leftovers.length,
+				`${leftovers.join(", ")} - a launched process may still be holding one open`);
 		}
 
 		return r.list;

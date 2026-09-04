@@ -157,10 +157,13 @@ private:
 
 	// A child's handle is normally released by whoever asks about its pid. A caller that only
 	// ever launches keeps them all, so a launch that finds this many tracked sweeps the exited
-	// ones out first. The mark then follows the live count, so the sweep stays rare and a real
-	// pile-up is reported once per doubling instead of once per launch.
-	static constexpr size_t kChildReapFloor = 128;
-	size_t m_childReapAt = kChildReapFloor;
+	// ones out first. The threshold is fixed: letting it follow the live count would ratchet
+	// upwards after one burst and leave that many dead handles to collect next time.
+	static constexpr size_t kChildReapAt = 128;
+
+	// Only the warning backs off, so a genuine pile-up is reported once per doubling rather
+	// than on every launch. It returns to the floor once the children have drained.
+	size_t m_childWarnAt = kChildReapAt;
 
 	bool m_restartApp = false;
 
