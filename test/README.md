@@ -51,6 +51,11 @@ Your everyday OBS is untouched: nothing writes to `%APPDATA%\obs-studio`, and no
 `portable_mode.txt` marker is left behind, so launching that rundir yourself still behaves
 normally.
 
+One suite is an exception, and not to the profile: the filesystem api resolves every path
+against `%APPDATA%\StreamlabsOBS`, so `filesystem-api` has nowhere else to run. It confines
+itself to one uniquely named subdirectory there, cleans that up afterwards, and fails the run
+if anything is left behind.
+
 ### One OBS at a time
 
 Only one process can hold the CEF DevTools port (9123, hardcoded in `SlBrowser.cpp`, which is
@@ -173,4 +178,5 @@ test/
   suites/
     smoke/         the plugin comes up and answers
     source-message/ browsersource_sendMessage reaches the right browser source
+    filesystem-api/ the sandboxed filesystem and process api, and its containment
 ```
