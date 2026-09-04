@@ -1884,6 +1884,31 @@ HANDLE PluginJsHandler::getChildJob()
 	return m_childJob;
 }
 
+// Release the children that have already exited. GetExitCodeProcess only queries the handle, so
+// this is cheap even over a map that has got out of hand - and STILL_ACTIVE is the same yardstick
+// sys_isProcessRunning answers with, so nothing is dropped that it would still call running.
+size_t PluginJsHandler::reapExitedChildren()
+{
+	size_t reaped = 0;
+
+	for (auto it = m_childProcesses.begin(); it != m_childProcesses.end();)
+	{
+		DWORD exitCode = 0;
+
+		if (GetExitCodeProcess(it->second, &exitCode) && exitCode == STILL_ACTIVE)
+		{
+			++it;
+			continue;
+		}
+
+		CloseHandle(it->second);
+		it = m_childProcesses.erase(it);
+		++reaped;
+	}
+
+	return reaped;
+}
+
 void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::string &out_jsonReturn)
 {
 	const auto &param2Value = params["param2"];
@@ -1932,6 +1957,22 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 		CloseHandle(pi.hThread);
 
 		m_childProcesses[pi.dwProcessId] = pi.hProcess;
+
+		// Nothing here on a normal launch: the branch is not taken until a caller has piled up
+		// kChildReapFloor of them without ever asking about one.
+		if (m_childProcesses.size() >= m_childReapAt)
+		{
+			const size_t reaped = reapExitedChildren();
+			const size_t live = m_childProcesses.size();
+
+			// Sweeping found nothing to release, so these really are all still running - which is
+			// worth saying out loud, because it is a caller leaking processes rather than handles.
+			if (live >= kChildReapFloor)
+				blog(LOG_WARNING, "PluginJsHandler::JS_RUN_STREAMLABS_EXE %zu child processes are still running (released %zu)", live, reaped);
+
+			m_childReapAt = (std::max)(kChildReapFloor, live * 2);
+		}
+
 		out_jsonReturn = Json(Json::object({{"success", true}, {"pid", (int)pi.dwProcessId}})).dump();
 	}
 	else

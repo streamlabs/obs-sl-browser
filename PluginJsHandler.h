@@ -142,6 +142,7 @@ private:
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;
 	HANDLE getChildJob();
+	size_t reapExitedChildren();
 
 	static QDockWidget *findDock(const std::string &objectName);
 
@@ -153,6 +154,13 @@ private:
 
 	std::map<uint32_t, HANDLE> m_childProcesses;
 	HANDLE m_childJob = nullptr;
+
+	// A child's handle is normally released by whoever asks about its pid. A caller that only
+	// ever launches keeps them all, so a launch that finds this many tracked sweeps the exited
+	// ones out first. The mark then follows the live count, so the sweep stays rare and a real
+	// pile-up is reported once per doubling instead of once per launch.
+	static constexpr size_t kChildReapFloor = 128;
+	size_t m_childReapAt = kChildReapFloor;
 
 	bool m_restartApp = false;
 
