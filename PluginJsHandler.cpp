@@ -502,12 +502,9 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 				SetForegroundWindow(hWnd);
 			}
 
-			auto utf8_to_wstring = [](const std::string &str) {
-				std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
-				return myconv.from_bytes(str);
-			};
-
-			std::wstring wurl = utf8_to_wstring(url);
+			// The member conversion, not a local wstring_convert: that one throws on input that
+			// is not valid utf-8, and this string came from the page.
+			std::wstring wurl = utf8_to_ws(url);
 
 			SHELLEXECUTEINFO info = {};
 			info.cbSize = sizeof(SHELLEXECUTEINFO);
@@ -2123,11 +2120,6 @@ void PluginJsHandler::JS_DOWNLOAD_FILE(const Json &params, std::string &out_json
 		return myconv.to_bytes(str);
 	};
 
-	auto utf8_to_wstring = [](const std::string &str) {
-		std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
-		return myconv.from_bytes(str);
-	};
-
 	if (!folderPath.empty())
 	{
 		using namespace std::chrono;
@@ -2140,7 +2132,7 @@ void PluginJsHandler::JS_DOWNLOAD_FILE(const Json &params, std::string &out_json
 
 		// ThreadID + MsTime should be unique, same threaID within 1ms window is a statistical improbability
 		std::wstring subFolderPath = folderPath + L"\\" + std::to_wstring(GetCurrentThreadId()) + millis_str;
-		std::wstring downloadPath = subFolderPath + L"\\" + utf8_to_wstring(filename);
+		std::wstring downloadPath = subFolderPath + L"\\" + utf8_to_ws(filename);
 
 		CreateDirectoryW(folderPath.c_str(), NULL);
 		CreateDirectoryW(subFolderPath.c_str(), NULL);
@@ -4120,16 +4112,48 @@ void PluginJsHandler::JS_BROWSERSOURCE_SEND_MESSAGE(const json11::Json &params, 
 * Helpers
 */
 
+/*
+ * Both of these used std::wstring_convert, which throws on input it cannot represent. Nothing
+ * between an api handler and the worker thread catches, so that throw ended the process - and a
+ * javascript string is allowed to carry an unpaired surrogate, which reaches us as exactly the
+ * kind of input it refuses. A page could take OBS down with one malformed argument.
+ *
+ * The Win32 conversions do not throw. Without MB_ERR_INVALID_CHARS an unconvertible sequence
+ * becomes U+FFFD, so a malformed path turns into a path that is merely wrong, and is then
+ * refused by the containment check or by the file operation like any other bad path.
+ *
+ * Fixing it here rather than at each call site is deliberate: this is the only thing in the
+ * conversion that could throw, and a catch in one caller would leave the next one to be written
+ * exposed again.
+ */
 std::string PluginJsHandler::ws_to_utf8(const std::wstring &str)
 {
-	std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-	return conv.to_bytes(str);
+	if (str.empty())
+		return std::string();
+
+	const int needed = WideCharToMultiByte(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0, nullptr, nullptr);
+
+	if (needed <= 0)
+		return std::string();
+
+	std::string out((size_t)needed, '\0');
+	WideCharToMultiByte(CP_UTF8, 0, str.data(), (int)str.size(), out.data(), needed, nullptr, nullptr);
+	return out;
 }
 
 std::wstring PluginJsHandler::utf8_to_ws(const std::string &str)
 {
-	std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-	return conv.from_bytes(str);
+	if (str.empty())
+		return std::wstring();
+
+	const int needed = MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0);
+
+	if (needed <= 0)
+		return std::wstring();
+
+	std::wstring out((size_t)needed, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), out.data(), needed);
+	return out;
 }
 
 bool PluginJsHandler::resolveWithinDownloads(const std::wstring &downloadsDir, const std::string &inputPath, std::filesystem::path &out_resolved, std::string &out_error)
@@ -4147,24 +4171,7 @@ bool PluginJsHandler::resolveWithinDownloads(const std::wstring &downloadsDir, c
 	}
 
 	std::filesystem::path root = std::filesystem::path(downloadsDir).lexically_normal();
-	std::filesystem::path candidate;
-
-	try
-	{
-		candidate = (root / utf8_to_ws(inputPath)).lexically_normal();
-	}
-	catch (const std::exception &)
-	{
-		// utf8_to_ws throws on input that is not valid utf-8, and a javascript string holding an
-		// unpaired surrogate reaches us as exactly that. Nothing catches it further up, so without
-		// this a malformed path from the page takes obs down instead of being refused.
-		//
-		// The offending bytes are deliberately not quoted back: json11 emits string bytes as they
-		// are, so echoing them would make the reply itself invalid utf-8 and leave the transport
-		// to mangle or drop the very error it is carrying.
-		out_error = "Invalid path (not valid utf-8)";
-		return false;
-	}
+	std::filesystem::path candidate = (root / utf8_to_ws(inputPath)).lexically_normal();
 
 	std::wstring rootStr = root.wstring();
 	std::wstring candStr = candidate.wstring();

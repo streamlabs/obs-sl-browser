@@ -133,9 +133,10 @@ private:
 	void JS_IS_PROCESS_RUNNING(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_STOP_PROCESS(const json11::Json &params, std::string &out_jsonReturn);
 
-	// Internal helpers
-	std::string ws_to_utf8(const std::wstring &str);
-	std::wstring utf8_to_ws(const std::string &str);
+	// Internal helpers. The conversions are static: they touch no state, and a posted lambda
+	// that has not captured 'this' needs to be able to call them.
+	static std::string ws_to_utf8(const std::wstring &str);
+	static std::wstring utf8_to_ws(const std::string &str);
 	bool resolveWithinDownloads(const std::wstring &downloadsDir, const std::string &inputPath, std::filesystem::path &out_resolved, std::string &out_error);
 	bool sha256File(const std::filesystem::path &filePath, std::string &out_hexDigest, std::string &out_error);
 

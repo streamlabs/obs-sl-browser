@@ -185,11 +185,21 @@ const escapes = () => [
 		lands: join(ROOT, "..", `sltest-abs-${STAMP}.txt`),
 	},
 	{
-		// No target to aim at, so this one only asks whether an unusable path is refused.
+		/*
+		 * No target to aim at, so this one only asks whether an unusable path is refused - and it
+		 * is the one row that must skip the destructive probes.
+		 *
+		 * "" is not a path outside the root, it *is* the root: an unguarded resolver answers
+		 * `root / ""`, which is the real Streamlabs folder with the user's real data in it. Every
+		 * other row can be handed to fs_remove because the worst it can destroy is a fixture this
+		 * suite created. This one would hand the user's whole folder to a recursive delete, at the
+		 * exact moment the guard meant to prevent that has regressed.
+		 */
 		what: "an empty path",
 		present: "",
 		absent: "",
 		lands: null,
+		sparesDestructive: true,
 	},
 ];
 
@@ -209,13 +219,20 @@ const escapes = () => [
  * pointed at a real one.
  */
 const GUARDED = [
-	["fs_mkdir", "absent", (cdp, p) => cdp.call("fs_mkdir", p)],
-	["fs_writeFile", "absent", (cdp, p) => cdp.call("fs_writeFile", p, "escaped", false)],
-	["fs_move (destination)", "absent", (cdp, p) => cdp.call("fs_move", P("keep.txt"), p)],
-	["fs_exists", "present", (cdp, p) => cdp.call("fs_exists", p)],
-	["fs_sha256", "present", (cdp, p) => cdp.call("fs_sha256", p)],
-	["fs_remove", "present", (cdp, p) => cdp.call("fs_remove", p, true, true)],
-	["fs_move (source)", "present", (cdp, p) => cdp.call("fs_move", p, P("moved-in"))],
+	{ fn: "fs_mkdir", aims: "absent", call: (cdp, p) => cdp.call("fs_mkdir", p) },
+	{ fn: "fs_writeFile", aims: "absent", call: (cdp, p) => cdp.call("fs_writeFile", p, "escaped", false) },
+	{ fn: "fs_move (destination)", aims: "absent", call: (cdp, p) => cdp.call("fs_move", P("keep.txt"), p) },
+	{ fn: "fs_exists", aims: "present", call: (cdp, p) => cdp.call("fs_exists", p) },
+	{ fn: "fs_sha256", aims: "present", call: (cdp, p) => cdp.call("fs_sha256", p) },
+
+	/*
+	 * recursive=false, which is not a weakening: containment is what is under test, and force is
+	 * the flag that could plausibly swallow it. Passing recursive as well would mean that a probe
+	 * aimed at a directory could empty it, and the value of that over `rm` on one file is nil
+	 * against the cost of being wrong.
+	 */
+	{ fn: "fs_remove", aims: "present", destroys: true, call: (cdp, p) => cdp.call("fs_remove", p, false, true) },
+	{ fn: "fs_move (source)", aims: "present", destroys: true, call: (cdp, p) => cdp.call("fs_move", p, P("moved-in")) },
 ];
 
 /* ---------------------------------------------------------------- fixture --- */
@@ -237,7 +254,7 @@ const UNICODE_RUNNER = "runner-ünïcodé.exe";
 export default {
 	name: "filesystem-api",
 	description: "the sandboxed filesystem and process api, and the folder it is confined to",
-	timeoutMs: 300000,
+	timeoutMs: 420000,
 
 	async run({ cdp, obs, say }) {
 		const r = results();
@@ -550,12 +567,19 @@ export default {
 			for (const esc of escapes()) {
 				await r.step(`${esc.what} is refused by every function that takes a path`, async () => {
 					const allowed = [];
-					for (const [label, aims, invoke] of GUARDED) {
-						const res = await invoke(cdp, aims === "present" ? esc.present : esc.absent);
-						const bad = diag(label, res);
+					const tried = [];
+
+					for (const guard of GUARDED) {
+						if (guard.destroys && esc.sparesDestructive) continue;
+						tried.push(guard.fn);
+
+						const res = await guard.call(cdp, guard.aims === "present" ? esc.present : esc.absent);
+						const bad = diag(guard.fn, res);
 						if (bad) return bad;
-						if (!res.error) allowed.push(`${label} answered ${short(res)}`);
+						if (!res.error) allowed.push(`${guard.fn} answered ${short(res)}`);
 					}
+
+					if (!tried.length) return "no probe ran";
 
 					// Believing the error messages is not enough. Whatever they said, nothing may
 					// have been created outside the root, and the file that was already there has
@@ -791,10 +815,19 @@ export default {
 			const outsider = spawn("ping", ["-n", "60", "127.0.0.1"], { windowsHide: true, stdio: "ignore" });
 			outsiders.push(outsider);
 
-			const outsiderUp = await until(() => outsider.pid && isRunning(outsider.pid), { timeoutMs: 10000, everyMs: 200 });
+			// A spawn failure arrives as an asynchronous "error" event, and node treats one with no
+			// listener as an uncaught exception - so without this, a machine where ping cannot be
+			// started ends the whole harness instead of reaching the skip below.
+			let outsiderFailed = null;
+			outsider.on("error", (e) => { outsiderFailed = e; });
 
-			if (!outsiderUp) {
-				r.skip("a process we did not start is left alone", "node could not start a process to try it on");
+			const outsiderUp = await until(
+				() => outsiderFailed || (outsider.pid && isRunning(outsider.pid)),
+				{ timeoutMs: 10000, everyMs: 200 });
+
+			if (!outsiderUp || outsiderFailed) {
+				r.skip("a process we did not start is left alone",
+					`node could not start a process to try it on${outsiderFailed ? `: ${outsiderFailed.message}` : ""}`);
 			} else {
 				await r.step("a process we did not start is not reported as running", async () => {
 					const res = await cdp.call("sys_isProcessRunning", outsider.pid);
@@ -830,55 +863,91 @@ export default {
 			 * the sweep only exists for the caller that launches and never asks - and it takes a
 			 * caller that does exactly that to reach it.
 			 *
-			 * hostname.exe is the child: it prints a line and exits within milliseconds, wants
-			 * neither a console nor a window, and needs no resources beside it. 128 of those come
-			 * and go in seconds, where 128 of the charmap copy would be gigabytes of live process.
+			 * The measurement is obs64's handle count, because the plugin holds one handle per
+			 * child it is still tracking and nothing in the api reports how many that is. The
+			 * arrangement below is what makes that number mean something:
 			 *
-			 * They are deliberately not put on the cleanup list. Each is gone before the next one
-			 * starts, and 128 pids there would mean 128 stop calls at the end for processes that
-			 * ended by themselves; the job object remains the backstop if one ever lingers.
+			 *   fill    REAP_AT - 1 children, one short of the mark, so no sweep happens yet
+			 *   settle  wait until every one of them has exited - the sweep can only release a
+			 *           child that has, so tripping it while they are alive would prove nothing
+			 *   held    the count now, holding that many dead children
+			 *   trip    one more launch, which reaches the mark and sweeps
+			 *   after   the count again
 			 *
-			 * What makes the sweep observable is obs64's handle count. The plugin holds one handle
-			 * per child it is still tracking, so an unswept run ends REAP_AT handles higher and a
-			 * swept one ends roughly where it began.
+			 * A first attempt launched all of them in one burst and compared the count across the
+			 * whole run. That passed here and failed on a slower machine, where the children were
+			 * still alive when the mark was reached: the sweep correctly released nothing, and the
+			 * test called correct behaviour a leak. Waiting for them to exit first is the fix, and
+			 * only one thing happens between `held` and `after`, so the difference between those
+			 * two is attributable in a way a delta across 128 api calls is not.
+			 *
+			 * hostname.exe is the child: it prints a line and exits, wants neither a console nor a
+			 * window, and needs no resources beside it. They are deliberately not put on the
+			 * cleanup list - each has ended by itself long before the end of the suite, and 128
+			 * pids there would mean 128 stop calls for processes that are already gone.
 			 */
 			const quickExit = join(sys32, "hostname.exe");
-			let sweepable = false;
+			const FILL = REAP_AT - 1;
 
-			if (obs?.pid && existsSync(quickExit)) {
+			const fill = async () => {
+				for (let i = 0; i < FILL; i++) {
+					const res = await cdp.call("fs_runSlExe", P("quickexit.exe"), true);
+					if (res?.success !== true) return `launch ${i + 1} of ${FILL} failed: ${short(res)}`;
+				}
+				return null;
+			};
+
+			let sweepSetup = null; // {baseline, held} once the fill is done and quiet
+
+			if (!obs?.pid) {
+				r.skip("the sweep releases the handles of children nobody asked about",
+					"--no-launch, so there is no known obs process to measure");
+			} else if (!existsSync(quickExit)) {
+				r.skip("the sweep releases the handles of children nobody asked about",
+					`${quickExit} is not there to use as a short-lived child`);
+			} else {
 				copyFileSync(quickExit, A("quickexit.exe"));
 
-				// Confirm the child really does exit on its own before leaning on 128 of them
-				// doing so. If it does not, the count would measure live processes, not handles.
-				const probe = await cdp.call("fs_runSlExe", P("quickexit.exe"), true);
-				sweepable = probe?.success === true &&
-					!!(await until(() => !isRunning(probe.pid), { timeoutMs: 10000, everyMs: 200 }));
+				const baseline = handleCount(obs.pid);
+				const failed = await fill();
+				say(`filled to ${FILL} children, waiting for them to exit`);
+
+				// Generous: a machine that scans each new image on execution takes far longer over
+				// this than one that does not, and being slow is not the same as being broken.
+				const quiet = await until(() => countByImage("quickexit.exe") === 0, { timeoutMs: 120000, everyMs: 500 });
+
+				if (failed) {
+					r.fail("the sweep releases the handles of children nobody asked about", failed);
+				} else if (!quiet) {
+					r.skip("the sweep releases the handles of children nobody asked about",
+						`${countByImage("quickexit.exe")} of the ${FILL} short-lived children were still running after two minutes, so there is nothing for a sweep to release`);
+				} else {
+					sweepSetup = { baseline, held: handleCount(obs.pid) };
+				}
 			}
 
-			if (!sweepable) {
-				r.skip("the sweep releases the handles of children nobody asked about",
-					obs?.pid ? "no exe that exits by itself could be staged" : "--no-launch, so there is no known obs process to measure");
-			} else {
+			if (sweepSetup) {
 				await r.step("the sweep releases the handles of children nobody asked about", async () => {
-					const before = handleCount(obs.pid);
-					if (!before) return "obs's handle count could not be read";
+					const { baseline, held } = sweepSetup;
 
-					for (let i = 0; i < REAP_AT; i++) {
-						const res = await cdp.call("fs_runSlExe", P("quickexit.exe"), true);
-						if (res?.success !== true) return `launch ${i + 1} of ${REAP_AT} failed: ${short(res)}`;
+					// One more reaches the mark. Everything already tracked has exited, so a working
+					// sweep releases all of it here.
+					const res = await cdp.call("fs_runSlExe", P("quickexit.exe"), true);
+					if (res?.success !== true) return `the launch that should trip the sweep failed: ${short(res)}`;
+
+					await until(() => countByImage("quickexit.exe") === 0, { timeoutMs: 30000, everyMs: 250 });
+					const after = handleCount(obs.pid);
+
+					r.info("obs handles", `${baseline} at rest, ${held} holding ${FILL} exited children, ${after} after the sweep`);
+
+					// Checked before the sweep is judged: if the handles were never held in the
+					// first place, a count that does not fall says nothing about the sweep.
+					if (held - baseline < FILL / 2) {
+						return `holding ${FILL} exited children only moved the count by ${held - baseline}, so this check cannot see the handles it is meant to be counting`;
 					}
 
-					// The last few may still be on their way out; the count should not include them.
-					await until(() => countByImage("quickexit.exe") === 0, { timeoutMs: 20000, everyMs: 250 });
-
-					const after = handleCount(obs.pid);
-					r.info("obs handles", `${before} before ${REAP_AT} unasked-about launches, ${after} after`);
-
-					// Half the run's worth of handles is far outside the few that obs and cef move
-					// on their own over these seconds, and far below the REAP_AT an unswept run
-					// would be holding.
-					if (after - before >= REAP_AT / 2) {
-						return `handle count rose by ${after - before} over ${REAP_AT} launches - they are not being released`;
+					if (held - after < FILL / 2) {
+						return `the sweep released ${held - after} handles of the ${FILL} exited children it was holding`;
 					}
 				});
 			}
@@ -999,12 +1068,32 @@ export default {
 			 * is. A crash shows up here as a callback that never fires.
 			 */
 			await r.step("a path that is not valid utf-8 does not take the plugin down", async () => {
-				const res = await cdp.call("fs_mkdir", `${SANDBOX}\\lone-\ud800-surrogate`);
-				const bad = diag("fs_mkdir", res);
-				if (bad) return bad;
+				const lone = "\ud800";
 
-				const after = await cdp.call("sl_getVersionInfo");
-				if (diag("sl_getVersionInfo", after)) return "the plugin stopped answering after it";
+				/*
+				 * Not just the one call. fs_mkdir reaches the conversion through the resolver, which
+				 * answers for itself, but fs_pathJoin and sys_getEnvVar convert their argument
+				 * directly - a fix in the resolver alone leaves those two able to end the process,
+				 * which is the shape this regression had the first time.
+				 */
+				const probes = [
+					["fs_mkdir", () => cdp.call("fs_mkdir", `${SANDBOX}\\lone-${lone}-surrogate`)],
+					["fs_pathJoin", () => cdp.call("fs_pathJoin", lone, "tail")],
+					["fs_pathJoin", () => cdp.call("fs_pathJoin", "head", lone)],
+					["sys_getEnvVar", () => cdp.call("sys_getEnvVar", lone)],
+				];
+
+				for (const [label, invoke] of probes) {
+					const res = await invoke();
+					const bad = diag(label, res);
+					if (bad) return bad;
+
+					// Refused, or sanitised somewhere in the transport - either is a fine answer.
+					// That the plugin is still there is the assertion; a crash reads as the next
+					// callback never firing.
+					const after = await cdp.call("sl_getVersionInfo");
+					if (diag("sl_getVersionInfo", after)) return `the plugin stopped answering after ${label}`;
+				}
 			});
 		} catch (e) {
 			r.fail("the suite ran to the end", String(e?.message || e).split("\n")[0]);
@@ -1034,23 +1123,26 @@ export default {
 				} catch { /* already gone */ }
 			}
 
-			rmSync(A(), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+			/*
+			 * Everything this suite is known to have created, named individually - not "whatever
+			 * appeared in the root while we were running", which is the user's business.
+			 *
+			 * Each is attempted on its own and a failure only recorded. The likeliest one is the
+			 * sandbox, held open by a child that outlived the suite; letting that throw would
+			 * abandon every path after it and leave the rest in the user's real AppData.
+			 */
+			const created = [A(), OUTSIDE_DIR, ...downloadDirs, ...escapes().map((e) => e.lands)].filter(Boolean);
+			const refused = [];
 
-			// Only the directories this suite's own downloads created, recorded as they appeared.
-			for (const dir of downloadDirs) {
-				rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+			for (const path of created) {
+				try {
+					rmSync(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+				} catch (e) {
+					refused.push(`${path} (${String(e?.message || e).split("\n")[0]})`);
+				}
 			}
 
-			// Whatever the escape checks concluded, none of it may be left on disk.
-			rmSync(OUTSIDE_DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-			for (const esc of escapes()) {
-				if (esc.lands) rmSync(esc.lands, { recursive: true, force: true });
-			}
-
-			// Everything this suite is known to have created, named individually - not "whatever
-			// is in the root that was not there before", which is the user's business.
-			const leftovers = [A(), OUTSIDE_DIR, ...downloadDirs, ...escapes().map((e) => e.lands)]
-				.filter((p) => p && existsSync(p));
+			const leftovers = [...new Set([...refused, ...created.filter((p) => existsSync(p))])];
 
 			r.check("nothing was left behind on disk", !leftovers.length,
 				`${leftovers.join(", ")} - a launched process may still be holding one open`);
