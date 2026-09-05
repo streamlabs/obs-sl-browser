@@ -1884,9 +1884,6 @@ HANDLE PluginJsHandler::getChildJob()
 	return m_childJob;
 }
 
-// Release the children that have already exited. GetExitCodeProcess only queries the handle, so
-// this is cheap even over a map that has got out of hand - and STILL_ACTIVE is the same yardstick
-// sys_isProcessRunning answers with, so nothing is dropped that it would still call running.
 // A process handle is signalled once the process ends, so this answers the question exactly.
 // GetExitCodeProcess cannot: STILL_ACTIVE is 259, which is also a legal exit code, so a child
 // that exits with 259 would read as running for as long as the plugin is up.
@@ -1895,6 +1892,10 @@ static bool isChildRunning(HANDLE process)
 	return WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
 }
 
+// Release the children that have already exited. A zero timeout makes each check a state query
+// rather than a wait, so this stays cheap even over a map that has got out of hand, and it is
+// the same predicate sys_isProcessRunning answers with - nothing is dropped here that it would
+// still call running.
 size_t PluginJsHandler::reapExitedChildren()
 {
 	size_t reaped = 0;
@@ -1962,6 +1963,13 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 		ResumeThread(pi.hThread);
 		CloseHandle(pi.hThread);
 
+		// Drained since the last pile-up, so a fresh one should warn from the floor again rather
+		// than inherit a raised mark. Checked here rather than after the sweep below: the map
+		// also shrinks through sys_stopProcess and sys_isProcessRunning, neither of which comes
+		// anywhere near this branch.
+		if (m_childProcesses.size() < kChildReapAt)
+			m_childWarnAt = kChildReapAt;
+
 		m_childProcesses[pi.dwProcessId] = pi.hProcess;
 
 		// Nothing here on a normal launch: the branch is not taken until a caller has piled up
@@ -1977,11 +1985,6 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 				// caller leaking processes rather than handles, which is worth seeing in a log.
 				blog(LOG_WARNING, "PluginJsHandler::JS_RUN_STREAMLABS_EXE %zu child processes are still running (released %zu)", live, reaped);
 				m_childWarnAt = live * 2;
-			}
-			else if (live < kChildReapAt)
-			{
-				// Drained. A fresh pile-up should say so again rather than inherit the old mark.
-				m_childWarnAt = kChildReapAt;
 			}
 		}
 

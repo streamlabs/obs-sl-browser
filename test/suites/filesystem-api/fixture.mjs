@@ -8,12 +8,33 @@
  * The entries are stored, not deflated: a stored zip is a header, the bytes, and a directory
  * entry, which is short enough to read - and the suite is testing the checksum gate in front
  * of the unpacker, not the unpacker's inflate path.
- *
- * zlib.crc32 needs Node 22.2+; the harness already asks for 22.
  */
 
 import { createServer } from "node:http";
-import { crc32 } from "node:zlib";
+
+/*
+ * CRC-32, which is the checksum a zip entry carries.
+ *
+ * node:zlib exports one, but only from 22.2, and the harness asks for Node 22 - on 22.0 or
+ * 22.1 that import fails and takes the whole suite down at load time, for a reason that has
+ * nothing to do with what is being tested. Ten lines here costs less than a version floor
+ * nobody would expect.
+ */
+const CRC_TABLE = (() => {
+	const table = new Uint32Array(256);
+	for (let n = 0; n < 256; n++) {
+		let c = n;
+		for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+		table[n] = c >>> 0;
+	}
+	return table;
+})();
+
+function crc32(bytes) {
+	let c = 0xffffffff;
+	for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+	return (c ^ 0xffffffff) >>> 0;
+}
 
 const LOCAL_SIG = 0x04034b50;
 const CENTRAL_SIG = 0x02014b50;

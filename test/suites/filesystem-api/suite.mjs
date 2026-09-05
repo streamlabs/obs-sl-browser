@@ -24,7 +24,7 @@
  * of in a fifteen-minute build.
  */
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -120,6 +120,26 @@ const mainWindow = (pid) => {
 	}
 };
 
+/*
+ * How many open handles a process holds. This is what makes the sweep observable from outside:
+ * the plugin keeps one handle per child it is still tracking, and nothing in the api reports
+ * how many that is.
+ */
+const handleCount = (pid) => {
+	try {
+		const out = execFileSync("powershell",
+			["-NoProfile", "-NonInteractive", "-Command",
+				`(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).HandleCount`],
+			{ encoding: "utf8", windowsHide: true, timeout: 30000 });
+		return Number(out.trim()) || 0;
+	} catch {
+		return 0;
+	}
+};
+
+// kChildReapAt in PluginJsHandler.h: the number of tracked children at which a launch sweeps.
+const REAP_AT = 128;
+
 /* ------------------------------------------------------------ containment --- */
 
 /*
@@ -133,8 +153,11 @@ const mainWindow = (pid) => {
  * and a table that accepts any error as a refusal would pass against no guard at all. Aimed at
  * a file that is really there, only a working guard can produce an error.
  */
-const OUTSIDE_DIR = join(ROOT, "..", `StreamlabsOBS-${STAMP}`);
-const OUTSIDE_PRESENT = join(OUTSIDE_DIR, "present.txt");
+// Conditional because ROOT is: test/check.mjs imports every suite, and it runs on a linux
+// runner where APPDATA does not exist. Anything derived eagerly from a null root throws during
+// that import, which fails the checks before run() can report the missing root properly.
+const OUTSIDE_DIR = ROOT ? join(ROOT, "..", `StreamlabsOBS-${STAMP}`) : null;
+const OUTSIDE_PRESENT = OUTSIDE_DIR ? join(OUTSIDE_DIR, "present.txt") : null;
 const OUTSIDE_PRESENT_BODY = "the guard is what has to stop this being read or moved";
 
 /*
@@ -216,10 +239,11 @@ export default {
 	description: "the sandboxed filesystem and process api, and the folder it is confined to",
 	timeoutMs: 300000,
 
-	async run({ cdp, say }) {
+	async run({ cdp, obs, say }) {
 		const r = results();
 		const launched = []; // pids fs_runSlExe handed back that have not been stopped yet
 		const downloadDirs = []; // the directories fs_downloadZip made, noted as it made them
+		const outsiders = []; // processes node started itself, to try the api on something not its own
 		let zipServer = null;
 
 		if (!ROOT) {
@@ -569,8 +593,9 @@ export default {
 			 * per installed language and picking one of them is a coin toss - so every language
 			 * the exe ships in comes along and the loader takes the one it wants.
 			 */
+			const sys32 = join(process.env.SystemRoot || "C:\\Windows", "System32");
+
 			const stageRunner = (as) => {
-				const sys32 = join(process.env.SystemRoot || "C:\\Windows", "System32");
 				for (const name of ["charmap.exe", "mmc.exe"]) {
 					if (!existsSync(join(sys32, name))) continue;
 
@@ -751,22 +776,43 @@ export default {
 				if (countByImage("charmap.exe") > before) return "a charmap.exe started anyway";
 			});
 
-			// pid 4 is the System process: real, running, and not one of ours. Both calls are
-			// documented as answering only about processes fs_runSlExe started.
-			await r.step("a process we did not start is not reported as running", async () => {
-				const res = await cdp.call("sys_isProcessRunning", 4);
-				const bad = diag("sys_isProcessRunning", res);
-				if (bad) return bad;
-				if (res.running !== false) return `sys_isProcessRunning claimed pid 4 is ours: ${short(res)}`;
-			});
+			/*
+			 * Both calls are documented as answering only about processes fs_runSlExe started, and
+			 * the way to show that is a process this one could have stopped and did not.
+			 *
+			 * A protected pid like the System process proves nothing here: an implementation that
+			 * blindly terminated whatever it was handed would fail on it too and look identical.
+			 * So node starts one of its own - same user, ordinary rights, genuinely stoppable - and
+			 * the assertion is that it is still running afterwards.
+			 *
+			 * ping rather than the staged runner: no window, and it gives up on its own if any of
+			 * this goes wrong.
+			 */
+			const outsider = spawn("ping", ["-n", "60", "127.0.0.1"], { windowsHide: true, stdio: "ignore" });
+			outsiders.push(outsider);
 
-			await r.step("a process we did not start cannot be stopped", async () => {
-				const res = await cdp.call("sys_stopProcess", 4);
-				const bad = diag("sys_stopProcess", res);
-				if (bad) return bad;
-				if (res.success !== false) return `expected success:false, got ${short(res)}`;
-				if (!isRunning(4)) return "pid 4 was terminated";
-			});
+			const outsiderUp = await until(() => outsider.pid && isRunning(outsider.pid), { timeoutMs: 10000, everyMs: 200 });
+
+			if (!outsiderUp) {
+				r.skip("a process we did not start is left alone", "node could not start a process to try it on");
+			} else {
+				await r.step("a process we did not start is not reported as running", async () => {
+					const res = await cdp.call("sys_isProcessRunning", outsider.pid);
+					const bad = diag("sys_isProcessRunning", res);
+					if (bad) return bad;
+					if (res.running !== false) return `it claimed pid ${outsider.pid} is one of ours: ${short(res)}`;
+				});
+
+				await r.step("a process we did not start cannot be stopped", async () => {
+					const res = await cdp.call("sys_stopProcess", outsider.pid);
+					const bad = diag("sys_stopProcess", res);
+					if (bad) return bad;
+					if (res.success !== false) return `expected success:false, got ${short(res)}`;
+
+					// The assertion that matters: it was refused, and the process is untouched.
+					if (!isRunning(outsider.pid)) return `pid ${outsider.pid} was terminated anyway`;
+				});
+			}
 
 			await r.step("fs_runSlExe reports an exe that is not there", async () => {
 				const res = await cdp.call("fs_runSlExe", P("no-such-program.exe"), true);
@@ -776,6 +822,67 @@ export default {
 				if (!res.error) return "no error explaining why";
 			});
 
+			/* ------------------------------------------ the sweep at 128 children --- */
+
+			/*
+			 * Nothing above this point comes near the reaper. The suite launches a handful of
+			 * children and asks about every one, which releases each handle where it stands, so
+			 * the sweep only exists for the caller that launches and never asks - and it takes a
+			 * caller that does exactly that to reach it.
+			 *
+			 * hostname.exe is the child: it prints a line and exits within milliseconds, wants
+			 * neither a console nor a window, and needs no resources beside it. 128 of those come
+			 * and go in seconds, where 128 of the charmap copy would be gigabytes of live process.
+			 *
+			 * They are deliberately not put on the cleanup list. Each is gone before the next one
+			 * starts, and 128 pids there would mean 128 stop calls at the end for processes that
+			 * ended by themselves; the job object remains the backstop if one ever lingers.
+			 *
+			 * What makes the sweep observable is obs64's handle count. The plugin holds one handle
+			 * per child it is still tracking, so an unswept run ends REAP_AT handles higher and a
+			 * swept one ends roughly where it began.
+			 */
+			const quickExit = join(sys32, "hostname.exe");
+			let sweepable = false;
+
+			if (obs?.pid && existsSync(quickExit)) {
+				copyFileSync(quickExit, A("quickexit.exe"));
+
+				// Confirm the child really does exit on its own before leaning on 128 of them
+				// doing so. If it does not, the count would measure live processes, not handles.
+				const probe = await cdp.call("fs_runSlExe", P("quickexit.exe"), true);
+				sweepable = probe?.success === true &&
+					!!(await until(() => !isRunning(probe.pid), { timeoutMs: 10000, everyMs: 200 }));
+			}
+
+			if (!sweepable) {
+				r.skip("the sweep releases the handles of children nobody asked about",
+					obs?.pid ? "no exe that exits by itself could be staged" : "--no-launch, so there is no known obs process to measure");
+			} else {
+				await r.step("the sweep releases the handles of children nobody asked about", async () => {
+					const before = handleCount(obs.pid);
+					if (!before) return "obs's handle count could not be read";
+
+					for (let i = 0; i < REAP_AT; i++) {
+						const res = await cdp.call("fs_runSlExe", P("quickexit.exe"), true);
+						if (res?.success !== true) return `launch ${i + 1} of ${REAP_AT} failed: ${short(res)}`;
+					}
+
+					// The last few may still be on their way out; the count should not include them.
+					await until(() => countByImage("quickexit.exe") === 0, { timeoutMs: 20000, everyMs: 250 });
+
+					const after = handleCount(obs.pid);
+					r.info("obs handles", `${before} before ${REAP_AT} unasked-about launches, ${after} after`);
+
+					// Half the run's worth of handles is far outside the few that obs and cef move
+					// on their own over these seconds, and far below the REAP_AT an unswept run
+					// would be holding.
+					if (after - before >= REAP_AT / 2) {
+						return `handle count rose by ${after - before} over ${REAP_AT} launches - they are not being released`;
+					}
+				});
+			}
+
 			/* ------------------------------------- fs_downloadZip's sha256 gate --- */
 
 			const zip = buildZip(ZIP_FILES);
@@ -783,11 +890,30 @@ export default {
 			zipServer = await serveBytes(zip);
 			say(`serving the fixture zip at ${zipServer.url}`);
 
-			// Whether the archive was unpacked, judged from disk rather than from the reply: a
-			// gate that refuses and unpacks anyway would still answer with an error.
-			const unpacked = (res) => {
+			/*
+			 * What is missing from an unpack, judged from disk rather than from the reply: a gate
+			 * that refused and unpacked anyway would still have answered with an error.
+			 *
+			 * Every entry is looked up by name and read back. Counting how many of the returned
+			 * paths exist is not the same thing - the same path twice would count as two - and the
+			 * contents are what say the file came out of this archive rather than a previous one.
+			 */
+			const notUnpacked = (res) => {
 				const paths = Array.isArray(res) ? res.map((e) => e?.path).filter(Boolean) : [];
-				return paths.filter((p) => existsSync(p));
+				const problems = [];
+
+				for (const entry of ZIP_FILES) {
+					const tail = `\\${entry.name.replaceAll("/", "\\")}`;
+					const hit = paths.find((p) => p.endsWith(tail));
+
+					if (!hit) problems.push(`${entry.name} is not among ${paths.join(", ") || "no paths at all"}`);
+					else if (!existsSync(hit)) problems.push(`${entry.name} was named but is not on disk`);
+					else if (readFileSync(hit, "utf8") !== entry.contents) {
+						problems.push(`${entry.name} reads ${JSON.stringify(readFileSync(hit, "utf8"))}`);
+					}
+				}
+
+				return problems;
 			};
 
 			/*
@@ -817,15 +943,8 @@ export default {
 				if (bad) return bad;
 				if (!Array.isArray(res)) return `expected an array of paths, got ${short(res)}`;
 
-				const files = unpacked(res);
-				if (files.length !== ZIP_FILES.length) {
-					return `${files.length} of ${ZIP_FILES.length} entries are on disk: ${short(res)}`;
-				}
-				const hello = files.find((p) => p.endsWith("hello.txt"));
-				if (!hello) return `no hello.txt among ${files.join(", ")}`;
-				if (readFileSync(hello, "utf8") !== ZIP_FILES[0].contents) {
-					return `hello.txt reads ${JSON.stringify(readFileSync(hello, "utf8"))}`;
-				}
+				const problems = notUnpacked(res);
+				if (problems.length) return problems.join("; ");
 				transportWorks = true;
 			});
 
@@ -841,7 +960,9 @@ export default {
 				const bad = diag("fs_downloadZip", res);
 				if (bad) return bad;
 				if (!Array.isArray(res)) return `expected an array of paths, got ${short(res)}`;
-				if (unpacked(res).length !== ZIP_FILES.length) return `only ${unpacked(res).length} entries are on disk`;
+
+				const problems = notUnpacked(res);
+				if (problems.length) return problems.join("; ");
 			});
 
 			await gate("a mismatched checksum refuses, and unpacks nothing", async () => {
@@ -903,6 +1024,14 @@ export default {
 				try {
 					await cdp.call("sys_stopProcess", pid);
 				} catch { /* obs is already gone, and the job object has it */ }
+			}
+
+			// Node's own children are a different matter: it holds the handle, so the pid cannot
+			// have been recycled underneath it and kill() is addressing what it thinks it is.
+			for (const child of outsiders) {
+				try {
+					child.kill();
+				} catch { /* already gone */ }
 			}
 
 			rmSync(A(), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
