@@ -2019,12 +2019,7 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 		CreateDirectoryW(folderPath.c_str(), NULL);
 		CreateDirectoryW(subFolderPath.c_str(), NULL);
 
-		auto wstring_to_utf8 = [](const std::wstring &str) {
-			std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
-			return myconv.to_bytes(str);
-		};
-
-		if (WindowsFunctions::DownloadFile(url, wstring_to_utf8(zipFilepath)))
+		if (WindowsFunctions::DownloadFile(url, ws_to_utf8(zipFilepath)))
 		{
 			// Verify the checksum (if one was supplied) before trusting the archive.
 			bool shaOk = true;
@@ -2066,7 +2061,7 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 			{
 				std::vector<std::string> filepaths;
 
-				if (WindowsFunctions::Unzip(wstring_to_utf8(zipFilepath), filepaths))
+				if (WindowsFunctions::Unzip(ws_to_utf8(zipFilepath), filepaths))
 				{
 					// Build json string now
 					Json::array json_array;
@@ -2115,11 +2110,6 @@ void PluginJsHandler::JS_DOWNLOAD_FILE(const Json &params, std::string &out_json
 		return;
 	}
 
-	auto wstring_to_utf8 = [](const std::wstring &str) {
-		std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
-		return myconv.to_bytes(str);
-	};
-
 	if (!folderPath.empty())
 	{
 		using namespace std::chrono;
@@ -2137,8 +2127,11 @@ void PluginJsHandler::JS_DOWNLOAD_FILE(const Json &params, std::string &out_json
 		CreateDirectoryW(folderPath.c_str(), NULL);
 		CreateDirectoryW(subFolderPath.c_str(), NULL);
 
-		if (WindowsFunctions::DownloadFile(url, wstring_to_utf8(downloadPath)))
-			out_jsonReturn = Json(Json::object({{"path", downloadPath}})).dump();
+		// ws_to_utf8 on the way out too: json11 has no wstring constructor, so a std::wstring
+		// matches its vector-like one and this answered with an array of utf-16 code units
+		// rather than the path string the api documents.
+		if (WindowsFunctions::DownloadFile(url, ws_to_utf8(downloadPath)))
+			out_jsonReturn = Json(Json::object({{"path", ws_to_utf8(downloadPath)}})).dump();
 		else
 			out_jsonReturn = Json(Json::object({{"error", "Http download file failed"}})).dump();
 	}

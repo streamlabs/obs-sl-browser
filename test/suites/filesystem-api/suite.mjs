@@ -68,6 +68,24 @@ const wantError = (fn, res) =>
 /* -------------------------------------------------------------- processes --- */
 
 /*
+ * Every probe below answers null when the measurement itself failed, rather than a value that
+ * happens to be in range. A tasklist or powershell that did not run is not the same statement as
+ * "nothing is running" or "no handles are held", and the difference matters in the direction that
+ * hurts: a post-sweep handle count that quietly read 0 would make the release look enormous and
+ * pass a check that had observed nothing at all. Callers compare against true, false or a number
+ * explicitly, so an unmeasured probe fails or keeps waiting rather than satisfying anything.
+ */
+
+/** stdout of a probe command, or null if it could not be run. */
+const probe = (exe, args) => {
+	try {
+		return execFileSync(exe, args, { encoding: "utf8", windowsHide: true, timeout: 30000 });
+	} catch {
+		return null;
+	}
+};
+
+/*
  * Whether a pid names a process that is still running.
  *
  * Deliberately not OpenProcess, and so not node's process.kill(pid, 0) either: windows keeps a
@@ -78,13 +96,8 @@ const wantError = (fn, res) =>
  * enumerates running processes, so it draws that line in the right place.
  */
 const isRunning = (pid) => {
-	try {
-		const out = execFileSync("tasklist", ["/FI", `PID eq ${pid}`, "/NH", "/FO", "CSV"],
-			{ encoding: "utf8", windowsHide: true, timeout: 15000 });
-		return out.trim().startsWith('"');
-	} catch {
-		return false;
-	}
+	const out = probe("tasklist", ["/FI", `PID eq ${pid}`, "/NH", "/FO", "CSV"]);
+	return out === null ? null : out.trim().startsWith('"');
 };
 
 /*
@@ -93,13 +106,8 @@ const isRunning = (pid) => {
  * not merely that the reply said no.
  */
 const countByImage = (image) => {
-	try {
-		const out = execFileSync("tasklist", ["/FI", `IMAGENAME eq ${image}`, "/NH", "/FO", "CSV"],
-			{ encoding: "utf8", windowsHide: true, timeout: 15000 });
-		return out.split("\n").filter((line) => line.trim().startsWith('"')).length;
-	} catch {
-		return 0;
-	}
+	const out = probe("tasklist", ["/FI", `IMAGENAME eq ${image}`, "/NH", "/FO", "CSV"]);
+	return out === null ? null : out.split("\n").filter((line) => line.trim().startsWith('"')).length;
 };
 
 /*
@@ -109,15 +117,9 @@ const countByImage = (image) => {
  * even though it exists.
  */
 const mainWindow = (pid) => {
-	try {
-		const out = execFileSync("powershell",
-			["-NoProfile", "-NonInteractive", "-Command",
-				`(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).MainWindowHandle`],
-			{ encoding: "utf8", windowsHide: true, timeout: 30000 });
-		return Number(out.trim()) || 0;
-	} catch {
-		return 0;
-	}
+	const out = probe("powershell", ["-NoProfile", "-NonInteractive", "-Command",
+		`(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).MainWindowHandle`]);
+	return out === null ? null : Number(out.trim()) || 0;
 };
 
 /*
@@ -126,15 +128,14 @@ const mainWindow = (pid) => {
  * how many that is.
  */
 const handleCount = (pid) => {
-	try {
-		const out = execFileSync("powershell",
-			["-NoProfile", "-NonInteractive", "-Command",
-				`(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).HandleCount`],
-			{ encoding: "utf8", windowsHide: true, timeout: 30000 });
-		return Number(out.trim()) || 0;
-	} catch {
-		return 0;
-	}
+	const out = probe("powershell", ["-NoProfile", "-NonInteractive", "-Command",
+		`(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).HandleCount`]);
+	if (out === null) return null;
+
+	// Empty output is Get-Process finding no such process, which is not a handle count of zero.
+	const trimmed = out.trim();
+	const n = Number(trimmed);
+	return trimmed !== "" && Number.isFinite(n) ? n : null;
 };
 
 // kChildReapAt in PluginJsHandler.h: the number of tracked children at which a launch sweeps.
@@ -651,7 +652,7 @@ export default {
 			const stopAndWait = async (pid) => {
 				const bad = wantSuccess("sys_stopProcess", await cdp.call("sys_stopProcess", pid));
 				if (bad) return bad;
-				if (!(await until(() => !isRunning(pid), { timeoutMs: 15000, everyMs: 250 }))) {
+				if (!(await until(() => isRunning(pid) === false, { timeoutMs: 15000, everyMs: 250 }))) {
 					return `pid ${pid} is still running 15s after being stopped`;
 				}
 				// Cleanup has nothing left to do about this one, and must not go near the pid again:
@@ -670,7 +671,7 @@ export default {
 					const bad = wantSuccess("fs_runSlExe", shown);
 					if (bad) return bad;
 					if (!Number.isInteger(shown.pid) || shown.pid <= 0) return `pid was ${JSON.stringify(shown.pid)}`;
-					if (!(await until(() => isRunning(shown.pid), { timeoutMs: 15000, everyMs: 250 }))) {
+					if (!(await until(() => isRunning(shown.pid) === true, { timeoutMs: 15000, everyMs: 250 }))) {
 						return `nothing with pid ${shown.pid} is running`;
 					}
 				});
@@ -708,7 +709,7 @@ export default {
 				 */
 				const startedAt = Date.now();
 				const sawWindow = shown?.pid
-					? await until(() => mainWindow(shown.pid) !== 0, { timeoutMs: 30000, everyMs: 500 })
+					? await until(() => mainWindow(shown.pid) > 0, { timeoutMs: 30000, everyMs: 500 })
 					: null;
 				const budget = Math.max(5000, (Date.now() - startedAt) * 3);
 
@@ -718,7 +719,7 @@ export default {
 				} else {
 					await r.step("hideWindow starts the process without a visible window", async () => {
 						if (!hidden?.pid) return "the hidden instance never started";
-						if (await until(() => mainWindow(hidden.pid) !== 0, { timeoutMs: budget, everyMs: 500 })) {
+						if (await until(() => mainWindow(hidden.pid) > 0, { timeoutMs: budget, everyMs: 500 })) {
 							return `pid ${hidden.pid} has a visible main window`;
 						}
 					});
@@ -758,7 +759,7 @@ export default {
 					const res = await start(A("runner.exe"), true);
 					const bad = wantSuccess("fs_runSlExe", res);
 					if (bad) return bad;
-					if (!(await until(() => isRunning(res.pid), { timeoutMs: 15000, everyMs: 250 }))) {
+					if (!(await until(() => isRunning(res.pid) === true, { timeoutMs: 15000, everyMs: 250 }))) {
 						return `nothing with pid ${res.pid} is running`;
 					}
 					return stopAndWait(res.pid);
@@ -772,7 +773,7 @@ export default {
 					const res = await start(P(UNICODE_RUNNER), true);
 					const bad = wantSuccess("fs_runSlExe", res);
 					if (bad) return bad;
-					if (!(await until(() => isRunning(res.pid), { timeoutMs: 15000, everyMs: 250 }))) {
+					if (!(await until(() => isRunning(res.pid) === true, { timeoutMs: 15000, everyMs: 250 }))) {
 						return `nothing with pid ${res.pid} is running`;
 					}
 					return stopAndWait(res.pid);
@@ -789,6 +790,8 @@ export default {
 				if (!existsSync(outside)) return "charmap.exe is not there to try to run";
 
 				const before = countByImage("charmap.exe");
+				if (before === null) return "could not count charmap.exe processes to compare against";
+
 				// Through start(), not a bare call: if the guard ever regresses this launch
 				// succeeds, and the pid has to be on the cleanup list before the step gives up on
 				// it - a test for a stray process must not leave one.
@@ -797,7 +800,10 @@ export default {
 				if (bad) return bad;
 
 				if (/CreateProcess/i.test(res.error)) return `it tried to launch it: ${res.error}`;
-				if (countByImage("charmap.exe") > before) return "a charmap.exe started anyway";
+
+				const after = countByImage("charmap.exe");
+				if (after === null) return "could not count charmap.exe processes afterwards";
+				if (after > before) return "a charmap.exe started anyway";
 			});
 
 			/*
@@ -822,7 +828,7 @@ export default {
 			outsider.on("error", (e) => { outsiderFailed = e; });
 
 			const outsiderUp = await until(
-				() => outsiderFailed || (outsider.pid && isRunning(outsider.pid)),
+				() => outsiderFailed || (outsider.pid && isRunning(outsider.pid) === true),
 				{ timeoutMs: 10000, everyMs: 200 });
 
 			if (!outsiderUp || outsiderFailed) {
@@ -843,7 +849,7 @@ export default {
 					if (res.success !== false) return `expected success:false, got ${short(res)}`;
 
 					// The assertion that matters: it was refused, and the process is untouched.
-					if (!isRunning(outsider.pid)) return `pid ${outsider.pid} was terminated anyway`;
+					if (isRunning(outsider.pid) !== true) return `pid ${outsider.pid} is no longer confirmably running`;
 				});
 			}
 
@@ -916,13 +922,20 @@ export default {
 				// this than one that does not, and being slow is not the same as being broken.
 				const quiet = await until(() => countByImage("quickexit.exe") === 0, { timeoutMs: 120000, everyMs: 500 });
 
+				const held = quiet ? handleCount(obs.pid) : null;
+
 				if (failed) {
 					r.fail("the sweep releases the handles of children nobody asked about", failed);
 				} else if (!quiet) {
+					const still = countByImage("quickexit.exe");
 					r.skip("the sweep releases the handles of children nobody asked about",
-						`${countByImage("quickexit.exe")} of the ${FILL} short-lived children were still running after two minutes, so there is nothing for a sweep to release`);
+						`${still === null ? "some" : still} of the ${FILL} short-lived children were still running after two minutes, so there is nothing for a sweep to release`);
+				} else if (baseline === null || held === null) {
+					// Not a pass and not a failure of the plugin: the check simply has no reading.
+					r.skip("the sweep releases the handles of children nobody asked about",
+						"obs's handle count could not be read, so there is nothing to compare");
 				} else {
-					sweepSetup = { baseline, held: handleCount(obs.pid) };
+					sweepSetup = { baseline, held };
 				}
 			}
 
@@ -936,7 +949,12 @@ export default {
 					if (res?.success !== true) return `the launch that should trip the sweep failed: ${short(res)}`;
 
 					await until(() => countByImage("quickexit.exe") === 0, { timeoutMs: 30000, everyMs: 250 });
+
 					const after = handleCount(obs.pid);
+					// Without this, an unreadable count would arrive as a sentinel small enough to
+					// make the release below look enormous, and the check would pass having seen
+					// nothing at all.
+					if (after === null) return "obs's handle count could not be read after the sweep";
 
 					r.info("obs handles", `${baseline} at rest, ${held} holding ${FILL} exited children, ${after} after the sweep`);
 
@@ -994,15 +1012,18 @@ export default {
 			 * digit-named directories afterwards would also carry off one the real Streamlabs had
 			 * created in the meantime, in the folder holding the user's actual downloads.
 			 */
-			const downloadZip = async (...args) => {
+			const recording = async (invoke) => {
 				const names = () => new Set(existsSync(ROOT) ? readdirSync(ROOT) : []);
 				const before = names();
-				const res = await cdp.call("fs_downloadZip", ...args);
+				const res = await invoke();
 
 				const created = [...names()].filter((n) => !before.has(n)).map((n) => join(ROOT, n));
 				downloadDirs.push(...created);
 				return { res, created };
 			};
+
+			const downloadZip = (...args) => recording(() => cdp.call("fs_downloadZip", ...args));
+			const downloadFile = (...args) => recording(() => cdp.call("fs_downloadFile", ...args));
 
 			let transportWorks = false;
 
@@ -1054,6 +1075,42 @@ export default {
 				const bad = wantError("fs_downloadZip", res);
 				if (bad) return bad;
 				if (!String(res.error).includes(digest)) return `error was ${JSON.stringify(res.error)}, expected it to name ${digest}`;
+			});
+
+			/*
+			 * A filename outside the basic multilingual plane is two utf-16 code units, and the
+			 * conversion back to utf-8 for the download call used a codecvt that only speaks
+			 * ucs-2. It had nothing to do with malformed input: a perfectly ordinary emoji in a
+			 * filename ended the process. Both directions go through the same Win32 conversion
+			 * now, and the reply carries the path as a string rather than as the array of code
+			 * units json11 makes of a std::wstring.
+			 */
+			await gate("a filename outside the basic multilingual plane downloads", async () => {
+				const name = "smile-\u{1F600}.txt";
+				const { res, created } = await downloadFile(zipServer.url, name);
+				const bad = diag("fs_downloadFile", res);
+				if (bad) return bad;
+				if (res.error) return res.error;
+
+				if (typeof res.path !== "string") return `path came back as ${short(res)}`;
+				if (!res.path.endsWith(name)) return `path is ${JSON.stringify(res.path)}, expected it to end with ${JSON.stringify(name)}`;
+
+				/*
+				 * A file arrived, but not necessarily under that name.
+				 * WindowsFunctions::DownloadFile takes the destination as a narrow string and hands
+				 * it to std::ofstream, which reads it as the active ANSI code page - so a name with
+				 * anything outside that page is mangled on the way to disk. That is a separate
+				 * defect from the crash this step covers, in code this change does not touch, so
+				 * the assertion is that the download happened and the name is only reported.
+				 */
+				const landed = created.length === 1 ? readdirSync(created[0]) : [];
+				if (landed.length !== 1) {
+					return `expected one file in the download directory, found ${landed.length ? landed.join(", ") : "none"}`;
+				}
+				if (landed[0] !== name) r.info("download filename", `asked for ${name}, landed as ${landed[0]}`);
+
+				const after = await cdp.call("sl_getVersionInfo");
+				if (diag("sl_getVersionInfo", after)) return "the plugin stopped answering after it";
 			});
 
 			/* -------------------------------------------------- a path that is not utf-8 --- */
