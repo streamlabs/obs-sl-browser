@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>sl-browser filesystem api</title>
+<body style="background:#102030;color:#9cf;font:13px monospace;margin:8px">
+<h3>filesystem-api</h3>
+<div id="log">waiting</div>
+<script src="/_harness/inpage.js"></script>
+<script>
+// suite.mjs drives every call over CDP. This page only has to be a real page, so that
+// OnContextCreated has run and put slabsGlobal on this context.
+document.getElementById('log').textContent =
+	'slabsGlobal: ' + typeof window.slabsGlobal + ' / helpers: ' + typeof window.__slt;
+</script>

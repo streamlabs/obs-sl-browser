@@ -133,9 +133,10 @@ private:
 	void JS_IS_PROCESS_RUNNING(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_STOP_PROCESS(const json11::Json &params, std::string &out_jsonReturn);
 
-	// Internal helpers
-	std::string ws_to_utf8(const std::wstring &str);
-	std::wstring utf8_to_ws(const std::string &str);
+	// Internal helpers. The conversions are static: they touch no state, and a posted lambda
+	// that has not captured 'this' needs to be able to call them.
+	static std::string ws_to_utf8(const std::wstring &str);
+	static std::wstring utf8_to_ws(const std::string &str);
 	bool resolveWithinDownloads(const std::wstring &downloadsDir, const std::string &inputPath, std::filesystem::path &out_resolved, std::string &out_error);
 	bool sha256File(const std::filesystem::path &filePath, std::string &out_hexDigest, std::string &out_error);
 
@@ -154,6 +155,7 @@ private:
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;
 	HANDLE getChildJob();
+	size_t reapExitedChildren();
 
 	static QDockWidget *findDock(const std::string &objectName);
 
@@ -165,6 +167,16 @@ private:
 
 	std::map<uint32_t, HANDLE> m_childProcesses;
 	HANDLE m_childJob = nullptr;
+
+	// A child's handle is normally released by whoever asks about its pid. A caller that only
+	// ever launches keeps them all, so a launch that finds this many tracked sweeps the exited
+	// ones out first. The threshold is fixed: letting it follow the live count would ratchet
+	// upwards after one burst and leave that many dead handles to collect next time.
+	static constexpr size_t kChildReapAt = 128;
+
+	// Only the warning backs off, so a genuine pile-up is reported once per doubling rather
+	// than on every launch. It returns to the floor once the children have drained.
+	size_t m_childWarnAt = kChildReapAt;
 
 	bool m_restartApp = false;
 
