@@ -2110,6 +2110,26 @@ void PluginJsHandler::JS_DOWNLOAD_FILE(const Json &params, std::string &out_json
 		return;
 	}
 
+	/*
+	 * The filename comes from the page and is concatenated onto a directory we made, so without
+	 * this a caller could walk back out of the Streamlabs folder with '..' and have the download
+	 * written anywhere it can reach.
+	 *
+	 * Checked as a leaf name rather than by resolving and comparing, because that is the whole
+	 * contract here: the api documents a filename, and the directory it goes in is created empty
+	 * for this one call, so a name carrying a separator or a drive had nowhere to land anyway.
+	 * filename() differs from the path itself for exactly those, and '.' and '..' survive it.
+	 */
+	const std::filesystem::path leaf = utf8_to_ws(filename);
+
+	if (leaf != leaf.filename() || leaf.filename() == L"." || leaf.filename() == L"..")
+	{
+		// The rejected name is not quoted back: it is the caller's bytes, and json11 emits string
+		// bytes as they are, so echoing them can make the reply itself malformed.
+		out_jsonReturn = Json(Json::object({{"error", "Invalid filename (a plain file name is expected)"}})).dump();
+		return;
+	}
+
 	if (!folderPath.empty())
 	{
 		using namespace std::chrono;
@@ -2122,7 +2142,7 @@ void PluginJsHandler::JS_DOWNLOAD_FILE(const Json &params, std::string &out_json
 
 		// ThreadID + MsTime should be unique, same threaID within 1ms window is a statistical improbability
 		std::wstring subFolderPath = folderPath + L"\\" + std::to_wstring(GetCurrentThreadId()) + millis_str;
-		std::wstring downloadPath = subFolderPath + L"\\" + utf8_to_ws(filename);
+		std::wstring downloadPath = subFolderPath + L"\\" + leaf.wstring();
 
 		CreateDirectoryW(folderPath.c_str(), NULL);
 		CreateDirectoryW(subFolderPath.c_str(), NULL);

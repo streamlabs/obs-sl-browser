@@ -243,7 +243,8 @@ public:
 			{"fs_runSlExe", JS_RUN_STREAMLABS_EXE},
 			
 			// .(@function(arg1), @url, @filename)
-			//	Downloads file, returning a filepath to it
+			//	Downloads file into a folder of its own inside the streamlabs folder, returning the full path to it.
+			//		filename must be a plain file name - no directories, no drive, no '..'
 			//		Example arg1 = { "path": "..." }
 			{"fs_downloadFile", JS_DOWNLOAD_FILE},
 

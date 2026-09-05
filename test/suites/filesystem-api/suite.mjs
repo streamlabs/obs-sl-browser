@@ -161,6 +161,11 @@ const OUTSIDE_DIR = ROOT ? join(ROOT, "..", `StreamlabsOBS-${STAMP}`) : null;
 const OUTSIDE_PRESENT = OUTSIDE_DIR ? join(OUTSIDE_DIR, "present.txt") : null;
 const OUTSIDE_PRESENT_BODY = "the guard is what has to stop this being read or moved";
 
+// Where an unguarded fs_downloadFile would put its download. Its own probe, below, rather than a
+// row in the table: it needs a url and it writes over the network, and the table's paths are not
+// filenames.
+const DOWNLOAD_ESCAPE = ROOT ? join(ROOT, "..", `sltest-download-escape-${STAMP}.txt`) : null;
+
 /*
  * Each escape is one shape of path that must never resolve, in two flavours: one aimed at the
  * file that exists, for the calls that read or consume a path, and one aimed at a name that
@@ -217,7 +222,8 @@ const escapes = () => [
  *
  * fs_runSlExe is confined too but is not in here, because none of these paths is an exe: it
  * would answer "CreateProcess failed" whether or not it checked. It gets a probe of its own,
- * pointed at a real one.
+ * pointed at a real one. fs_downloadFile is out for the same sort of reason - it takes a
+ * filename rather than a path, and needs a url to fetch - and also has its own.
  */
 const GUARDED = [
 	{ fn: "fs_mkdir", aims: "absent", call: (cdp, p) => cdp.call("fs_mkdir", p) },
@@ -1113,6 +1119,34 @@ export default {
 				if (diag("sl_getVersionInfo", after)) return "the plugin stopped answering after it";
 			});
 
+			/*
+			 * The filename is concatenated onto a directory the plugin makes, so without a check
+			 * a page can climb back out of the Streamlabs folder with '..' and have the download
+			 * written wherever it can reach. Two levels up from the per-call directory is
+			 * %APPDATA% itself, which is somewhere a real write would plainly be wrong.
+			 *
+			 * The url is a live one on purpose: if the guard regresses, the download has to
+			 * actually happen for the file to appear where it should not.
+			 */
+			await gate("fs_downloadFile will not write outside the folder", async () => {
+				const { res } = await downloadFile(zipServer.url, `..\\..\\sltest-download-escape-${STAMP}.txt`);
+				const bad = wantError("fs_downloadFile", res);
+				if (bad) return bad;
+
+				// Refused before the download was attempted, rather than by the download failing.
+				if (/download/i.test(res.error)) return `it tried to fetch it: ${res.error}`;
+				if (existsSync(DOWNLOAD_ESCAPE)) return `${DOWNLOAD_ESCAPE} was written`;
+			});
+
+			// A separator anywhere is refused, not only one that climbs out: the api takes a name,
+			// and the directory it lands in is made empty for that one call.
+			await gate("fs_downloadFile refuses a name with a path in it", async () => {
+				const { res } = await downloadFile(zipServer.url, "nested\\file.txt");
+				const bad = wantError("fs_downloadFile", res);
+				if (bad) return bad;
+				if (/download/i.test(res.error)) return `it tried to fetch it: ${res.error}`;
+			});
+
 			/* -------------------------------------------------- a path that is not utf-8 --- */
 
 			/*
@@ -1188,7 +1222,8 @@ export default {
 			 * sandbox, held open by a child that outlived the suite; letting that throw would
 			 * abandon every path after it and leave the rest in the user's real AppData.
 			 */
-			const created = [A(), OUTSIDE_DIR, ...downloadDirs, ...escapes().map((e) => e.lands)].filter(Boolean);
+			const created = [A(), OUTSIDE_DIR, DOWNLOAD_ESCAPE, ...downloadDirs, ...escapes().map((e) => e.lands)]
+				.filter(Boolean);
 			const refused = [];
 
 			for (const path of created) {
