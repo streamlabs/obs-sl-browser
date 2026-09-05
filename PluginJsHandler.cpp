@@ -502,12 +502,9 @@ void PluginJsHandler::JS_LAUNCH_OS_BROWSER_URL(const json11::Json &params, std::
 				SetForegroundWindow(hWnd);
 			}
 
-			auto utf8_to_wstring = [](const std::string &str) {
-				std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
-				return myconv.from_bytes(str);
-			};
-
-			std::wstring wurl = utf8_to_wstring(url);
+			// The member conversion, not a local wstring_convert: that one throws on input that
+			// is not valid utf-8, and this string came from the page.
+			std::wstring wurl = utf8_to_ws(url);
 
 			SHELLEXECUTEINFO info = {};
 			info.cbSize = sizeof(SHELLEXECUTEINFO);
@@ -1884,6 +1881,38 @@ HANDLE PluginJsHandler::getChildJob()
 	return m_childJob;
 }
 
+// A process handle is signalled once the process ends, so this answers the question exactly.
+// GetExitCodeProcess cannot: STILL_ACTIVE is 259, which is also a legal exit code, so a child
+// that exits with 259 would read as running for as long as the plugin is up.
+static bool isChildRunning(HANDLE process)
+{
+	return WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
+}
+
+// Release the children that have already exited. A zero timeout makes each check a state query
+// rather than a wait, so this stays cheap even over a map that has got out of hand, and it is
+// the same predicate sys_isProcessRunning answers with - nothing is dropped here that it would
+// still call running.
+size_t PluginJsHandler::reapExitedChildren()
+{
+	size_t reaped = 0;
+
+	for (auto it = m_childProcesses.begin(); it != m_childProcesses.end();)
+	{
+		if (isChildRunning(it->second))
+		{
+			++it;
+			continue;
+		}
+
+		CloseHandle(it->second);
+		it = m_childProcesses.erase(it);
+		++reaped;
+	}
+
+	return reaped;
+}
+
 void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::string &out_jsonReturn)
 {
 	const auto &param2Value = params["param2"];
@@ -1891,8 +1920,20 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 	const bool hideWindow = params["param3"].bool_value();
 
 	std::wstring folderPath = getDownloadsDir();
-	std::wstring wFileName(fileName.begin(), fileName.end());
-	std::wstring fullPath = folderPath + L"\\" + wFileName;
+
+	// Confined like every other path this api takes: only something we put in the Streamlabs
+	// folder may be launched. A name relative to that folder and an absolute path inside it -
+	// which is the shape fs_downloadZip hands back - both resolve; anything else is refused.
+	std::filesystem::path resolved;
+	std::string err;
+
+	if (!resolveWithinDownloads(folderPath, fileName, resolved, err))
+	{
+		out_jsonReturn = Json(Json::object({{"success", false}, {"error", err}})).dump();
+		return;
+	}
+
+	std::wstring fullPath = resolved.wstring();
 
 	// Tie the child's lifetime to ours: the launched exe is terminated if this (parent) process goes away.
 	HANDLE hJob = getChildJob();
@@ -1919,7 +1960,31 @@ void PluginJsHandler::JS_RUN_STREAMLABS_EXE(const json11::Json &params, std::str
 		ResumeThread(pi.hThread);
 		CloseHandle(pi.hThread);
 
+		// Drained since the last pile-up, so a fresh one should warn from the floor again rather
+		// than inherit a raised mark. Checked here rather than after the sweep below: the map
+		// also shrinks through sys_stopProcess and sys_isProcessRunning, neither of which comes
+		// anywhere near this branch.
+		if (m_childProcesses.size() < kChildReapAt)
+			m_childWarnAt = kChildReapAt;
+
 		m_childProcesses[pi.dwProcessId] = pi.hProcess;
+
+		// Nothing here on a normal launch: the branch is not taken until a caller has piled up
+		// kChildReapAt of them without ever asking about one.
+		if (m_childProcesses.size() >= kChildReapAt)
+		{
+			const size_t reaped = reapExitedChildren();
+			const size_t live = m_childProcesses.size();
+
+			if (live >= m_childWarnAt)
+			{
+				// Sweeping released nothing like enough, so these really are still running: a
+				// caller leaking processes rather than handles, which is worth seeing in a log.
+				blog(LOG_WARNING, "PluginJsHandler::JS_RUN_STREAMLABS_EXE %zu child processes are still running (released %zu)", live, reaped);
+				m_childWarnAt = live * 2;
+			}
+		}
+
 		out_jsonReturn = Json(Json::object({{"success", true}, {"pid", (int)pi.dwProcessId}})).dump();
 	}
 	else
@@ -1954,12 +2019,7 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 		CreateDirectoryW(folderPath.c_str(), NULL);
 		CreateDirectoryW(subFolderPath.c_str(), NULL);
 
-		auto wstring_to_utf8 = [](const std::wstring &str) {
-			std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
-			return myconv.to_bytes(str);
-		};
-
-		if (WindowsFunctions::DownloadFile(url, wstring_to_utf8(zipFilepath)))
+		if (WindowsFunctions::DownloadFile(url, ws_to_utf8(zipFilepath)))
 		{
 			// Verify the checksum (if one was supplied) before trusting the archive.
 			bool shaOk = true;
@@ -2001,7 +2061,7 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 			{
 				std::vector<std::string> filepaths;
 
-				if (WindowsFunctions::Unzip(wstring_to_utf8(zipFilepath), filepaths))
+				if (WindowsFunctions::Unzip(ws_to_utf8(zipFilepath), filepaths))
 				{
 					// Build json string now
 					Json::array json_array;
@@ -2050,15 +2110,25 @@ void PluginJsHandler::JS_DOWNLOAD_FILE(const Json &params, std::string &out_json
 		return;
 	}
 
-	auto wstring_to_utf8 = [](const std::wstring &str) {
-		std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
-		return myconv.to_bytes(str);
-	};
+	/*
+	 * The filename comes from the page and is concatenated onto a directory we made, so without
+	 * this a caller could walk back out of the Streamlabs folder with '..' and have the download
+	 * written anywhere it can reach.
+	 *
+	 * Checked as a leaf name rather than by resolving and comparing, because that is the whole
+	 * contract here: the api documents a filename, and the directory it goes in is created empty
+	 * for this one call, so a name carrying a separator or a drive had nowhere to land anyway.
+	 * filename() differs from the path itself for exactly those, and '.' and '..' survive it.
+	 */
+	const std::filesystem::path leaf = utf8_to_ws(filename);
 
-	auto utf8_to_wstring = [](const std::string &str) {
-		std::wstring_convert<std::codecvt_utf8<wchar_t>> myconv;
-		return myconv.from_bytes(str);
-	};
+	if (leaf != leaf.filename() || leaf.filename() == L"." || leaf.filename() == L"..")
+	{
+		// The rejected name is not quoted back: it is the caller's bytes, and json11 emits string
+		// bytes as they are, so echoing them can make the reply itself malformed.
+		out_jsonReturn = Json(Json::object({{"error", "Invalid filename (a plain file name is expected)"}})).dump();
+		return;
+	}
 
 	if (!folderPath.empty())
 	{
@@ -2072,13 +2142,16 @@ void PluginJsHandler::JS_DOWNLOAD_FILE(const Json &params, std::string &out_json
 
 		// ThreadID + MsTime should be unique, same threaID within 1ms window is a statistical improbability
 		std::wstring subFolderPath = folderPath + L"\\" + std::to_wstring(GetCurrentThreadId()) + millis_str;
-		std::wstring downloadPath = subFolderPath + L"\\" + utf8_to_wstring(filename);
+		std::wstring downloadPath = subFolderPath + L"\\" + leaf.wstring();
 
 		CreateDirectoryW(folderPath.c_str(), NULL);
 		CreateDirectoryW(subFolderPath.c_str(), NULL);
 
-		if (WindowsFunctions::DownloadFile(url, wstring_to_utf8(downloadPath)))
-			out_jsonReturn = Json(Json::object({{"path", downloadPath}})).dump();
+		// ws_to_utf8 on the way out too: json11 has no wstring constructor, so a std::wstring
+		// matches its vector-like one and this answered with an array of utf-16 code units
+		// rather than the path string the api documents.
+		if (WindowsFunctions::DownloadFile(url, ws_to_utf8(downloadPath)))
+			out_jsonReturn = Json(Json::object({{"path", ws_to_utf8(downloadPath)}})).dump();
 		else
 			out_jsonReturn = Json(Json::object({{"error", "Http download file failed"}})).dump();
 	}
@@ -2695,15 +2768,13 @@ void PluginJsHandler::JS_IS_PROCESS_RUNNING(const Json &params, std::string &out
 
 	if (it != m_childProcesses.end())
 	{
-		DWORD exitCode = 0;
-
-		if (GetExitCodeProcess(it->second, &exitCode) && exitCode == STILL_ACTIVE)
+		if (isChildRunning(it->second))
 		{
 			running = true;
 		}
 		else
 		{
-			// Process has exited (or the handle is no longer queryable) - release it.
+			// Process has exited - release it.
 			CloseHandle(it->second);
 			m_childProcesses.erase(it);
 		}
@@ -4054,16 +4125,48 @@ void PluginJsHandler::JS_BROWSERSOURCE_SEND_MESSAGE(const json11::Json &params, 
 * Helpers
 */
 
+/*
+ * Both of these used std::wstring_convert, which throws on input it cannot represent. Nothing
+ * between an api handler and the worker thread catches, so that throw ended the process - and a
+ * javascript string is allowed to carry an unpaired surrogate, which reaches us as exactly the
+ * kind of input it refuses. A page could take OBS down with one malformed argument.
+ *
+ * The Win32 conversions do not throw. Without MB_ERR_INVALID_CHARS an unconvertible sequence
+ * becomes U+FFFD, so a malformed path turns into a path that is merely wrong, and is then
+ * refused by the containment check or by the file operation like any other bad path.
+ *
+ * Fixing it here rather than at each call site is deliberate: this is the only thing in the
+ * conversion that could throw, and a catch in one caller would leave the next one to be written
+ * exposed again.
+ */
 std::string PluginJsHandler::ws_to_utf8(const std::wstring &str)
 {
-	std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-	return conv.to_bytes(str);
+	if (str.empty())
+		return std::string();
+
+	const int needed = WideCharToMultiByte(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0, nullptr, nullptr);
+
+	if (needed <= 0)
+		return std::string();
+
+	std::string out((size_t)needed, '\0');
+	WideCharToMultiByte(CP_UTF8, 0, str.data(), (int)str.size(), out.data(), needed, nullptr, nullptr);
+	return out;
 }
 
 std::wstring PluginJsHandler::utf8_to_ws(const std::string &str)
 {
-	std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-	return conv.from_bytes(str);
+	if (str.empty())
+		return std::wstring();
+
+	const int needed = MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), nullptr, 0);
+
+	if (needed <= 0)
+		return std::wstring();
+
+	std::wstring out((size_t)needed, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), out.data(), needed);
+	return out;
 }
 
 bool PluginJsHandler::resolveWithinDownloads(const std::wstring &downloadsDir, const std::string &inputPath, std::filesystem::path &out_resolved, std::string &out_error)
