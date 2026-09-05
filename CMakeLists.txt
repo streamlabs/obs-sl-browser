@@ -175,6 +175,8 @@ target_compile_options(sl-browser-plugin PRIVATE
 target_compile_options(sl-browser-plugin PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
 target_compile_definitions(sl-browser-plugin PRIVATE NOMINMAX)
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/sl-dual-output/sl-dual-output.cmake)
+
 ## -- Helper proxy children
 
 add_executable(sl-browser-page)

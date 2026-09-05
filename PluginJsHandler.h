@@ -140,6 +140,18 @@ private:
 	bool resolveWithinDownloads(const std::wstring &downloadsDir, const std::string &inputPath, std::filesystem::path &out_resolved, std::string &out_error);
 	bool sha256File(const std::filesystem::path &filePath, std::string &out_hexDigest, std::string &out_error);
 
+	// Dual output. Scene and source editing on the dual canvas goes through the obs_* calls above with a trailing
+	//	canvas argument; these cover what has no main-canvas equivalent.
+	void JS_DUALOUTPUT_GET_STATE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DUALOUTPUT_SET_ENABLED(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DUALOUTPUT_SET_CANVAS_SIZE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DUALOUTPUT_SET_OUTPUT_MODE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DUALOUTPUT_SET_STREAM_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DUALOUTPUT_GET_STREAM_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DUALOUTPUT_START_STREAM(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DUALOUTPUT_STOP_STREAM(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_DUALOUTPUT_REMOVE_SCENE(const json11::Json &params, std::string &out_jsonReturn);
+
 	std::wstring getDownloadsDir() const;
 	std::wstring getFontsDir() const;
 	HANDLE getChildJob();

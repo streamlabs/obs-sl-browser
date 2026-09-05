@@ -1,0 +1,987 @@
+#include "SlDualController.hpp"
+#include "SlDualOutput.hpp"
+#include "SlDualCanvas.hpp"
+#include "SlDualStreamOutput.hpp"
+#include "SlDualTransitions.hpp"
+#include "SlDualDock.hpp"
+#include "SlDualScenesDock.hpp"
+#include "SlDualSourcesDock.hpp"
+#include "SlDualTransitionsDock.hpp"
+
+#include <util/config-file.h>
+#include <util/platform.h>
+
+#include <QApplication>
+#include <QMetaObject>
+#include <QThread>
+
+#include <algorithm>
+#include <cstring>
+#include <filesystem>
+
+static const char *kSaveKey = "sl-dual-output";
+static const char *kPreviewDockId = "sl-dual-output-dock";
+static const char *kScenesDockId = "sl-dual-output-scenes-dock";
+static const char *kSourcesDockId = "sl-dual-output-sources-dock";
+static const char *kTransitionsDockId = "sl-dual-output-transitions-dock";
+
+static void frontendEventThunk(enum obs_frontend_event event, void *data)
+{
+	static_cast<SlDualController *>(data)->onFrontendEvent(event);
+}
+
+static void saveThunk(obs_data_t *saveData, bool saving, void *data)
+{
+	static_cast<SlDualController *>(data)->onSaveLoad(saveData, saving);
+}
+
+SlDualController::SlDualController() = default;
+
+SlDualController::~SlDualController()
+{
+	shutdown();
+}
+
+bool SlDualController::init()
+{
+	if (!obs_initialized())
+		return false;
+
+	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "initializing (built against OBS %s)", SL_DUAL_OBS_VERSION_RAW);
+
+	transitions = std::make_unique<SlDualTransitions>();
+	restoreFromCollectionFile();
+	transitions->rebuild(config);
+
+	canvas = std::make_unique<SlDualCanvas>();
+
+	// If the frontend hasn't loaded its scene collection yet (initialize() from obs_module_post_load),
+	//	defer the canvas: the frontend clears all canvases when the collection loads.
+	// FINISHED_LOADING attaches it.
+	obs_source_t *currentScene = obs_frontend_get_current_scene();
+	bool frontendLoaded = currentScene != nullptr;
+
+	if (currentScene)
+		obs_source_release(currentScene);
+
+	if (frontendLoaded)
+		ensureCanvas();
+
+	output = std::make_unique<SlDualStreamOutput>();
+	output->setStateCallback([](SlDualStreamState state, const std::string &msg) {
+		// Output signals arrive on OBS threads; hop to the UI thread.
+		QMetaObject::invokeMethod(
+			qApp,
+			[state, msg]() {
+				if (SlDualController *controller = SlDualOutput::instance().m_controller.get())
+					controller->onOutputState(state, msg);
+			},
+			Qt::QueuedConnection);
+	});
+
+	if (config.enabled)
+		createDocks();
+
+	obs_frontend_add_event_callback(frontendEventThunk, this);
+	obs_frontend_add_save_callback(saveThunk, this);
+	m_callbacksRegistered = true;
+
+	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "ready (canvas %ux%u%s)", config.canvasWidth, config.canvasHeight, canvas->valid() ? "" : ", attach deferred until collection load");
+	return true;
+}
+
+void SlDualController::ensureCanvas()
+{
+	if (!canvas)
+		return;
+
+	// Quiesce the preview while the canvas may be swapped out underneath.
+	if (dock)
+		dock->setPreviewActive(false);
+
+	if (canvas->create(config.canvasWidth, config.canvasHeight))
+	{
+		const SlDualCanvas::Size created = canvas->size();
+		config.canvasWidth = created.width;
+		config.canvasHeight = created.height;
+
+		bool firstSeed = !config.seeded;
+
+		// seeds once or adopts scenes
+		canvas->ensureScenes(config);
+		applyTransition();
+		canvas->verifyChannelIntegrity();
+		config.activeScene = canvas->activeSceneName();
+
+		if (firstSeed)
+		{
+			config.seeded = true;
+
+			// persist the seed marker promptly
+			obs_frontend_save();
+		}
+
+		// The UUID only exists once attached, so the multitrack handoff has to be (re)written here.
+		applyOutputModeSetting();
+
+		if (dock)
+			dock->setPreviewActive(true);
+	}
+}
+
+void SlDualController::shutdown()
+{
+	if (m_callbacksRegistered)
+	{
+		obs_frontend_remove_event_callback(frontendEventThunk, this);
+		obs_frontend_remove_save_callback(saveThunk, this);
+		m_callbacksRegistered = false;
+	}
+
+	removeDocks();
+
+	if (output)
+	{
+		output->hardStop();
+		output.reset();
+	}
+
+	if (canvas)
+	{
+		canvas->destroy();
+		canvas.reset();
+	}
+
+	// After the canvas: its channel held the selected instance.
+	if (transitions)
+		transitions.reset();
+}
+
+/**
+* Actions
+*/
+
+bool SlDualController::startStream()
+{
+	if (!canvas || !canvas->valid() || !output || !config.enabled)
+		return false;
+
+	// OBS's multitrack path already sends this canvas; a second encode would double it.
+	if (config.outputMode == SlDualOutputMode::EnhancedBroadcasting)
+	{
+		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "start ignored: output mode is enhanced_broadcasting");
+		return false;
+	}
+
+	return output->start(config, canvas->video());
+}
+
+void SlDualController::stopStream()
+{
+	if (output)
+		output->requestStop();
+}
+
+bool SlDualController::streamBusy() const
+{
+	return output && output->state() != SlDualStreamState::Idle;
+}
+
+bool SlDualController::mainStreamBusy() const
+{
+	return m_mainStreamStarting || obs_frontend_streaming_active();
+}
+
+void SlDualController::applySettings(const SlDualConfig &next)
+{
+	// Scene state is owned by the dock/editor; preserve it.
+	std::string activeScene = config.activeScene;
+	bool wasEnabled = config.enabled;
+
+	// A running output cannot be resized under it. Sampled before the assignment below, and the old
+	// size put back after, because storing the requested one would have config() report a size the
+	// canvas never took - and nothing re-applies it on stop. The same lock the settings dialog and
+	// the js api use, and it holds while the output is merely starting.
+	bool sizeLocked = streamBusy();
+	uint32_t lockedWidth = config.canvasWidth;
+	uint32_t lockedHeight = config.canvasHeight;
+
+	config = next;
+	config.activeScene = activeScene;
+
+	if (sizeLocked)
+	{
+		config.canvasWidth = lockedWidth;
+		config.canvasHeight = lockedHeight;
+	}
+	else if (canvas)
+	{
+		canvas->resetVideo(config.canvasWidth, config.canvasHeight);
+
+		const SlDualCanvas::Size applied = canvas->size();
+		config.canvasWidth = applied.width;
+		config.canvasHeight = applied.height;
+	}
+
+	applyOutputModeSetting();
+
+	if (config.enabled != wasEnabled)
+	{
+		bool want = config.enabled;
+
+		// setEnabled saves; let it run against the already-applied config.
+		config.enabled = wasEnabled;
+
+		// A refusal leaves `enabled` where it was, but everything else in this config still has to persist.
+		if (setEnabled(want))
+			return;
+	}
+
+	// persist promptly via the save callback
+	obs_frontend_save();
+}
+
+bool SlDualController::setEnabled(bool enabled)
+{
+	if (config.enabled == enabled)
+		return true;
+
+	// The multitrack path picked the canvas up when the main stream was prepared, so releasing the
+	// claim here cannot take it back - the canvas would go on streaming with the docks gone and the
+	// api reporting it off. Refused until the main stream stops, the same way a mode change is.
+	if (!enabled && config.outputMode == SlDualOutputMode::EnhancedBroadcasting && mainStreamBusy())
+	{
+		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "disable refused: the main stream is carrying the canvas");
+		return false;
+	}
+
+	config.enabled = enabled;
+
+	if (!enabled)
+	{
+		if (output)
+			output->hardStop();
+
+		removeDocks();
+	}
+	else
+	{
+		createDocks();
+		refreshSceneUi();
+		refreshTransitionUi();
+	}
+
+	// Releases the multitrack claim on the way out, and re-takes it on the way back in if the mode
+	// still asks for it. Without this, disabling left OBS streaming the canvas.
+	applyOutputModeSetting();
+
+	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "%s", enabled ? "enabled" : "disabled");
+	obs_frontend_save();
+	return true;
+}
+
+bool SlDualController::setOutputMode(SlDualOutputMode mode)
+{
+	if (config.outputMode == mode)
+		return true;
+
+	// OBS reads MultitrackExtraCanvas when it prepares the main stream, so once that stream is
+	// running the claim cannot be taken back by clearing the profile value - the canvas stays
+	// attached to the multitrack output. Allowing the switch anyway would let startStream() bring
+	// our own encode up alongside it and send the canvas twice, which is the one thing this mode
+	// exists to prevent. Refused until the main stream stops, the same way a resize is.
+	if (mainStreamBusy())
+	{
+		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "output mode change refused: the main stream is live");
+		return false;
+	}
+
+	// Never leave our own encode running while handing the canvas to the multitrack path. hardStop
+	// rather than requestStop: the latter is asynchronous for a live output, so the claim below
+	// could be published while our encode was still winding down, and a main stream starting in
+	// that gap would carry the canvas alongside it - the one thing this mode exists to prevent.
+	if (mode == SlDualOutputMode::EnhancedBroadcasting && output)
+		output->hardStop();
+
+	config.outputMode = mode;
+	applyOutputModeSetting();
+	obs_frontend_save();
+	return true;
+}
+
+void SlDualController::applyOutputModeSetting()
+{
+	config_t *profile = obs_frontend_get_profile_config();
+
+	if (!profile || !canvas || !canvas->valid())
+		return;
+
+	const char *ours = obs_canvas_get_uuid(canvas->canvasHandle());
+
+	if (!ours)
+		return;
+
+	const char *current = config_get_string(profile, "Stream1", "MultitrackExtraCanvas");
+	std::string want;
+
+	// config.enabled matters as much as the mode: disabling dual output only stops our own encode,
+	// so leaving the canvas claimed here would have OBS go on streaming a canvas the user switched
+	// off - and re-claim it at startup. setEnabled() calls back in to apply this.
+	if (config.enabled && config.outputMode == SlDualOutputMode::EnhancedBroadcasting)
+		want = ours;
+	else if (current && strcmp(current, ours) == 0)
+		want.clear();
+	else
+		// Unset, or pointing at a canvas that isn't ours. Not ours to clear.
+		return;
+
+	if (current && want == current)
+		return;
+
+	config_set_string(profile, "Stream1", "MultitrackExtraCanvas", want.c_str());
+	config_save(profile);
+
+	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "output mode '%s', multitrack canvas %s", slDualOutputModeToString(config.outputMode), want.empty() ? "released" : "claimed");
+}
+
+void SlDualController::sceneSetActive(const std::string &name)
+{
+	if (canvas && canvas->setActiveScene(name))
+	{
+		config.activeScene = canvas->activeSceneName();
+
+		if (dock)
+			dock->resetEditorState(false);
+		obs_frontend_save();
+	}
+
+	refreshSceneUi();
+}
+
+bool SlDualController::sceneCreate(const std::string &name)
+{
+	bool ok = canvas && canvas->createScene(name);
+
+	if (ok)
+	{
+		config.activeScene = canvas->activeSceneName();
+
+		if (std::find(config.sceneOrder.begin(), config.sceneOrder.end(), name) == config.sceneOrder.end())
+			config.sceneOrder.push_back(name);
+
+		if (dock)
+			dock->resetEditorState(false);
+		obs_frontend_save();
+	}
+
+	refreshSceneUi();
+	return ok;
+}
+
+void SlDualController::sceneRemoveActive()
+{
+	if (!canvas)
+		return;
+
+	// Quiesce the preview: the draw callback must not enumerate a scene that is being destroyed.
+	if (dock)
+	{
+		dock->setPreviewActive(false);
+		dock->resetEditorState(false);
+	}
+
+	std::string removed = canvas->activeSceneName();
+
+	if (canvas->removeActiveScene())
+	{
+		config.activeScene = canvas->activeSceneName();
+		config.sceneOrder.erase(std::remove(config.sceneOrder.begin(), config.sceneOrder.end(), removed), config.sceneOrder.end());
+		obs_frontend_save();
+	}
+
+	if (dock)
+		dock->setPreviewActive(true);
+
+	refreshSceneUi();
+}
+
+bool SlDualController::sceneRemove(const std::string &name)
+{
+	if (!canvas || name.empty())
+		return false;
+
+	// Selecting the target first would run the transition and leave a different scene on air after the
+	// delete; a background scene is removed where it stands.
+	if (canvas->activeSceneName() == name)
+	{
+		sceneRemoveActive();
+		return canvas->activeSceneName() != name;
+	}
+
+	if (!canvas->removeScene(name))
+		return false;
+
+	config.sceneOrder.erase(std::remove(config.sceneOrder.begin(), config.sceneOrder.end(), name), config.sceneOrder.end());
+	obs_frontend_save();
+	refreshSceneUi();
+	return true;
+}
+
+bool SlDualController::sceneRenameActive(const std::string &name)
+{
+	std::string oldName = canvas ? canvas->activeSceneName() : std::string();
+	bool ok = canvas && canvas->renameActiveScene(name);
+
+	if (ok)
+	{
+		config.activeScene = canvas->activeSceneName();
+		std::replace(config.sceneOrder.begin(), config.sceneOrder.end(), oldName, name);
+		obs_frontend_save();
+	}
+
+	refreshSceneUi();
+	return ok;
+}
+
+void SlDualController::transitionSelect(const std::string &name)
+{
+	config.transitionName = name;
+	applyTransition();
+	obs_frontend_save();
+	refreshTransitionUi();
+}
+
+void SlDualController::transitionSetDuration(int ms)
+{
+	config.transitionDurationMs = ms;
+
+	if (canvas)
+		canvas->setTransitionDuration(ms);
+	obs_frontend_save();
+}
+
+bool SlDualController::transitionAdd(const std::string &typeId, const std::string &name)
+{
+	if (!transitions || !transitions->add(typeId, name))
+		return false;
+
+	config.transitionName = name;
+	applyTransition();
+	obs_frontend_save();
+	refreshTransitionUi();
+	return true;
+}
+
+void SlDualController::transitionRemoveSelected()
+{
+	if (!transitions || !transitions->remove(config.transitionName))
+		return;
+
+	// Fall back the same way selection resolution does (Fade, else the first instance).
+	config.transitionName = transitions->selectedName(config);
+	applyTransition();
+	obs_frontend_save();
+	refreshTransitionUi();
+}
+
+void SlDualController::applyTransition()
+{
+	if (!canvas || !transitions)
+		return;
+
+	canvas->setTransitionDuration(config.transitionDurationMs);
+	canvas->setTransition(transitions->selected(config));
+}
+
+/**
+* Events
+*/
+
+void SlDualController::onFrontendEvent(enum obs_frontend_event event)
+{
+	switch (event)
+	{
+	case OBS_FRONTEND_EVENT_STREAMING_STARTING: {
+		m_mainStreamStarting = true;
+		break;
+	}
+	case OBS_FRONTEND_EVENT_STREAMING_STOPPED: {
+		m_mainStreamStarting = false;
+		break;
+	}
+	case OBS_FRONTEND_EVENT_STREAMING_STARTED: {
+		// Starting again over an output that is already starting or reconnecting would re-enter
+		//	SlDualStreamOutput::start, which guards only Stopping and an already-active output.
+		if (config.autoStart && !streamBusy() && !config.server.empty())
+			startStream();
+		break;
+	}
+	case OBS_FRONTEND_EVENT_STREAMING_STOPPING: {
+		// An output caught mid-connect is exactly the one that must not be left behind: it is not
+		//	active yet, so a check for that would skip it and autoStart would let it go live on
+		//	its own after the main stream had already stopped.
+		if (config.autoStart && streamBusy())
+			stopStream();
+		break;
+	}
+	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING: {
+		onCollectionChanging();
+		break;
+	}
+	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED: {
+		onCollectionChanged();
+		break;
+	}
+	case OBS_FRONTEND_EVENT_FINISHED_LOADING: {
+		ensureCanvas();
+		refreshSceneUi();
+		break;
+	}
+	case OBS_FRONTEND_EVENT_EXIT: {
+		onExit();
+		break;
+	}
+	default: {
+		break;
+	}
+	}
+}
+
+void SlDualController::onCollectionChanging()
+{
+	// The frontend is about to destroy its canvases and this collection's scenes.
+	// Stop the output hard, quiesce the preview, drop canvas refs.
+	// Read once: the two decisions below are not the same question. Anything not Idle has to be
+	// stopped before its canvas goes away, but Stopping must not come back afterwards - the user
+	// already asked for it to stop, and restarting it here would override that.
+	SlDualStreamState state = output ? output->state() : SlDualStreamState::Idle;
+
+	m_restartOutputAfterCollectionChange = state == SlDualStreamState::Starting || state == SlDualStreamState::Live || state == SlDualStreamState::Reconnecting;
+
+	if (output && state != SlDualStreamState::Idle)
+	{
+		output->hardStop();
+		onOutputState(SlDualStreamState::Idle, "Paused for scene collection change");
+	}
+
+	if (dock)
+	{
+		dock->setPreviewActive(false);
+
+		// scenes are about to be destroyed
+		dock->resetEditorState(true);
+	}
+
+	if (canvas)
+		canvas->detach();
+
+	// unbinds the source list from dying scenes
+	refreshSceneUi();
+}
+
+void SlDualController::onCollectionChanged()
+{
+	// The save callback has already applied this collection's settings to `config` during load, defaults
+	// included, so `enabled` can differ from the collection we came from and the docks have to follow it.
+	if (config.enabled && !dock)
+		createDocks();
+	else if (!config.enabled && dock)
+		removeDocks();
+
+	ensureCanvas();
+	refreshSceneUi();
+
+	if (m_restartOutputAfterCollectionChange)
+	{
+		m_restartOutputAfterCollectionChange = false;
+		startStream();
+	}
+}
+
+void SlDualController::onExit()
+{
+	if (m_exitCleanupDone)
+		return;
+	m_exitCleanupDone = true;
+
+	// Full teardown while the frontend is still alive (the collection was already saved: SaveProjectNow runs before OBS_FRONTEND_EVENT_EXIT).
+	// Holding canvas/scene refs into obs_module_unload extends libobs object lifetimes past the frontend's own teardown; release now,
+	//	like the frontend does. shutdown() remains a safe no-op fallback.
+	if (output)
+	{
+		output->hardStop();
+		output.reset();
+	}
+
+	removeDocks();
+
+	if (canvas)
+	{
+		canvas->destroy();
+		canvas.reset();
+	}
+
+	if (transitions)
+		transitions.reset();
+}
+
+void SlDualController::onOutputState(SlDualStreamState state, const std::string &msg)
+{
+	// These are queued to the UI thread, so one can arrive after the output it describes has been
+	// stopped or replaced: a Live queued just before hardStop() would otherwise land on top of the
+	// Idle that followed it and leave the dock contradicting the output. The output's own atomic
+	// state is the authority - anything disagreeing with it is stale, and the notification for
+	// whatever state won is already queued behind this one.
+	if (!output || output->state() != state)
+		return;
+
+	if (dock)
+		dock->setStreamState(state, msg);
+}
+
+/**
+* Persistence
+*/
+
+void SlDualController::onSaveLoad(obs_data_t *saveData, bool saving)
+{
+	if (saving)
+	{
+		obs_data_t *data = buildSaveData();
+		obs_data_set_obj(saveData, kSaveKey, data);
+		obs_data_release(data);
+	}
+	else
+	{
+		obs_data_t *data = obs_data_get_obj(saveData, kSaveKey);
+
+		if (data)
+		{
+			applyLoadedData(data);
+			obs_data_release(data);
+		}
+		else
+		{
+			// These settings belong to the collection, so a collection that carries none gets the
+			// defaults - not whatever the previous one left in `config`, which would then be written
+			// into this collection's file at the next save. Stream credentials included.
+			resetConfigToDefaults();
+
+			if (transitions)
+				transitions->rebuild(config);
+		}
+	}
+}
+
+void SlDualController::resetConfigToDefaults()
+{
+	config = SlDualConfig();
+}
+
+obs_data_t *SlDualController::buildSaveData() const
+{
+	obs_data_t *d = obs_data_create();
+	obs_data_set_int(d, "version", 5);
+	obs_data_set_int(d, "canvas_width", config.canvasWidth);
+	obs_data_set_int(d, "canvas_height", config.canvasHeight);
+	obs_data_set_string(d, "active_scene", config.activeScene.c_str());
+
+	obs_data_array_t *order = obs_data_array_create();
+
+	for (const std::string &name : config.sceneOrder)
+	{
+		obs_data_t *entry = obs_data_create();
+		obs_data_set_string(entry, "name", name.c_str());
+		obs_data_array_push_back(order, entry);
+		obs_data_release(entry);
+	}
+
+	obs_data_set_array(d, "scene_order", order);
+	obs_data_array_release(order);
+
+	obs_data_set_string(d, "transition", config.transitionName.c_str());
+	obs_data_set_int(d, "transition_duration", config.transitionDurationMs);
+
+	obs_data_array_t *customs = obs_data_array_create();
+	std::vector<SlDualTransitionInfo> infos = transitions ? transitions->customInfos() : config.customTransitions;
+
+	for (const SlDualTransitionInfo &info : infos)
+	{
+		obs_data_t *entry = obs_data_create();
+		obs_data_set_string(entry, "id", info.id.c_str());
+		obs_data_set_string(entry, "name", info.name.c_str());
+		obs_data_set_string(entry, "settings", info.settingsJson.c_str());
+		obs_data_array_push_back(customs, entry);
+		obs_data_release(entry);
+	}
+
+	obs_data_set_array(d, "custom_transitions", customs);
+	obs_data_array_release(customs);
+	obs_data_set_bool(d, "seeded", config.seeded);
+	obs_data_set_string(d, "server", config.server.c_str());
+
+	// Deliberate, and a known tradeoff: the key and password go in the scene collection rather than
+	// the profile, so that each collection can stream somewhere different. OBS keeps its own stream
+	// key in the profile instead, which is why exporting a collection is normally safe - here it is
+	// not, and an exported or shared collection carries live credentials in clear text. Moving them
+	// to profile storage would mean one key for every collection, which is not what this is for.
+	obs_data_set_string(d, "key", config.key.c_str());
+	obs_data_set_bool(d, "use_auth", config.useAuth);
+	obs_data_set_string(d, "auth_username", config.authUsername.c_str());
+	obs_data_set_string(d, "auth_password", config.authPassword.c_str());
+	obs_data_set_string(d, "encoder_id", config.encoderId.c_str());
+	obs_data_set_int(d, "video_bitrate", config.videoBitrateKbps);
+	obs_data_set_int(d, "audio_bitrate", config.audioBitrateKbps);
+	obs_data_set_int(d, "audio_track", config.audioTrack);
+	obs_data_set_bool(d, "auto_start", config.autoStart);
+	obs_data_set_string(d, "output_mode", slDualOutputModeToString(config.outputMode));
+	obs_data_set_bool(d, "enabled", config.enabled);
+	return d;
+}
+
+void SlDualController::applyLoadedData(obs_data_t *d)
+{
+	// The loaded object is the whole truth for this collection: start from the defaults so an older
+	// save's missing keys come back as defaults rather than as the previously loaded collection's values.
+	resetConfigToDefaults();
+
+	// Absent keys fall back to the defaults set above.
+	obs_data_set_default_int(d, "canvas_width", config.canvasWidth);
+	obs_data_set_default_int(d, "canvas_height", config.canvasHeight);
+	obs_data_set_default_string(d, "active_scene", config.activeScene.c_str());
+	obs_data_set_default_bool(d, "seeded", config.seeded);
+	obs_data_set_default_string(d, "server", config.server.c_str());
+	obs_data_set_default_string(d, "key", config.key.c_str());
+	obs_data_set_default_bool(d, "use_auth", config.useAuth);
+	obs_data_set_default_string(d, "auth_username", config.authUsername.c_str());
+	obs_data_set_default_string(d, "auth_password", config.authPassword.c_str());
+	obs_data_set_default_string(d, "encoder_id", config.encoderId.c_str());
+	obs_data_set_default_int(d, "video_bitrate", config.videoBitrateKbps);
+	obs_data_set_default_int(d, "audio_bitrate", config.audioBitrateKbps);
+	obs_data_set_default_int(d, "audio_track", config.audioTrack);
+	obs_data_set_default_bool(d, "auto_start", config.autoStart);
+	obs_data_set_default_string(d, "output_mode", slDualOutputModeToString(config.outputMode));
+	obs_data_set_default_bool(d, "enabled", config.enabled);
+
+	config.canvasWidth = (uint32_t)obs_data_get_int(d, "canvas_width");
+	config.canvasHeight = (uint32_t)obs_data_get_int(d, "canvas_height");
+	config.activeScene = obs_data_get_string(d, "active_scene");
+
+	// Absent (pre-v3 saves): keep whatever order is already known.
+	obs_data_array_t *order = obs_data_get_array(d, "scene_order");
+
+	if (order)
+	{
+		config.sceneOrder.clear();
+		size_t n = obs_data_array_count(order);
+
+		for (size_t i = 0; i < n; i++)
+		{
+			obs_data_t *entry = obs_data_array_item(order, i);
+			const char *name = obs_data_get_string(entry, "name");
+
+			if (name && *name)
+				config.sceneOrder.push_back(name);
+			obs_data_release(entry);
+		}
+
+		obs_data_array_release(order);
+	}
+
+	obs_data_set_default_string(d, "transition", config.transitionName.c_str());
+	obs_data_set_default_int(d, "transition_duration", config.transitionDurationMs);
+	config.transitionName = obs_data_get_string(d, "transition");
+	config.transitionDurationMs = (int)obs_data_get_int(d, "transition_duration");
+
+	// Cleared when absent: a save without the key means no custom instances existed.
+	config.customTransitions.clear();
+	obs_data_array_t *customs = obs_data_get_array(d, "custom_transitions");
+
+	if (customs)
+	{
+		size_t count = obs_data_array_count(customs);
+
+		for (size_t i = 0; i < count; i++)
+		{
+			obs_data_t *entry = obs_data_array_item(customs, i);
+			SlDualTransitionInfo info;
+			info.id = obs_data_get_string(entry, "id");
+			info.name = obs_data_get_string(entry, "name");
+			info.settingsJson = obs_data_get_string(entry, "settings");
+
+			if (!info.id.empty() && !info.name.empty())
+				config.customTransitions.push_back(info);
+			obs_data_release(entry);
+		}
+
+		obs_data_array_release(customs);
+	}
+
+	if (transitions)
+		transitions->rebuild(config);
+
+	config.seeded = obs_data_get_bool(d, "seeded");
+	config.server = obs_data_get_string(d, "server");
+	config.key = obs_data_get_string(d, "key");
+	config.useAuth = obs_data_get_bool(d, "use_auth");
+	config.authUsername = obs_data_get_string(d, "auth_username");
+	config.authPassword = obs_data_get_string(d, "auth_password");
+	config.encoderId = obs_data_get_string(d, "encoder_id");
+	config.videoBitrateKbps = (int)obs_data_get_int(d, "video_bitrate");
+	config.audioBitrateKbps = (int)obs_data_get_int(d, "audio_bitrate");
+	config.audioTrack = (int)obs_data_get_int(d, "audio_track");
+	config.autoStart = obs_data_get_bool(d, "auto_start");
+	config.outputMode = slDualOutputModeFromString(obs_data_get_string(d, "output_mode"));
+	config.enabled = obs_data_get_bool(d, "enabled");
+}
+
+void SlDualController::restoreFromCollectionFile()
+{
+	// The save callback's load side only fires for collections loaded while registered. initialize() may run long after the current collection loaded, so read our key straight from the collection file once.
+	char *collectionName = obs_frontend_get_current_scene_collection();
+
+	if (!collectionName)
+		return;
+
+	char scenesDir[512];
+
+	if (os_get_config_path(scenesDir, sizeof(scenesDir), "obs-studio/basic/scenes") <= 0)
+	{
+		bfree(collectionName);
+		return;
+	}
+
+	try
+	{
+		std::filesystem::path dir = std::filesystem::u8path(scenesDir);
+
+		for (const auto &entry : std::filesystem::directory_iterator(dir))
+		{
+			if (!entry.is_regular_file() || entry.path().extension() != L".json")
+				continue;
+
+			obs_data_t *root = obs_data_create_from_json_file(entry.path().u8string().c_str());
+
+			if (!root)
+				continue;
+
+			const char *name = obs_data_get_string(root, "name");
+			bool match = name && strcmp(name, collectionName) == 0;
+
+			if (match)
+			{
+				obs_data_t *ours = obs_data_get_obj(root, kSaveKey);
+
+				if (ours)
+				{
+					applyLoadedData(ours);
+					obs_data_release(ours);
+					blog(LOG_INFO, SL_DUAL_LOG_PREFIX "restored settings from collection '%s'", name);
+				}
+			}
+
+			obs_data_release(root);
+
+			if (match)
+				break;
+		}
+	}
+	catch (const std::exception &e)
+	{
+		blog(LOG_WARNING, SL_DUAL_LOG_PREFIX "scene collection scan failed: %s", e.what());
+	}
+
+	bfree(collectionName);
+}
+
+/**
+* Docks
+*/
+
+void SlDualController::createDocks()
+{
+	if (dock)
+		return;
+
+	dock = new SlDualDock(*this);
+
+	if (!obs_frontend_add_dock_by_id(kPreviewDockId, "Vertical", dock))
+	{
+		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add preview dock");
+		delete dock;
+		dock = nullptr;
+		return;
+	}
+
+	scenesDock = new SlDualScenesDock(*this);
+
+	if (!obs_frontend_add_dock_by_id(kScenesDockId, "Vertical Scenes", scenesDock))
+	{
+		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add scenes dock");
+		delete scenesDock;
+		scenesDock = nullptr;
+	}
+
+	sourcesDock = new SlDualSourcesDock(*this, dock->preview());
+
+	if (!obs_frontend_add_dock_by_id(kSourcesDockId, "Vertical Sources", sourcesDock))
+	{
+		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add sources dock");
+		delete sourcesDock;
+		sourcesDock = nullptr;
+	}
+
+	transitionsDock = new SlDualTransitionsDock(*this);
+
+	if (!obs_frontend_add_dock_by_id(kTransitionsDockId, "Vertical Transitions", transitionsDock))
+	{
+		blog(LOG_ERROR, SL_DUAL_LOG_PREFIX "failed to add transitions dock");
+		delete transitionsDock;
+		transitionsDock = nullptr;
+	}
+}
+
+void SlDualController::removeDocks()
+{
+	if (transitionsDock)
+	{
+		obs_frontend_remove_dock(kTransitionsDockId);
+		transitionsDock = nullptr;
+	}
+
+	// The frontend deletes each widget on remove; drop the sources dock first, it borrows the preview.
+	if (sourcesDock)
+	{
+		obs_frontend_remove_dock(kSourcesDockId);
+		sourcesDock = nullptr;
+	}
+
+	if (scenesDock)
+	{
+		obs_frontend_remove_dock(kScenesDockId);
+		scenesDock = nullptr;
+	}
+
+	if (dock)
+	{
+		obs_frontend_remove_dock(kPreviewDockId);
+		dock = nullptr;
+	}
+}
+
+void SlDualController::refreshSceneUi()
+{
+	if (scenesDock)
+		scenesDock->refresh();
+
+	if (sourcesDock)
+		sourcesDock->refreshBinding();
+
+	refreshTransitionUi();
+}
+
+void SlDualController::refreshTransitionUi()
+{
+	if (transitionsDock)
+		transitionsDock->refresh();
+}

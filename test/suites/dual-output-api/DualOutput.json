@@ -1,0 +1,55 @@
+{
+    "name": "DualOutput",
+    "current_scene": "Horizontal One",
+    "current_program_scene": "Horizontal One",
+    "scene_order": [
+        {
+            "name": "Horizontal One"
+        },
+        {
+            "name": "Horizontal Two"
+        }
+    ],
+    "sources": [
+        {
+            "id": "scene",
+            "versioned_id": "scene",
+            "name": "Horizontal One",
+            "settings": {
+                "custom_size": false,
+                "id_counter": 0,
+                "items": []
+            },
+            "enabled": true,
+            "muted": false,
+            "volume": 1.0,
+            "flags": 0,
+            "mixers": 0,
+            "sync": 0,
+            "monitoring_type": 0,
+            "balance": 0.5,
+            "hotkeys": {},
+            "private_settings": {}
+        },
+        {
+            "id": "scene",
+            "versioned_id": "scene",
+            "name": "Horizontal Two",
+            "settings": {
+                "custom_size": false,
+                "id_counter": 0,
+                "items": []
+            },
+            "enabled": true,
+            "muted": false,
+            "volume": 1.0,
+            "flags": 0,
+            "mixers": 0,
+            "sync": 0,
+            "monitoring_type": 0,
+            "balance": 0.5,
+            "hotkeys": {},
+            "private_settings": {}
+        }
+    ]
+}

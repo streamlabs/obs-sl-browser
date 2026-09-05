@@ -93,6 +93,15 @@ public:
 		JS_QT_GET_COOKIE_VALUE,
 		JS_BROWSER_SET_HIDDEN_STATE,
 		JS_RUN_STREAMLABS_EXE,
+		JS_DUALOUTPUT_GET_STATE,
+		JS_DUALOUTPUT_SET_ENABLED,
+		JS_DUALOUTPUT_SET_CANVAS_SIZE,
+		JS_DUALOUTPUT_SET_OUTPUT_MODE,
+		JS_DUALOUTPUT_SET_STREAM_SETTINGS,
+		JS_DUALOUTPUT_GET_STREAM_SETTINGS,
+		JS_DUALOUTPUT_START_STREAM,
+		JS_DUALOUTPUT_STOP_STREAM,
+		JS_DUALOUTPUT_REMOVE_SCENE,
 		JS_BROWSERSOURCE_SEND_MESSAGE,
 		JS_PATH_JOIN,
 		JS_GET_ENV_VAR,
@@ -361,23 +370,23 @@ public:
 			//	Returns json of service, protocol, server, bool_use_auth, username, password, key
 			{"obs_get_stream_settings", JS_GET_STREAMSETTINGS},
 
-			// .(@function(arg1), @sceneName)
-			//	Performs 'obs_frontend_set_current_scene' on the scene in question
+			// .(@function(arg1), @sceneName, @canvas)
+			//	Sets the program scene on the main canvas, or the rendered scene on the vertical one.
 			{"obs_set_current_scene", JS_SET_CURRENT_SCENE},
 
-			// .(@function(arg1))
+			// .(@function(arg1), @canvas)
 			//		Example arg1 = { "name": "." }
 			{"obs_get_current_scene", JS_GET_CURRENT_SCENE},
 
-			// .(@function(arg1), @sceneName)
-			//	Peforms literally obs_scene_create(sceneName) 
+			// .(@function(arg1), @sceneName, @canvas)
+			//	Creates the scene in the target canvas's namespace, so the same name may exist on both canvases.
 			{"obs_create_scene", JS_CREATE_SCENE},
 
-			// .(@function(arg1), @sceneName, @sourceName)
+			// .(@function(arg1), @sceneName, @sourceName, @canvas)
 			//	Peforms literally obs_scene_add(sceneName, sourceName)
 			{"obs_scene_add", JS_SCENE_ADD},
 
-			// .(@function(arg1), @sceneName)
+			// .(@function(arg1), @sceneName, @canvas)
 			//		Example arg1 = { "source_names": [] }
 			{"obs_scene_get_sources", JS_SCENE_GET_SOURCES},
 
@@ -391,7 +400,7 @@ public:
 			//		OBS_SOURCE_TYPE_SCENE = 3
 			{"obs_query_all_sources", JS_QUERY_ALL_SOURCES},
 
-			// .(@function(arg1))
+			// .(@function(arg1), @canvas)
 			//		Example arg1 = [ { "name": ".", "type": 0, "id": "." }, ... ]
 			{"obs_enum_scenes", JS_ENUM_SCENES},
 
@@ -422,19 +431,19 @@ public:
 			// .(@function(arg1), @sceneName)
 			{"obs_add_scene_collection", JS_ADD_SCENE_COLLECTION},
 
-			// .(@function(arg1), @sceneName, @sourceName, @decimal_x, @decimal_y)
+			// .(@function(arg1), @sceneName, @sourceName, @x, @y, @canvas)
 			{"obs_sceneitem_set_pos", JS_SET_SCENEITEM_POS},
 
-			// .(@function(arg1), @sceneName, @sourceName, @decimal_rot)
+			// .(@function(arg1), @sceneName, @sourceName, @rotation, @canvas)
 			{"obs_sceneitem_set_rot", JS_SET_SCENEITEM_ROT},
 
-			// .(@function(arg1), @sceneName, @sourceName, @int_left, @int_top, @int_right, @int_bottom)
+			// .(@function(arg1), @sceneName, @sourceName, @left, @top, @right, @bottom, @canvas)
 			{"obs_sceneitem_set_crop", JS_SET_SCENEITEM_CROP},
 
-			// .(@function(arg1), @sceneName, @sourceName, @decimal_x, @decimal_y)
+			// .(@function(arg1), @sceneName, @sourceName, @x_scale, @y_scale, @canvas)
 			{"obs_sceneitem_set_scale", JS_SET_SCALE},
 
-			// .(@function(arg1), @sceneName, @sourceName, @int_scaleType)
+			// .(@function(arg1), @sceneName, @sourceName, @scale_type, @canvas)
 			//	OBS_SCALE_DISABLE = 1
 			//	OBS_SCALE_POINT = 2
 			//	OBS_SCALE_BICUBIC = 3
@@ -443,7 +452,7 @@ public:
 			//	OBS_SCALE_AREA = 6
 			{"obs_sceneitem_set_scale_filter", JS_SET_SCENEITEM_SCALE_FILTER},
 
-			// .(@function(arg1), @sceneName, @sourceName, @int_blendingType)
+			// .(@function(arg1), @sceneName, @sourceName, @blending_type, @canvas)
 			//	OBS_BLEND_NORMAL = 1
 			//	OBS_BLEND_ADDITIVE = 2
 			//	OBS_BLEND_SUBTRACT = 3
@@ -453,47 +462,47 @@ public:
 			//	OBS_BLEND_DARKEN = 7
 			{"obs_sceneitem_set_blending_mode", JS_SET_SCENEITEM_BLENDING_MODE},
 
-			// .(@function(arg1), @sceneName, @sourceName, @int_blendingMethod)
+			// .(@function(arg1), @sceneName, @sourceName, @blending_method, @canvas)
 			//	OBS_BLEND_METHOD_DEFAULT = 1
 			//	OBS_BLEND_METHOD_SRGB_OFF = 2
 			{"obs_sceneitem_set_blending_method", JS_SET_SCENEITEM_BLENDING_METHOD},
 
-			// .(@function(arg1), @sceneName, @sourceName)
+			// .(@function(arg1), @sceneName, @sourceName, @canvas)
 			//		Example arg1 = { "x": 0.0, "y": 0.0 }
 			{"obs_sceneitem_get_pos", JS_GET_SCENEITEM_POS},
 
-			// .(@function(arg1), @sceneName, @sourceName)
+			// .(@function(arg1), @sceneName, @sourceName, @canvas)
 			//		Example arg1 = { "rotation": 0.0 }
 			{"obs_sceneitem_get_rot", JS_GET_SCENEITEM_ROT},
 
-			// .(@function(arg1), @sceneName, @sourceName)
+			// .(@function(arg1), @sceneName, @sourceName, @canvas)
 			//		Example arg1 = { "left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0 }
 			{"obs_sceneitem_get_crop", JS_GET_SCENEITEM_CROP},
 
-			// .(@function(arg1), @sceneName, @sourceName)
+			// .(@function(arg1), @sceneName, @sourceName, @canvas)
 			//		Example arg1 = { "x": 0.0, "y": 0.0 }
 			{"obs_sceneitem_get_scale", JS_GET_SCALE},
 
-			// .(@function(arg1), @sceneName, @sourceName)
+			// .(@function(arg1), @sceneName, @sourceName, @canvas)
 			//		Example arg1 = { "scale_filter": 0 }
 			{"obs_sceneitem_get_scale_filter", JS_GET_SCENEITEM_SCALE_FILTER},
 
-			// .(@function(arg1), @sceneName, @sourceName)
+			// .(@function(arg1), @sceneName, @sourceName, @canvas)
 			//		Example arg1 = { "blending_mode": 0 }
 			{"obs_sceneitem_get_blending_mode", JS_GET_SCENEITEM_BLENDING_MODE},
 
-			// .(@function(arg1), @sceneName, @sourceName)
+			// .(@function(arg1), @sceneName, @sourceName, @canvas)
 			//		Example arg1 = { "blending_method": 0 }
 			{"obs_sceneitem_get_blending_method", JS_GET_SCENEITEM_BLENDING_METHOD},
 
-			// .(@function(arg1), @sceneName, @sourceName, @visible)
+			// .(@function(arg1), @sceneName, @sourceName, @bool_visible, @canvas)
 			{"obs_sceneitem_set_visibility", JS_SET_SCENEITEM_VISIBILITY},				
 
 			// .(@function(arg1), @sourceName)
 			//		Example arg1 = { "width": 0, "height": 0 }
 			{"obs_source_get_dimensions", JS_GET_SOURCE_DIMENSIONS},
 
-			// .(@function(arg1))
+			// .(@function(arg1), @canvas)
 			//		Example arg1 = { "width": 0, "height": 0 }
 			{"obs_canvas_get_dimensions", JS_GET_CANVAS_DIMENSIONS},
 
@@ -572,6 +581,87 @@ public:
 			//		Example arg1 = { "branch": '29.1.0', "git_sha": 'abcdefg...', "rev": '10' }
 			//	DEV NOTE: THIS FUNCTION CAN NEVER BE RENAMED !!
 			{"sl_getVersionInfo", JS_SL_VERSION_INFO},
+
+			/***
+			* Dual Output (vertical canvas)
+			*
+			* The vertical canvas is a second, independently composed canvas with its own scenes.
+			*
+			* Sources are global, so obs_source_* / obs_source_filter_* calls reach anything on it with no change.
+			* Scenes are not: they live in the canvas namespace, so every scene-addressing call above takes a
+			*	trailing, optional @canvas argument - "" or omitted means the main canvas, "vertical" means this one.
+			*	An unrecognised value resolves nothing rather than falling back to main, so a typo cannot silently
+			*	edit the wrong canvas. Scene names may repeat across canvases without colliding.
+			*
+			* The canvas is detached while a scene collection loads or switches, and dual output calls answer
+			*	{ "error": "Dual output unavailable" } during that window. Gate setup on dualoutput_getState().available.
+			*/
+
+			// .(@function(arg1))
+			//		Example arg1 = { "available": bool, "enabled": bool, "canvas": { "width": 1080, "height": 1920 },
+			//			"active_scene": ".", "scenes": [ "." ], "stream_state": "idle|starting|live|reconnecting|stopping",
+			//			"output_mode": "rtmp|enhanced_broadcasting", "eb_available": bool }
+			//	'available' is false until the canvas is attached; everything else is still readable before then.
+			//	'eb_available' reports whether the main stream is using OBS multitrack, without which
+			//		"enhanced_broadcasting" mode has nothing to attach to.
+			{"dualoutput_getState", JS_DUALOUTPUT_GET_STATE},
+
+			// .(@function(arg1), @bool_enabled)
+			//	Shows/hides the vertical docks and gates streaming. The canvas stays registered either way,
+			//		so its scenes survive a round trip through disabled.
+			//	Disabling is refused while the main stream is running in "enhanced_broadcasting" mode: OBS
+			//		picked the canvas up when it prepared that stream and will not let go mid-stream, so
+			//		reporting it disabled would be a lie. Stop the main stream first.
+			{"dualoutput_setEnabled", JS_DUALOUTPUT_SET_ENABLED},
+
+			// .(@function(arg1), @int_width, @int_height)
+			//	Width is aligned to 4 and height to 2, so the applied size can differ from what was asked for.
+			//		Example arg1 = { "width": 1080, "height": 1920 }
+			{"dualoutput_setCanvasSize", JS_DUALOUTPUT_SET_CANVAS_SIZE},
+
+			// .(@function(arg1), @str_mode)
+			//	"rtmp" - our own RTMP output sends the canvas, configured by dualoutput_setStreamSettings.
+			//	"enhanced_broadcasting" - the canvas is handed to OBS as its Additional Canvas and the main
+			//		stream carries it; our own output is stopped and dualoutput_startStream is refused.
+			//	Only one of the two ever runs: both at once would encode and send the canvas twice.
+			//	Refused while the main stream is running, including while it is still connecting - OBS reads
+			//		the canvas claim once when it prepares the stream, so a switch after that point cannot
+			//		take effect and would let both outputs send at once. Stop the main stream first.
+			{"dualoutput_setOutputMode", JS_DUALOUTPUT_SET_OUTPUT_MODE},
+
+			// .(@function(arg1), @server, @key, @bool_use_auth, @username, @password, @encoderId, @int_videoBitrate, @int_audioBitrate, @int_audioTrack, @bool_autoStart)
+			//	'server' is any RTMP url, so a platform ingest or the Streamlabs multistream endpoint both work.
+			//	'encoderId' is an obs encoder id ("obs_x264", "jim_nvenc", ...); it falls back to obs_x264 if unavailable.
+			//	'audioTrack' is 1-based and selects which of the main audio mixes to encode - there is no separate vertical audio.
+			//		Out of range is an error rather than a clamp, so the reported track is always the one encoded.
+			//	Every argument is optional and presence is what counts: pass one and it is applied, leave it out
+			//		(undefined) and the stored value is kept, so a partial update is safe. Nothing is inferred from
+			//		the value itself - "" clears a stored string, and a bitrate of 0 is an error rather than ignored.
+			//		'encoderId' is the exception, having no meaningful empty value; "" leaves it alone.
+			//	'autoStart' starts and stops this output with the main OBS stream.
+			//	Note: these settings live in the scene collection, so that each collection can stream
+			//		somewhere different - which means 'key' and 'authPassword' are written into the
+			//		collection json in clear text. Exporting or sharing a scene collection therefore
+			//		discloses them. OBS's own stream key lives in the profile and is not affected.
+			{"dualoutput_setStreamSettings", JS_DUALOUTPUT_SET_STREAM_SETTINGS},
+
+			// .(@function(arg1))
+			//	Returns json of server, key, use_auth, username, password, encoder_id, video_bitrate, audio_bitrate, audio_track, auto_start
+			{"dualoutput_getStreamSettings", JS_DUALOUTPUT_GET_STREAM_SETTINGS},
+
+			// .(@function(arg1))
+			//	Only meaningful in "rtmp" mode. Returns as soon as the output is accepted, not once connected -
+			//		poll dualoutput_getState for the outcome.
+			//		Example arg1 = { "stream_state": "starting" }
+			{"dualoutput_startStream", JS_DUALOUTPUT_START_STREAM},
+
+			// .(@function(arg1))
+			//		Example arg1 = { "stream_state": "stopping" }
+			{"dualoutput_stopStream", JS_DUALOUTPUT_STOP_STREAM},
+
+			// .(@function(arg1), @sceneName)
+			//	Removes a scene from the vertical canvas. Fails on the last remaining scene.
+			{"dualoutput_removeScene", JS_DUALOUTPUT_REMOVE_SCENE},
 
 			/***
 			* Browser sources
