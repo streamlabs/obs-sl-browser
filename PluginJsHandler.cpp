@@ -20,6 +20,7 @@
 #include <functional>
 #include <codecvt>
 #include <filesystem>
+#include <memory>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -155,24 +156,25 @@ void PluginJsHandler::freezeCheckThread()
 {
 	while (m_running)
 	{
-		std::atomic<bool> threadActive = true;
+		// Shared so the detached probe can outlive this iteration while the UI is still frozen.
+		auto threadActive = std::make_shared<std::atomic<bool>>(true);
 
-		std::thread([&] {
+		std::thread([threadActive] {
 			QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 			QMetaObject::invokeMethod(mainWindow, [mainWindow]() { printf("0"); }, Qt::BlockingQueuedConnection);
-			threadActive = false;
+			*threadActive = false;
 		}).detach();
 
 		auto timeStart = std::chrono::steady_clock::now();
 
-		while (threadActive)
+		while (*threadActive && m_running)
 		{
 			auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - timeStart).count();
 
 			if (elapsedTime > 30000)
 			{
 				blog(LOG_ERROR, "PluginJsHandler::freezeCheckThread - UI seems frozen.");
-				int result = MessageBoxA(0, "The UI is not responding.\nWould you like to try and close the program?", "Frozen", MB_YESNO | MB_ICONERROR);
+				int result = MessageBoxA(0, "The UI is not responding.\nForce OBS to close? A crash report will be written.", "Frozen", MB_YESNO | MB_ICONERROR);
 
 				if (result == IDYES)
 				{
@@ -181,7 +183,11 @@ void PluginJsHandler::freezeCheckThread()
 					abort();
 				}
 
-				return;
+				// Keep monitoring, but don't ask again until this freeze is over.
+				while (*threadActive && m_running)
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+				break;
 			}
 
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
