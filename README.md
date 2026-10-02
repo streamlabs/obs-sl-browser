@@ -23,3 +23,5 @@ A revision number covers all version branches together. State lives in [`meta_pu
 3. **Create Internal Meta** (GitHub Action, run on `main`): writes the built revisions to `meta/internal_meta.json`. For an internal build, stop here and test.
 4. **Publish** (GitHub Action, run on `main`): uploads per-branch metadata `meta/rev<N>_<branch>.json` and packages. It sets `new_release_rev = N` and `next_rev = N + 1`. It fails unless every version branch HEAD has a signed build, so don't push to version branches between steps 2 and 4. Set `chance_get_new` to 0 first; otherwise that share of users gets revision N immediately.
 5. **Roll Out** (GitHub Action): This action sets the rollout fields of `meta_publish.json`. A blank revision keeps its current value, and a revision is refused unless it's published for every version branch.
+
+Trigger only one release workflow (Publish, Create Internal Meta, increment, Roll Out) at a time: GitHub keeps one pending run per concurrency group, so a third queued run is silently dropped.
