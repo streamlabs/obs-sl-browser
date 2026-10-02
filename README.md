@@ -12,26 +12,16 @@ Defining SL_PLUGIN_DEFAULT_URL as an env variable will override the default URL 
 
 ## Commits and PRs
 
-- Merge changes that are intended to affect all version branches into `main`.
-- To apply these changes to other version branches:
-  - Checkout and update the local `main` branch.
-  - Run `.\ci\rebase.ps1`.
- 
-## Building All Versions to AWS
+Merge changes meant for every OBS version into `main`. Each OBS version has its own branch (e.g. `32.1.1`), listed in [`obsversions_internal.json`](https://slobs-cdn.streamlabs.com/obsplugin/obsversions_internal.json).
 
-- Run `./ci/start_builds.ps1` with a parameter for your GitHub PAT.
+## Releasing
 
-## Creating Internal Builds
+A revision number covers all version branches together. State lives in [`meta_publish.json`](https://slobs-cdn.streamlabs.com/obsplugin/meta_publish.json).
 
-To create internal builds, simply follow the publishing steps below and then stop after finishing 'Create Internal Meta'.
+1. **Rebase**: on an up-to-date `main`, run `.\ci\rebase.ps1`. It merges `main` into every version branch and pushes.
+2. **Build all**: run `.\ci\start_builds.ps1 <GitHub PAT>`. It bumps `next_rev`, then runs `main.yml` on every version branch. Every build gets that revision.
+3. **Create Internal Meta** (GitHub Action, run on `main`): writes the built revisions to `meta/internal_meta.json`. For an internal build, stop here and test.
+4. **Publish** (GitHub Action, run on `main`): uploads per-branch metadata `meta/rev<N>_<branch>.json` and packages. It sets `new_release_rev = N` and `next_rev = N + 1`. It fails unless every version branch HEAD has a signed build, so don't push to version branches between steps 2 and 4. Set `chance_get_new` to 0 first; otherwise that share of users gets revision N immediately.
+5. **Roll Out** (GitHub Action): This action sets the rollout fields of `meta_publish.json`. A blank revision keeps its current value, and a revision is refused unless it's published for every version branch.
 
-## Publishing
-
-Always follow these steps in order
-
-1. Rebase
-2. Build All
-3. Run 'Create Internal Meta' github action
-4. Run 'Publish'
-
-After publishing, the public metadata that defines which revision is the latest needs to be updated. See updater service readme.
+Trigger only one release workflow (Publish, Create Internal Meta, increment, Roll Out) at a time: GitHub keeps one pending run per concurrency group, so a third queued run is silently dropped.
