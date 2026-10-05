@@ -634,10 +634,11 @@ public:
 			//	DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
 			{"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
 
-			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional), initScriptStr (optional))
+			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional), initScriptStr (optional), hideOnCloseBOOL (optional))
 			//		arg1 is called once the window and its browser exist, so every other tabs_* function can be used from then on. Example arg1 = {} or { "error": "." }
 			//		Until then, hide/show/resize/isHidden/executeJs/loadUrl/getWindowCefId on the uid answer { "error": "not ready" }
 			//		initScriptStr is run in the tab's main frame at the start of every document load (including reloads and navigations), after slabsTab is defined and before the page's own scripts. Empty means none
+			//		hideOnCloseBOOL false (default): when the user closes the window it is destroyed and main is sent kTabClosedMessage. true: it is only hidden, and main is not told
 			{"tabs_createWindow", JS_TABS_CREATE_WINDOW},
 
 			// .(@function(arg1), uidINT)
@@ -672,7 +673,7 @@ public:
 
 			// .(@function(arg1, arg2))
 			//		function is remembered internally and is not called on registration, only when a tab sends a message. It is given args 'string, uid' (The message, and the uid it came from)
-			//		When a tab window is closed by the user, it is destroyed and the function is called with the message kTabClosedMessage and the uid of the closed tab
+			//		When a tab window is closed by the user, it is destroyed and the function is called with the message kTabClosedMessage and the uid of the closed tab, unless the tab was created with hideOnClose
 			{"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
 
 			// .(@function(arg1))

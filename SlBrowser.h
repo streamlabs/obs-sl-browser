@@ -15,6 +15,7 @@ struct TabWindowOptions
 	std::string title;
 	std::string iconPath;
 	std::string initScript;
+	bool hideOnClose = false;
 
 	// Called on the CEF UI thread once the browser exists, or has failed to
 	std::function<void(const std::string &err)> onCreated;
@@ -35,6 +36,7 @@ struct BrowserElements
 	std::atomic<bool> hidden = true;
 
 	std::string initScript;
+	bool hideOnClose = false;
 	std::function<void(const std::string &err)> onCreated;
 
 	static void queueCleanupQtObj(QWidget *widget)
