@@ -18,7 +18,8 @@
  * this runs.
  */
 
-import { writeFileSync } from "node:fs";
+import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
 import { results, until } from "../../harness/suite.mjs";
@@ -93,6 +94,19 @@ export default {
 		// put it back afterwards.
 		const mainWasHidden = (await cdp.call("tabs_getIsWindowHidden", 0)).result === true;
 		if (mainWasHidden) await cdp.call("tabs_showWindow", 0);
+
+		// Icons are only taken from under %APPDATA%\StreamlabsOBS\, which is where the app store downloads them.
+		const appData = process.env.APPDATA;
+		const iconRoot = join(appData, "StreamlabsOBS");
+		const iconDirPath = join(iconRoot, `slt-icons-${Date.now()}`);
+		const outsidePath = join(appData, `slt-icon-outside-${Date.now()}.png`);
+		mkdirSync(iconDirPath, { recursive: true });
+		const iconFile = (name) => {
+			const f = join(iconDirPath, name);
+			writeFileSync(f, PNG);
+			return f;
+		};
+		const iconDir = { png: iconFile("icon.png") };
 
 		try {
 			/* ------------------------------------------------------------ surface --- */
@@ -418,11 +432,69 @@ export default {
 			});
 
 			await r.step("tabs_setIcon is accepted for a tab, and errors for an unknown uid", async () => {
-				const icon = join(workDir, "icon.png");
-				writeFileSync(icon, PNG);
-				const res = await cdp.call("tabs_setIcon", 101, icon);
+				const res = await cdp.call("tabs_setIcon", 101, iconDir.png);
 				if (isError(res) || res.__timeout) return JSON.stringify(res);
-				if (!isError(await cdp.call("tabs_setIcon", 999, icon))) return "an unknown uid did not error";
+				if (!isError(await cdp.call("tabs_setIcon", 999, iconDir.png))) return "an unknown uid did not error";
+			});
+
+			/* ----------------------------------------------------------- icon path rules --- */
+
+			await r.step("an icon outside %APPDATA%\StreamlabsOBS, with the wrong extension, or on a UNC or device path is an error", async () => {
+				writeFileSync(outsidePath, PNG);
+				const inside = (name) => iconFile(name);
+				const junction = join(iconDirPath, "link");
+				mkdirSync(workDir, { recursive: true });
+				writeFileSync(join(workDir, "outside.png"), PNG);
+				execFileSync("cmd.exe", ["/c", "mklink", "/J", junction, workDir], { stdio: "ignore" });
+
+				const bad = {
+					"a png in the work dir": join(workDir, "icon.png"),
+					"a png beside StreamlabsOBS": outsidePath,
+					"dot-dot out of StreamlabsOBS": join(iconRoot, "..", outsidePath.split("\\").pop()),
+					"through a junction": join(junction, "outside.png"),
+					"a UNC path": "\\127.0.0.1\share\a.png",
+					"a UNC path with forward slashes": "//127.0.0.1/share/a.png",
+					"a device path to a real icon": `\\?\${iconDir.png}`,
+					"a dot device path to a real icon": `\\.\${iconDir.png}`,
+					"a relative path": "icon.png",
+					"a missing file": join(iconDirPath, "missing.png"),
+					"an alternate data stream": `${iconDir.png}:stream`,
+					"an exe": inside("icon.exe"),
+					"a png.exe": inside("icon.png.exe"),
+					"an svg": inside("icon.svg"),
+					"a bmp": inside("icon.bmp"),
+					"a directory": iconDirPath,
+					"an empty path": "",
+				};
+				for (const [what, path] of Object.entries(bad)) {
+					const res = await cdp.call("tabs_setIcon", 101, path);
+					if (!isError(res)) return `tabs_setIcon accepted ${what}: ${JSON.stringify(res)}`;
+				}
+				for (const [what, path] of Object.entries(bad)) {
+					if (what === "an empty path") continue;
+					const res = await cdp.call("tabs_createWindow", 150, tabUrl(150), "icon", path);
+					if (!isError(res)) {
+						await cdp.call("tabs_destroyWindow", 150);
+						return `tabs_createWindow accepted ${what}: ${JSON.stringify(res)}`;
+					}
+				}
+				if ((await queryAll()).some((t) => t.uid === 150)) return "a refused create left uid 150 listed";
+			});
+
+			await r.step("icons .png, .ico, .jpg, .jpeg are accepted from inside the folder, in any letter case", async () => {
+				for (const name of ["ok.png", "ok.ico", "ok.jpg", "ok.jpeg", "OK.PNG"]) {
+					const f = iconFile(name);
+					const res = await cdp.call("tabs_setIcon", 101, f);
+					if (isError(res) || res.__timeout) return `${name}: ${JSON.stringify(res)}`;
+				}
+				const upper = iconDir.png.toUpperCase();
+				const res = await cdp.call("tabs_setIcon", 101, upper);
+				if (isError(res)) return `an upper-cased path was refused: ${JSON.stringify(res)}`;
+
+				const made = await createTab(151, "T151", "", [iconDir.png]);
+				if (isError(made)) return `tabs_createWindow with an icon: ${made.error}`;
+				await cdp.call("tabs_destroyWindow", 151);
+				created.delete(151);
 			});
 
 			/* --------------------------------------------------------------- messaging --- */
@@ -722,6 +794,8 @@ export default {
 			for (const uid of created) await cdp.call("tabs_destroyWindow", uid).catch(() => {});
 			for (const c of tabCdp.values()) c.close();
 			if (mainWasHidden) await cdp.call("tabs_hideWindow", 0).catch(() => {});
+			// Best effort: a junction is removed as a link, so its target is untouched.
+			try { rmSync(iconDirPath, { recursive: true, force: true }); rmSync(outsidePath, { force: true }); } catch { /* still in use */ }
 		}
 
 		await r.step("no tab windows are left", async () => {

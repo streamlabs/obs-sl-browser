@@ -643,6 +643,7 @@ public:
 			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional), initScriptStr (optional), hideOnCloseBOOL (optional))
 			//		arg1 is called once the window and its browser exist, so every other tabs_* function can be used from then on. Example arg1 = {} or { "error": "." }
 			//		Until then, hide/show/resize/isHidden/executeJs/loadUrl/getWindowCefId on the uid answer { "error": "not ready" }
+			//		iconpathStr must be an existing .png, .ico, .jpg or .jpeg file inside %APPDATA%\StreamlabsOBS\. Anything else, such as UNC or \\?\ paths, is an error. Empty means the default icon
 			//		url must be https on one of kTabAllowedOrigins (everything else, such as http, file:, data:, javascript: and http://absolute/, is an error), and the tab's main frame can only navigate to those origins. Subframes are not restricted
 			//		initScriptStr is run in the tab's main frame at the start of every document load (including reloads and navigations), after slabsTab is defined and before the page's own scripts. Empty means none
 			//		hideOnCloseBOOL false (default): when the user closes the window it is destroyed and main is sent kTabClosedMessage. true: it is only hidden, and main is not told
@@ -689,7 +690,7 @@ public:
 			{"tabs_queryAll", JS_TABS_QUERY_ALL},
 
 			// .(@function(arg1), uidINT, pathStr)
-			//		pathStr can be a .png path
+			//		pathStr is restricted as iconpathStr is for tabs_createWindow
 			{"tabs_setIcon", JS_TABS_SET_ICON},
 
 			// .(@function(arg1), uidINT, titleStr)

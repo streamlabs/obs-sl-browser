@@ -8,6 +8,7 @@
 #include <sstream>
 #include <thread>
 #include <mutex>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 
@@ -157,6 +158,57 @@ bool SlBrowser::isApprovedTabUrl(const std::string &url)
 	return !testOrigin.empty() && origin == testOrigin;
 }
 
+// Empty on success, with the canonical path in resolved
+std::string SlBrowser::resolveTabIconPath(const std::string &path, std::wstring &resolved) const
+{
+	namespace fs = std::filesystem;
+
+	const std::string err = "icon must be an existing .png, .ico, .jpg or .jpeg file inside %APPDATA%\\StreamlabsOBS";
+
+	const fs::path raw = fs::u8path(path);
+	const std::wstring &native = raw.native();
+
+	// UNC and \\?\ device paths: Qt would open them, and an SMB share would be sent the user's NTLM credentials
+	if (native.rfind(L"\\\\", 0) == 0 || native.rfind(L"//", 0) == 0)
+		return err;
+
+	// A colon is only ever a drive designator; anywhere else it names an alternate data stream
+	if (!raw.is_absolute() || native.find(L':', 2) != std::wstring::npos)
+		return err;
+
+	std::error_code ec;
+	const fs::path root = fs::canonical(getCacheDir(), ec);
+
+	if (ec)
+		return err;
+
+	const fs::path file = fs::canonical(raw, ec);
+
+	if (ec || !fs::is_regular_file(file, ec))
+		return err;
+
+	auto root_it = root.begin();
+	auto file_it = file.begin();
+
+	for (; root_it != root.end(); ++root_it, ++file_it)
+	{
+		if (file_it == file.end() || _wcsicmp(root_it->c_str(), file_it->c_str()) != 0)
+			return err;
+	}
+
+	if (file_it == file.end())
+		return err;
+
+	std::wstring ext = file.extension().wstring();
+	std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+
+	if (ext != L".png" && ext != L".ico" && ext != L".jpg" && ext != L".jpeg")
+		return err;
+
+	resolved = file.wstring();
+	return "";
+}
+
 std::string SlBrowser::registerBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements)
 {
 	std::lock_guard<std::mutex> g(m_mutex);
@@ -209,7 +261,7 @@ std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url
 			elements->widget->resize(1280, 720);
 
 			if (!iconPath.empty())
-				elements->widget->window()->setWindowIcon(QIcon(iconPath.c_str()));
+				elements->widget->window()->setWindowIcon(QIcon(QString::fromStdWString(iconPath)));
 
 			// The HWND is not made until the widget is shown at least once
 			elements->widget->showMinimized();
