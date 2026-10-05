@@ -245,7 +245,7 @@ void BrowserClient::SendMsgToReceiver(CefRefPtr<CefBrowser> target, const std::s
 	SendBrowserProcessMessage(target, PID_RENDERER, processMsg);
 }
 
-bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
+bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
 {
 	const std::string &name = message->GetName();
 	CefRefPtr<CefListValue> input_args = message->GetArgumentList();
@@ -254,6 +254,24 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		return false;
 
 	int funcid = input_args->GetInt(0);
+
+	// The renderer only binds what its role allows, but a compromised one can send any name
+	const bool allowedForRole = m_isMain ? (JavascriptApi::isPluginFunctionName(name) || JavascriptApi::isBrowserFunctionName(name)) : JavascriptApi::isBrowserTabFunctionName(name);
+
+	if (!allowedForRole || (JavascriptApi::isMainFrameOnlyFunctionName(name) && !frame->IsMain()))
+	{
+		if (funcid != 0)
+		{
+			CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
+			CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
+			execute_args->SetInt(0, funcid);
+			execute_args->SetString(1, Json(Json::object({{"error", "not permitted"}})).dump());
+
+			SendBrowserProcessMessage(browser, PID_RENDERER, msg);
+		}
+
+		return true;
+	}
 
 	if (JavascriptApi::isBrowserFunctionName(name) || JavascriptApi::isBrowserTabFunctionName(name))
 	{

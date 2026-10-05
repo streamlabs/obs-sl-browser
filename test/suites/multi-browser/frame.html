@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>multi browser frame</title>
+<body style="background:#302010;color:#fc9;font:13px monospace;margin:8px">
+<script src="/_harness/inpage.js"></script>
+<script>
+// Embedded as an iframe by suite.mjs, in the main page or in a tab, to report what a subframe is given.
+const WHO = new URLSearchParams(location.search).get('who') || '?';
+
+function report(event, data) {
+	return fetch(location.origin + '/report', {
+		method: 'POST',
+		headers: {'content-type': 'application/json'},
+		body: JSON.stringify({who: WHO, event: event, data: data})
+	}).catch(function (e) { return null; });
+}
+
+const g = window.slabsGlobal;
+const t = window.slabsTab;
+
+report('FRAME', {
+	href: location.href,
+	isTop: window === window.top,
+	slabsGlobalKeys: typeof g === 'object' ? Object.keys(g).sort() : null,
+	slabsTabKeys: typeof t === 'object' ? Object.keys(t).sort() : null
+});
+
+// A function that is still there must still work from here.
+if (g && typeof g.sl_getVersionInfo === 'function') {
+	__slt.call('sl_getVersionInfo').then(function (reply) { report('FRAME_CALL', {reply: reply}); });
+}
+</script>

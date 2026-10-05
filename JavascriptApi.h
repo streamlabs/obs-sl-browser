@@ -683,6 +683,7 @@ public:
 			// .(@function(arg1, arg2))
 			//		function is remembered internally and is not called on registration, only when a tab sends a message. It is given args 'string, uid' (The message, and the uid it came from)
 			//		When a tab window is closed by the user, it is destroyed and the function is called with the message kTabClosedMessage and the uid of the closed tab, unless the tab was created with hideOnClose
+			//		Only the main frame of a page can use this and the other tabs_* and tab_* functions; they are not defined in iframes, and calls that reach the browser process from an iframe, or from a browser of the wrong kind, are refused
 			{"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
 
 			// .(@function(arg1))
@@ -743,6 +744,12 @@ public:
 	{
 		auto ref = getBrowserTabsFunctionNames();
 		return ref.find(str) != ref.end();
+	}
+
+	// tabs_* and tab_* drive windows and the app channel, so only a page's own main frame may call them
+	static bool isMainFrameOnlyFunctionName(const std::string &str)
+	{
+		return str.rfind("tabs_", 0) == 0 || str.rfind("tab_", 0) == 0;
 	}
 
 	static JSFuncs getFunctionId(const std::string &funcName)
