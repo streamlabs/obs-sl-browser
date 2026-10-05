@@ -18,7 +18,7 @@
  * this runs.
  */
 
-import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
@@ -107,6 +107,15 @@ export default {
 			return f;
 		};
 		const iconDir = { png: iconFile("icon.png") };
+
+		// The cookie profiles this suite makes are named slt-*; earlier runs' are removed before this OBS has opened any.
+		const appsRoot = join(appData, "StreamlabsOBS_CEF_Cache", "apps");
+		const removeTestProfiles = () => {
+			for (const d of existsSync(appsRoot) ? readdirSync(appsRoot) : []) {
+				if (d.startsWith("app-slt-") || d.startsWith("app-_2e_2e_")) rmSync(join(appsRoot, d), { recursive: true, force: true });
+			}
+		};
+		try { removeTestProfiles(); } catch { /* left by a run that is still open */ }
 
 		try {
 			/* ------------------------------------------------------------ surface --- */
@@ -808,6 +817,129 @@ export default {
 				if ((await queryAll()).some((t) => t.uid === 131)) return "the tab is still listed";
 			});
 
+			/* ------------------------------------------------------------------ cookies --- */
+
+			// Every tab here loads from the harness's host, and so does main, so a cookie one of them
+			// sets is visible to any other that shares its profile.
+			const stamp = Date.now();
+			const cookiesOf = async (c) => {
+				try { return await c.evaluate("document.cookie"); } catch (e) { throw new Error(`reading cookies at ${await c.evaluate("location.href")}: ${e.message}`); }
+			};
+			const setCookie = (c, name, value = "1") => c.evaluate(`document.cookie = ${JSON.stringify(`${name}=${value}; path=/; max-age=3600`)}`);
+			const profileDir = (dir) => join(process.env.APPDATA, "StreamlabsOBS_CEF_Cache", "apps", dir);
+
+			async function openTab(uid, key) {
+				const res = await createTab(uid, `T${uid}`, `&c=${uid}`, key === undefined ? [] : ["", "", false, key]);
+				if (isError(res)) throw new Error(`tab ${uid}: ${res.error}`);
+				return attach(uid);
+			}
+
+			async function closeTab(uid) {
+				tabCdp.get(uid)?.close();
+				tabCdp.delete(uid);
+				await cdp.call("tabs_destroyWindow", uid);
+				created.delete(uid);
+			}
+
+			const keyA = `slt-${stamp}-a`;
+			const keyB = `slt-${stamp}-b`;
+
+			await r.step("a tab has its own cookies: not main's, not another key's, not a keyless tab's", async () => {
+				await cdp.evaluate(`document.cookie = "slt_main=1; path=/; max-age=3600"`);
+				if (!(await cookiesOf(cdp)).includes("slt_main=1")) return "main could not set its own cookie";
+
+				const a = await openTab(170, keyA);
+				if ((await cookiesOf(a)).includes("slt_main")) return "a tab with a key sees main's cookie";
+				await setCookie(a, "slt_a");
+
+				const b = await openTab(171, keyB);
+				const seenByB = await cookiesOf(b);
+				if (seenByB.includes("slt_main") || seenByB.includes("slt_a")) return `a tab with another key sees ${seenByB}`;
+				await setCookie(b, "slt_b");
+
+				const n1 = await openTab(172);
+				const seenByN1 = await cookiesOf(n1);
+				if (seenByN1.includes("slt_")) return `a tab with no key sees ${seenByN1}`;
+				await setCookie(n1, "slt_n");
+
+				const n2 = await openTab(173);
+				const seenByN2 = await cookiesOf(n2);
+				if (seenByN2.includes("slt_")) return `a second tab with no key sees ${seenByN2}`;
+
+				const mainSees = await cookiesOf(cdp);
+				if (mainSees.includes("slt_a") || mainSees.includes("slt_b") || mainSees.includes("slt_n")) return `main sees a tab's cookie: ${mainSees}`;
+
+				for (const uid of [170, 171, 172, 173]) await closeTab(uid);
+			});
+
+			await r.step("tabs with the same key share cookies, which outlive the tabs, while a keyless tab's do not", async () => {
+				const a1 = await openTab(174, keyA);
+				const a2 = await openTab(175, keyA);
+				if (!(await cookiesOf(a2)).includes("slt_a=1")) return `the second tab with key A sees ${await cookiesOf(a2)}`;
+				if ((await cookiesOf(a2)).includes("slt_b")) return "key A sees key B's cookie";
+				await setCookie(a1, "slt_shared", "x");
+				await settle(300);
+				if (!(await cookiesOf(a2)).includes("slt_shared=x")) return "a cookie set by one tab was not seen by the other with the same key";
+				await closeTab(174);
+				await closeTab(175);
+
+				const again = await openTab(176, keyA);
+				const seen = await cookiesOf(again);
+				if (!seen.includes("slt_a=1") || !seen.includes("slt_shared=x")) return `after every tab with key A was closed, a new one sees ${JSON.stringify(seen)}`;
+				await closeTab(176);
+
+				const keyless = await openTab(177);
+				const seenKeyless = await cookiesOf(keyless);
+				if (seenKeyless.includes("slt_")) return `a new keyless tab sees ${seenKeyless}; a keyless profile must not outlive its tab`;
+				await closeTab(177);
+			});
+
+			await r.step("a keyed tab's profile is a directory under the cache root, and keys that differ never share one", async () => {
+				const dirs = await until(async () => existsSync(profileDir(`app-${keyA}`)) || null, { timeoutMs: 15000, everyMs: 500 });
+				if (!dirs) return `no profile directory at ${profileDir(`app-${keyA}`)}`;
+
+				// Keys that would collide if they were only made filesystem-safe by dropping or replacing characters.
+				const keys = [`slt-${stamp}-K`, `slt-${stamp}-k`, `slt-${stamp}-k.`, `slt-${stamp}-k_`, `slt-${stamp}-k/`, `slt-${stamp}-k\\`];
+				for (const [i, key] of keys.entries()) {
+					const t = await openTab(180 + i, key);
+					const seen = await cookiesOf(t);
+					if (seen.includes("slt_k")) return `key ${JSON.stringify(key)} already sees ${seen}`;
+					await setCookie(t, "slt_k", String(i));
+					await closeTab(180 + i);
+				}
+				for (const [i, key] of keys.entries()) {
+					const t = await openTab(280 + i, key);
+					const seen = await cookiesOf(t);
+					if (seen !== `slt_k=${i}`) return `key ${JSON.stringify(key)} sees ${JSON.stringify(seen)}, expected only its own`;
+					await closeTab(280 + i);
+				}
+			});
+
+			await r.step("a context key cannot climb out of the cache root, and one over 64 bytes is an error", async () => {
+				const cacheRoot = join(process.env.APPDATA, "StreamlabsOBS_CEF_Cache");
+				const evil = `..\\..\\slt-escape-${stamp}`;
+				await openTab(190, `../../slt-escape-${stamp}`);
+				const escaped = `app-_2e_2e_2f_2e_2e_2fslt-escape-${stamp}`;
+				if (!(await until(async () => existsSync(profileDir(escaped)) || null, { timeoutMs: 15000, everyMs: 500 }))) return `the escaped profile ${profileDir(escaped)} was not made`;
+				await closeTab(190);
+				await openTab(191, evil);
+				await closeTab(191);
+				for (const where of [join(cacheRoot, `slt-escape-${stamp}`), join(process.env.APPDATA, `slt-escape-${stamp}`), join(cacheRoot, "apps", `slt-escape-${stamp}`)]) {
+					if (existsSync(where)) return `a profile was created at ${where}`;
+				}
+
+				const long = await cdp.call("tabs_createWindow", 192, tabUrl(192), "long", "", "", false, `slt-${"k".repeat(61)}`);
+				if (!isError(long)) {
+					await cdp.call("tabs_destroyWindow", 192);
+					return `a 65 byte key was accepted: ${JSON.stringify(long)}`;
+				}
+				if ((await queryAll()).some((t) => t.uid === 192)) return "a refused create left uid 192 listed";
+				const edge = await createTab(192, "T192", "", ["", "", false, `slt-${"k".repeat(60)}`]);
+				if (isError(edge)) return `a 64 byte key was refused: ${edge.error}`;
+				await cdp.call("tabs_destroyWindow", 192);
+				created.delete(192);
+			});
+
 			/* ------------------------------------------------------------------ churn --- */
 
 			await r.step("create and destroy churn leaves the proxy answering", async () => {
@@ -852,7 +984,7 @@ export default {
 			for (const c of tabCdp.values()) c.close();
 			if (mainWasHidden) await cdp.call("tabs_hideWindow", 0).catch(() => {});
 			// Best effort: a junction is removed as a link, so its target is untouched.
-			try { rmSync(iconDirPath, { recursive: true, force: true }); rmSync(outsidePath, { force: true }); } catch { /* still in use */ }
+			try { rmSync(iconDirPath, { recursive: true, force: true }); rmSync(outsidePath, { force: true }); removeTestProfiles(); } catch { /* still in use */ }
 		}
 
 		await r.step("no tab windows are left", async () => {
