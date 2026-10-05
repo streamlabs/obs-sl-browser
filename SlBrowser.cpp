@@ -144,13 +144,14 @@ void SlBrowser::createCefBrowser(const int32_t uuid, std::shared_ptr<BrowserElem
 	CefPostTask(TID_UI, base::BindOnce(&createCefBrowser_internal, browserElements, url, startHidden, keepOnTop));
 }
 
-std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url, const std::string &title, const std::string &iconPath)
+std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url, const std::string &title, const std::string &iconPath, std::function<void(const std::string &err)> onCreated)
 {
 	if (uid == 0)
 		return "uid 0 is the main browser";
 
 	// Reserved now so a duplicate uid is rejected in the reply; the widget has to be built on the Qt thread
 	auto elements = std::make_shared<BrowserElements>();
+	elements->onCreated = std::move(onCreated);
 	const std::string err = registerBrowser(uid, elements);
 
 	if (!err.empty())
@@ -200,6 +201,16 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 
 	browserElements->browser = CefBrowserHost::CreateBrowserSync(window_info, browserElements->client.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), request_context);
 
+	if (!browserElements->browser)
+	{
+		if (browserElements->onCreated)
+			browserElements->onCreated("failed to create the browser");
+
+		browserElements->onCreated = nullptr;
+		SlBrowser::instance().queueDestroyCefBrowser(browserElements->uid);
+		return;
+	}
+
 	if (startHidden)
 	{
 		browserElements->widget->hide();
@@ -223,6 +234,15 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 				.detach();
 		}
 	}
+
+	// The main widget was shown before it had elements to report to
+	browserElements->hidden = browserElements->widget->isHidden();
+	browserElements->ready = true;
+
+	if (browserElements->onCreated)
+		browserElements->onCreated("");
+
+	browserElements->onCreated = nullptr;
 }
 
 void SlBrowser::browserInit()
@@ -438,7 +458,7 @@ int32_t SlBrowser::getUuidFromCefId(const int32_t cefId)
 
 	for (auto &itr : m_browsers)
 	{
-		if (itr.second && itr.second->browser && itr.second->browser->GetIdentifier() == cefId)
+		if (itr.second && itr.second->ready && itr.second->browser && itr.second->browser->GetIdentifier() == cefId)
 			return itr.first;
 	}
 
@@ -449,7 +469,7 @@ int32_t SlBrowser::getBrowserCefId(const int32_t uid)
 {
 	if (auto ptr = getBrowserElements(uid))
 	{
-		if (ptr->browser)
+		if (ptr->ready && ptr->browser)
 			return ptr->browser->GetIdentifier();
 	}
 

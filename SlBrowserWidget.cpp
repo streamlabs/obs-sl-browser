@@ -78,6 +78,17 @@ void SlBrowserWidget::resizeEvent(QResizeEvent *event) /*override*/
 void SlBrowserWidget::showEvent(QShowEvent *event)
 {
 	QWidget::showEvent(event);
+
+	if (auto elements = m_elements.lock())
+		elements->hidden = isHidden();
+}
+
+void SlBrowserWidget::hideEvent(QHideEvent *event)
+{
+	QWidget::hideEvent(event);
+
+	if (auto elements = m_elements.lock())
+		elements->hidden = isHidden();
 }
 
 QPaintEngine *SlBrowserWidget::paintEngine() const
