@@ -144,14 +144,15 @@ void SlBrowser::createCefBrowser(const int32_t uuid, std::shared_ptr<BrowserElem
 	CefPostTask(TID_UI, base::BindOnce(&createCefBrowser_internal, browserElements, url, startHidden, keepOnTop));
 }
 
-std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url, const std::string &title, const std::string &iconPath, std::function<void(const std::string &err)> onCreated)
+std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url, TabWindowOptions options)
 {
 	if (uid == 0)
 		return "uid 0 is the main browser";
 
 	// Reserved now so a duplicate uid is rejected in the reply; the widget has to be built on the Qt thread
 	auto elements = std::make_shared<BrowserElements>();
-	elements->onCreated = std::move(onCreated);
+	elements->initScript = std::move(options.initScript);
+	elements->onCreated = std::move(options.onCreated);
 	const std::string err = registerBrowser(uid, elements);
 
 	if (!err.empty())
@@ -159,7 +160,7 @@ std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url
 
 	QMetaObject::invokeMethod(
 		qApp,
-		[elements, url, title, iconPath]() {
+		[elements, url, title = std::move(options.title), iconPath = std::move(options.iconPath)]() {
 			elements->widget = new SlBrowserWidget;
 			elements->widget->setElements(elements);
 			elements->widget->setWindowTitle(title.c_str());
@@ -199,7 +200,16 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 	// Tabs share the global request context, and so share cookies and login with the main browser
 	CefRefPtr<CefRequestContext> request_context = CefRequestContext::GetGlobalContext();
 
-	browserElements->browser = CefBrowserHost::CreateBrowserSync(window_info, browserElements->client.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), request_context);
+	// Reaches the renderer's OnBrowserCreated, which runs the script in every main-frame document of the tab
+	CefRefPtr<CefDictionaryValue> extra_info;
+
+	if (!browserElements->initScript.empty())
+	{
+		extra_info = CefDictionaryValue::Create();
+		extra_info->SetString("initScript", browserElements->initScript);
+	}
+
+	browserElements->browser = CefBrowserHost::CreateBrowserSync(window_info, browserElements->client.get(), url, browser_settings, extra_info, request_context);
 
 	if (!browserElements->browser)
 	{

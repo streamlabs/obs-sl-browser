@@ -119,21 +119,22 @@ bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_
 
 	int uid = argsWithoutFunc[0]->GetInt();
 	std::string url = argsWithoutFunc[1]->GetString();
-	std::string title = "Streamlabs App Store";
-	std::string iconPath;
+	TabWindowOptions options;
+	options.title = "Streamlabs App Store";
 
 	if (argsWithoutFunc.size() >= 3)
-		title = argsWithoutFunc[2]->GetString();
+		options.title = argsWithoutFunc[2]->GetString();
 
 	if (argsWithoutFunc.size() >= 4)
-		iconPath = argsWithoutFunc[3]->GetString();
+		options.iconPath = argsWithoutFunc[3]->GetString();
+
+	if (argsWithoutFunc.size() >= 5)
+		options.initScript = argsWithoutFunc[4]->GetString();
 
 	// The reply waits for the browser, so the caller can use the tab as soon as it hears back
-	std::function<void(const std::string &err)> onCreated;
-
 	if (funcId != 0)
 	{
-		onCreated = [browser, funcId](const std::string &err) {
+		options.onCreated = [browser, funcId](const std::string &err) {
 			CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
 			CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
 			execute_args->SetInt(0, funcId);
@@ -143,7 +144,7 @@ bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_
 		};
 	}
 
-	std::string err = SlBrowser::instance().createTabWindow(uid, url, title, iconPath, onCreated);
+	std::string err = SlBrowser::instance().createTabWindow(uid, url, std::move(options));
 
 	if (!err.empty())
 	{

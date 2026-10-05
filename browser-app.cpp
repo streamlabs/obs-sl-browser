@@ -58,6 +58,21 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 	command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:9123");
 }
 
+void BrowserApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionaryValue> extra_info)
+{
+	if (!extra_info || !extra_info->HasKey("initScript"))
+		return;
+
+	std::lock_guard<std::mutex> grd(m_initScriptMutex);
+	m_initScripts[browser->GetIdentifier()] = extra_info->GetString("initScript");
+}
+
+void BrowserApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
+{
+	std::lock_guard<std::mutex> grd(m_initScriptMutex);
+	m_initScripts.erase(browser->GetIdentifier());
+}
+
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
 	if (isMainBrowser(browser))
@@ -82,6 +97,27 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 
 		for (auto &itr : JavascriptApi::getBrowserTabsFunctionNames())
 			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		if (frame->IsMain())
+		{
+			std::string initScript;
+
+			{
+				std::lock_guard<std::mutex> grd(m_initScriptMutex);
+				auto itr = m_initScripts.find(browser->GetIdentifier());
+
+				if (itr != m_initScripts.end())
+					initScript = itr->second;
+			}
+
+			// Eval, not ExecuteJavaScript: it runs now, before any script of the page
+			if (!initScript.empty())
+			{
+				CefRefPtr<CefV8Value> retval;
+				CefRefPtr<CefV8Exception> exception;
+				context->Eval(initScript, frame->GetURL(), 0, retval, exception);
+			}
+		}
 	}
 }
 

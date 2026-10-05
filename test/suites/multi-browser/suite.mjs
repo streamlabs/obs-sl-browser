@@ -64,6 +64,7 @@ export default {
 		const tabCdp = new Map();
 		const tabUrl = (uid, extra = "") => `${observer.origin}/tab.html?uid=${uid}${extra}`;
 		const tabEvents = (uid, event) => observer.events.filter((e) => e.who === `tab${uid}` && e.event === event);
+		const loads = (uid) => tabEvents(uid, "LOADED");
 		const lastState = (uid) => tabEvents(uid, "RESIZED").concat(tabEvents(uid, "LOADED"))
 			.sort((a, b) => a.t.localeCompare(b.t)).at(-1)?.data;
 
@@ -71,8 +72,8 @@ export default {
 		const mainSize = () => cdp.evaluate("({w: window.innerWidth, h: window.innerHeight})");
 
 		// A create is only done when the tab's page has loaded and reported in.
-		async function createTab(uid, title, extra = "") {
-			const res = await cdp.call("tabs_createWindow", uid, tabUrl(uid, extra), title);
+		async function createTab(uid, title, extra = "", moreArgs = []) {
+			const res = await cdp.call("tabs_createWindow", uid, tabUrl(uid, extra), title, ...moreArgs);
 			if (res.__missing || res.__timeout || isError(res)) return res;
 			created.add(uid);
 			const loaded = await observer.waitFor((evs) => evs.some((e) => e.who === `tab${uid}` && e.event === "LOADED" && e.data?.href === tabUrl(uid, extra)), { timeoutMs: 60000 });
@@ -311,6 +312,70 @@ export default {
 				if (after.w !== before.w || after.h !== before.h) return `main changed from ${before.w}x${before.h} to ${after.w}x${after.h}`;
 				await cdp.call("tabs_destroyWindow", 112);
 				created.delete(112);
+			});
+
+			/* ----------------------------------------------------------- init script --- */
+
+			const INIT = "window.__slInit = (window.__slInit || 0) + 1; window.__slInitTab = typeof window.slabsTab;";
+
+			await r.step("an initScript runs in the tab before the page's own scripts, once slabsTab exists", async () => {
+				const res = await createTab(120, "T120", "", ["", INIT]);
+				if (isError(res)) return res.error;
+				const s = loads(120).at(-1).data;
+				if (s.initAtStart !== 1) return `the page saw init count ${s.initAtStart} when its own script started, expected 1`;
+				if (s.initSawSlabsTab !== "object") return `slabsTab was ${s.initSawSlabsTab} when the script ran`;
+				if (s.hasSlabsGlobal) return "the tab reported slabsGlobal";
+			});
+
+			await r.step("the initScript runs again after a reload, after tabs_loadUrl, and after the page navigates itself", async () => {
+				const loadsBefore = () => loads(120).length;
+				const next = (n) => observer.waitFor(() => loads(120).length >= n, { timeoutMs: 30000 });
+
+				let n = loadsBefore();
+				if (isError(await cdp.call("tabs_executeJs", 120, "location.reload()"))) return "reload errored";
+				if (!(await next(n + 1))) return "no load after location.reload()";
+				let s = loads(120).at(-1).data;
+				if (s.initAtStart !== 1) return `after reload the page saw init count ${s.initAtStart}, expected 1`;
+
+				n = loadsBefore();
+				if (isError(await cdp.call("tabs_loadUrl", 120, tabUrl(120, "&nav=5")))) return "loadUrl errored";
+				if (!(await next(n + 1))) return "no load after tabs_loadUrl";
+				s = loads(120).at(-1).data;
+				if (s.nav !== "5" || s.initAtStart !== 1) return `after loadUrl: nav ${s.nav}, init count ${s.initAtStart}`;
+
+				n = loadsBefore();
+				if (isError(await cdp.call("tabs_executeJs", 120, `location.href = ${JSON.stringify(tabUrl(120, "&nav=6"))}`))) return "navigate errored";
+				if (!(await next(n + 1))) return "no load after the page navigated itself";
+				s = loads(120).at(-1).data;
+				if (s.nav !== "6" || s.initAtStart !== 1) return `after self navigation: nav ${s.nav}, init count ${s.initAtStart}`;
+
+				await cdp.call("tabs_destroyWindow", 120);
+				created.delete(120);
+			});
+
+			await r.step("a throwing initScript does not stop the page, and a large one runs", async () => {
+				const bad = await createTab(121, "T121", "", ["", "throw new Error('init failed')"]);
+				if (isError(bad)) return `throwing script: ${bad.error}`;
+				const keys = loads(121).at(-1).data.slabsTabKeys;
+				if (JSON.stringify(keys) !== JSON.stringify(TAB_KEYS)) return `slabsTab keys were ${JSON.stringify(keys)}`;
+				await cdp.call("tabs_destroyWindow", 121);
+				created.delete(121);
+
+				const big = `/*${"x".repeat(200000)}*/ ${INIT}`;
+				const res = await createTab(122, "T122", "", ["", big]);
+				if (isError(res)) return `large script: ${res.error}`;
+				if (loads(122).at(-1).data.initAtStart !== 1) return "the 200 KB script did not run";
+				await cdp.call("tabs_destroyWindow", 122);
+				created.delete(122);
+			});
+
+			await r.step("without an initScript nothing is run, and a tab does not inherit another's", async () => {
+				const res = await createTab(123, "T123");
+				if (isError(res)) return res.error;
+				const s = loads(123).at(-1).data;
+				if (s.initAtStart !== null || s.init !== null) return `unexpected init state ${JSON.stringify(s)}`;
+				await cdp.call("tabs_destroyWindow", 123);
+				created.delete(123);
 			});
 
 			/* ------------------------------------------------------------------ resize --- */
