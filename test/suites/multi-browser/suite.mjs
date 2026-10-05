@@ -413,6 +413,34 @@ export default {
 				created.delete(123);
 			});
 
+			await r.step("a flood of resize, hide and show calls made at once leaves the tab and the proxy working", async () => {
+				const res = await createTab(114, "T114");
+				if (isError(res)) return res.error;
+				const calls = [];
+				for (let i = 0; i < 300; i++) {
+					calls.push(["tabs_resizeWindow", 114, 400 + ((i * 37) % 500), 300 + ((i * 53) % 400)]);
+					if (i % 5 === 0) calls.push(["tabs_hideWindow", 114]);
+					if (i % 7 === 0) calls.push(["tabs_showWindow", 114]);
+					if (i % 3 === 0) calls.push(["tabs_getIsWindowHidden", 114]);
+				}
+				const replies = await cdp.evaluate(`Promise.all(${JSON.stringify(calls)}.map((c) => __slt.call(...c)))`, { awaitPromise: true });
+				const bad = replies.findIndex((x) => isError(x) || x.__timeout);
+				if (bad !== -1) return `call ${bad} (${calls[bad][0]}) answered ${JSON.stringify(replies[bad])}`;
+
+				if (isError(await cdp.call("tabs_showWindow", 114))) return "show errored afterwards";
+				if (isError(await cdp.call("tabs_resizeWindow", 114, 700, 450))) return "resize errored afterwards";
+				const near = (v, want) => Math.abs(v - want) <= 24;
+				const ok = await observer.waitFor(() => {
+					const s = lastState(114);
+					return s && near(s.innerWidth, 700) && near(s.innerHeight, 450);
+				}, { timeoutMs: 15000 });
+				if (!ok) return `the tab ended at ${lastState(114)?.innerWidth}x${lastState(114)?.innerHeight}, not 700x450`;
+				const v = await cdp.call("sl_getVersionInfo");
+				if (v.__timeout || v.__missing) return "the proxy stopped answering";
+				await cdp.call("tabs_destroyWindow", 114);
+				created.delete(114);
+			});
+
 			/* ------------------------------------------------------------------ resize --- */
 
 			await r.step("tabs_resizeWindow resizes that tab to width x height, and leaves main alone", async () => {
