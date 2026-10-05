@@ -634,7 +634,10 @@ public:
 			//	DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
 			{"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
 
-			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional))
+			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional), initScriptStr (optional))
+			//		arg1 is called once the window and its browser exist, so every other tabs_* function can be used from then on. Example arg1 = {} or { "error": "." }
+			//		Until then, hide/show/resize/isHidden/executeJs/loadUrl/getWindowCefId on the uid answer { "error": "not ready" }
+			//		initScriptStr is run in the tab's main frame at the start of every document load (including reloads and navigations), after slabsTab is defined and before the page's own scripts. Empty means none
 			{"tabs_createWindow", JS_TABS_CREATE_WINDOW},
 
 			// .(@function(arg1), uidINT)
