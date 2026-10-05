@@ -437,6 +437,63 @@ export default {
 				if (!isError(await cdp.call("tabs_setIcon", 999, iconDir.png))) return "an unknown uid did not error";
 			});
 
+			/* ------------------------------------------------------------- iframe gating --- */
+
+			const otherOrigin = observer.origin.replace("127.0.0.1", "localhost");
+			const FRAME_ORIGINS = [["same-origin", observer.origin], ["cross-origin", otherOrigin]];
+			const frameReport = (who, event) => observer.events.find((e) => e.who === who && e.event === event)?.data;
+			const addFrame = (page, who, origin) => page.evaluate(`(() => { const f = document.createElement("iframe"); f.id = ${JSON.stringify(who)}; f.src = ${JSON.stringify(`${origin}/frame.html?who=${who}`)}; document.body.appendChild(f); return true; })()`);
+			const hasTabApi = (keys) => (keys || []).some((k) => k.startsWith("tabs_") || k.startsWith("tab_"));
+
+			await r.step("an iframe in the main page has no tabs_* or tab_*, but keeps the rest of slabsGlobal", async () => {
+				for (const [label, origin] of FRAME_ORIGINS) {
+					const who = `main-${label}-frame`;
+					await addFrame(cdp, who, origin);
+					// A cross-origin iframe is in another renderer process, which no reply is routed to, so only same-origin can be called.
+					const last = label === "same-origin" ? "FRAME_CALL" : "FRAME";
+					if (!(await observer.waitFor((evs) => evs.some((e) => e.who === who && e.event === last), { timeoutMs: 30000 }))) return `${label}: the iframe never reported`;
+					const f = frameReport(who, "FRAME");
+					if (f.isTop) return `${label}: the report came from the top frame`;
+					if (!f.slabsGlobalKeys) return `${label}: the iframe has no slabsGlobal at all`;
+					if (hasTabApi(f.slabsGlobalKeys)) return `${label}: the iframe has ${f.slabsGlobalKeys.filter((k) => k.startsWith("tab")).join(", ")}`;
+					if (!f.slabsGlobalKeys.includes("sl_getVersionInfo")) return `${label}: the iframe lost sl_getVersionInfo`;
+					if (f.slabsTabKeys) return `${label}: the iframe has slabsTab`;
+					if (label === "same-origin") {
+						const reply = frameReport(who, "FRAME_CALL").reply;
+						if (reply.__missing || reply.__timeout || isError(reply)) return `${label}: sl_getVersionInfo from the iframe answered ${JSON.stringify(reply)}`;
+					}
+					await cdp.evaluate(`document.getElementById(${JSON.stringify(who)}).remove()`);
+				}
+				// The top frame is unaffected.
+				const names = await cdp.evaluate("__slt.names()");
+				const missing = TABS_NAMES.filter((n) => !names.includes(n));
+				if (missing.length) return `the main frame lost: ${missing.join(", ")}`;
+			});
+
+			await r.step("an iframe in a tab has neither slabsTab nor slabsGlobal, and a cross-origin one still loads", async () => {
+				const res = await createTab(160, "T160");
+				if (isError(res)) return res.error;
+				const t = await attach(160);
+
+				for (const [label, origin] of FRAME_ORIGINS) {
+					const who = `tab-${label}-frame`;
+					await addFrame(t, who, origin);
+					if (!(await observer.waitFor((evs) => evs.some((e) => e.who === who && e.event === "FRAME"), { timeoutMs: 30000 }))) return `${label}: the iframe never loaded`;
+					const f = frameReport(who, "FRAME");
+					if (f.isTop) return `${label}: the report came from the top frame`;
+					if (f.slabsGlobalKeys) return `${label}: the iframe has slabsGlobal`;
+					if (f.slabsTabKeys) return `${label}: the iframe has slabsTab: ${JSON.stringify(f.slabsTabKeys)}`;
+				}
+
+				// The tab's own top frame keeps its api.
+				const keys = await t.evaluate("Object.keys(window.slabsTab).sort()");
+				if (JSON.stringify(keys) !== JSON.stringify(TAB_KEYS)) return `the top frame's slabsTab keys were ${JSON.stringify(keys)}`;
+				t.close();
+				tabCdp.delete(160);
+				await cdp.call("tabs_destroyWindow", 160);
+				created.delete(160);
+			});
+
 			/* ----------------------------------------------------------- icon path rules --- */
 
 			await r.step("an icon outside %APPDATA%\StreamlabsOBS, with the wrong extension, or on a UNC or device path is an error", async () => {
