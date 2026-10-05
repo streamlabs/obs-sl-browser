@@ -496,7 +496,7 @@ export default {
 
 			/* ----------------------------------------------------------- icon path rules --- */
 
-			await r.step("an icon outside %APPDATA%\StreamlabsOBS, with the wrong extension, or on a UNC or device path is an error", async () => {
+			await r.step("an icon outside %APPDATA%\\StreamlabsOBS, with the wrong extension, or on a UNC or device path is an error", async () => {
 				writeFileSync(outsidePath, PNG);
 				const inside = (name) => iconFile(name);
 				const junction = join(iconDirPath, "link");
@@ -509,10 +509,10 @@ export default {
 					"a png beside StreamlabsOBS": outsidePath,
 					"dot-dot out of StreamlabsOBS": join(iconRoot, "..", outsidePath.split("\\").pop()),
 					"through a junction": join(junction, "outside.png"),
-					"a UNC path": "\\127.0.0.1\share\a.png",
+					"a UNC path": "\\\\127.0.0.1\\share\\a.png",
 					"a UNC path with forward slashes": "//127.0.0.1/share/a.png",
-					"a device path to a real icon": `\\?\${iconDir.png}`,
-					"a dot device path to a real icon": `\\.\${iconDir.png}`,
+					"a device path to a real icon": `\\\\?\\${iconDir.png}`,
+					"a dot device path to a real icon": `\\\\.\\${iconDir.png}`,
 					"a relative path": "icon.png",
 					"a missing file": join(iconDirPath, "missing.png"),
 					"an alternate data stream": `${iconDir.png}:stream`,
