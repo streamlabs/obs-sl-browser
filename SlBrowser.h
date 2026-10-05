@@ -2,34 +2,64 @@
 
 #include "browser-client.hpp"
 #include "browser-app.hpp"
+#include "SlBrowserWidget.h"
 
 #include <QWidget>
+#include <map>
+
+struct BrowserElements
+{
+	~BrowserElements();
+	int32_t uid = 0;
+	SlBrowserWidget *widget = nullptr;
+	CefRefPtr<CefBrowser> browser = nullptr;
+	CefRefPtr<BrowserClient> client = nullptr;
+
+	static void queueCleanupQtObj(QWidget *widget)
+	{
+		if (widget != nullptr)
+		{
+			QMetaObject::invokeMethod(widget, "deleteLater", Qt::QueuedConnection);
+		}
+	}
+};
 
 class SlBrowser
 {
 public:
-	void run(int argc, char *argv[]);
+	SlBrowser(const SlBrowser &) = delete;
+	SlBrowser &operator=(const SlBrowser &) = delete;
 
-	static void CreateCefBrowser(int arg);
+public:
+	void run(int argc, char *argv[]);
 	static std::string getDefaultUrl();
+	std::string createTabWindow(const int32_t uid, const std::string &url, const std::string &title, const std::string &iconPath);
+	std::string queueDestroyCefBrowser(const int32_t uuid);
+	void closeTabWindow(const int32_t uid);
+	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
+	void setMainLoadingInProgress(const bool b) { m_mainLoadingInProgress = b; }
+	void saveHiddenState(const bool b) const;
+	void createCefBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
 
 	bool getSavedHiddenState() const;
-	void saveHiddenState(const bool b) const;
-
 	bool getMainPageSuccess() const { return m_mainPageSuccess; }
 	bool getMainLoadingInProgress() const { return m_mainLoadingInProgress; }
 
-	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
-	void setMainLoadingInProgress(const bool b) { m_mainLoadingInProgress = b; }
+	int32_t getBrowserCefId(const int32_t uid);
+	int32_t getUuidFromCefId(const int32_t cefId);
+
+	std::shared_ptr<BrowserElements> getBrowserElements(const int32_t uid);
+	std::map<int32_t, std::shared_ptr<BrowserElements>> getExtraBrowsers();
+
+	std::string popLastError();
 
 public:
-	QWidget *m_widget = nullptr;
-	CefRefPtr<BrowserApp> m_app = nullptr;
-	CefRefPtr<CefBrowser> m_browser = nullptr;
-	CefRefPtr<BrowserClient> browserClient = nullptr;
-	int32_t m_obs64_PIDt = 0;
 	bool m_allowHideBrowser = true;
+	int32_t m_obs64_PIDt = 0;
 	std::atomic<bool> m_cefInit = false;
+	CefRefPtr<BrowserApp> m_app = nullptr;
+	std::shared_ptr<BrowserElements> m_mainBrowser = nullptr;
+	std::map<int32_t, std::shared_ptr<BrowserElements>> m_browsers;
 
 public:
 	static SlBrowser &instance()
@@ -46,6 +76,11 @@ private:
 	void browserShutdown();
 	void browserManagerThread();
 
+	std::string registerBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements);
+
+	static void createCefBrowser_internal(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
+	static void cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements);
+
 	std::wstring getCacheDir() const;
 
 	static void DebugInputThread();
@@ -55,8 +90,6 @@ private:
 	bool m_mainLoadingInProgress = false;
 	bool m_cefCreated = false;
 
-public:
-	// Disallow copying
-	SlBrowser(const SlBrowser &) = delete;
-	SlBrowser &operator=(const SlBrowser &) = delete;
+	std::mutex m_mutex;
+	std::string m_lastError;
 };

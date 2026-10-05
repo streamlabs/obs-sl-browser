@@ -40,6 +40,12 @@ export async function waitForPage(port, match, timeoutMs = 60000) {
 		(seen.length ? `\nAttachable now: ${seen.map((p) => p.url).join(", ")}` : ""));
 }
 
+/** Attach to a page that has no slabsGlobal to prepare, such as a tab window. */
+export async function attachTo(port, match, timeoutMs = 30000) {
+	const page = await waitForPage(port, match, timeoutMs);
+	return Cdp.connect(page.webSocketDebuggerUrl);
+}
+
 export class Cdp {
 	#ws;
 	#id = 0;
@@ -182,6 +188,21 @@ export class Cdp {
 	call(fn, ...args) {
 		const argList = [JSON.stringify(fn), ...args.map((a) => JSON.stringify(a))].join(", ");
 		return this.evaluate(`__slt.call(${argList})`, { awaitPromise: true });
+	}
+
+	/** Like call(), on any global the plugin installs: "slabsGlobal" or "slabsTab". */
+	callOn(globalName, fn, ...args) {
+		const argList = [JSON.stringify(globalName), JSON.stringify(fn), ...args.map((a) => JSON.stringify(a))].join(", ");
+		return this.evaluate(`__slt.callOn(${argList})`, { awaitPromise: true });
+	}
+
+	/** Register a receiver that records every invocation; read it back with inbox(). */
+	listen(globalName, registerFn) {
+		return this.evaluate(`__slt.listen(${JSON.stringify(globalName)}, ${JSON.stringify(registerFn)})`);
+	}
+
+	inbox() {
+		return this.evaluate("__slt.inbox()");
 	}
 
 	close() {

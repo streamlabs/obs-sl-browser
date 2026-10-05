@@ -15,7 +15,8 @@
  *   timeoutMs    how long run() gets before it is abandoned (default 180000)
  *   run(ctx)     async, returns an array of results
  *
- * ctx is { cdp, observer, obs, dir, workDir, say }.
+ * ctx is { cdp, observer, obs, dir, workDir, say, port }, port being the DevTools port, for
+ * attaching to further pages with attachTo() from harness/cdp.mjs.
  */
 
 export const DEFAULTS = { page: "page.html", cdp: true, timeoutMs: 180000, expectMissing: [] };
