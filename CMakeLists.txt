@@ -70,6 +70,7 @@ target_sources(
           GrpcBrowser.cpp
           SlBrowser.cpp
           SlBrowserWidget.cpp
+          BrowserJsHandler.cpp
           browser-app.cpp
           browser-app.hpp
           browser-client.cpp

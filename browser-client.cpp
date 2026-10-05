@@ -159,6 +159,23 @@ void BrowserClient::RegisterCallback(const int functionId, CefRefPtr<CefBrowser>
 	m_MostRecentRenderKnowOf = browser;
 }
 
+void BrowserClient::RemoveBrowserFromCallback(CefRefPtr<CefBrowser> browser)
+{
+	std::lock_guard<std::recursive_mutex> grd(m_recursiveMutex);
+
+	if (m_MostRecentRenderKnowOf != nullptr && m_MostRecentRenderKnowOf->GetIdentifier() == browser->GetIdentifier())
+		m_MostRecentRenderKnowOf = nullptr;
+
+	for (auto itr = m_callbackDictionary.begin(); itr != m_callbackDictionary.end(); ++itr)
+	{
+		if (itr->second->GetIdentifier() == browser->GetIdentifier())
+		{
+			m_callbackDictionary.erase(itr);
+			return;
+		}
+	}
+}
+
 CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
 {
 	std::lock_guard<std::recursive_mutex> grd(m_recursiveMutex);
@@ -175,6 +192,20 @@ CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
 	return nullptr;
 }
 
+std::map<int32_t, int32_t> BrowserClient::m_tabReceiverDictionary;
+
+void BrowserClient::AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid)
+{
+	std::lock_guard<std::mutex> grd(m_mutex);
+	m_tabReceiverDictionary[browserCefId] = funcid;
+}
+
+int32_t BrowserClient::GetReceiverFuncIdForBrowser(const int32_t browserCefId)
+{
+	std::lock_guard<std::mutex> grd(m_mutex);
+	return m_tabReceiverDictionary[browserCefId];
+}
+
 bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
 {
 	const std::string &name = message->GetName();
@@ -185,101 +216,55 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 
 	int funcid = input_args->GetInt(0);
 
-	if (JavascriptApi::isBrowserFunctionName(name))
+	if (JavascriptApi::isBrowserFunctionName(name) || JavascriptApi::isBrowserTabFunctionName(name))
 	{
 		std::string jsonOutput = "{}";
 
-		std::vector <CefRefPtr<CefValue>> argsWithoutFunc;
+		std::vector<CefRefPtr<CefValue>> argsWithoutFunc;
 
 		for (size_t l = 1; l < input_args->GetSize(); l++)
 			argsWithoutFunc.push_back(input_args->GetValue(l));
 
-		// Stuff done right here and now to the browser
-		// Put this into a sub function if it gets bigger
+		bool retVal = true;
+		std::string internalMsgType = "executeCallback";
+		const int32_t browserUuid = SlBrowser::instance().getUuidFromCefId(browser->GetIdentifier());
+
 		switch (JavascriptApi::getFunctionId(name))
 		{
-		case JavascriptApi::JS_BROWSER_RESIZE_BROWSER:
+		case JavascriptApi::JS_MAIN_SEND_STRING_TO_TAB: retVal = JS_MAIN_SEND_STRING_TO_TAB(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS: retVal = JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_REGISTER_MSG_RECEIVER: retVal = JS_TABS_REGISTER_MSG_RECEIVER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TAB_SEND_STRING_TO_MAIN: retVal = JS_TAB_SEND_STRING_TO_MAIN(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_BROWSER_RESIZE_BROWSER: retVal = JS_BROWSER_RESIZE_BROWSER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_BROWSER_BRING_FRONT: retVal = JS_BROWSER_BRING_FRONT(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_BROWSER_SET_WINDOW_POSITION: retVal = JS_BROWSER_SET_WINDOW_POSITION(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_BROWSER_SET_ALLOW_HIDE_BROWSER: retVal = JS_BROWSER_SET_ALLOW_HIDE_BROWSER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_BROWSER_SET_HIDDEN_STATE: retVal = JS_BROWSER_SET_HIDDEN_STATE(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_CREATE_WINDOW: retVal = JS_TABS_CREATE_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_DESTROY_WINDOW: retVal = JS_TABS_DESTROY_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_RESIZE_WINDOW: retVal = JS_TABS_RESIZE_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_LOAD_URL: retVal = JS_TABS_LOAD_URL(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_GET_WINDOW_CEF_IDENTIFIER: retVal = JS_TABS_GET_WINDOW_CEF_IDENTIFIER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_EXECUTE_JS: retVal = JS_TABS_EXECUTE_JS(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_QUERY_ALL: retVal = JS_TABS_QUERY_ALL(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_SHOW_WINDOW: retVal = JS_TABS_SHOW_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_HIDE_WINDOW: retVal = JS_TABS_HIDE_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_IS_WINDOW_HIDDEN: retVal = JS_TABS_IS_WINDOW_HIDDEN(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_SET_ICON: retVal = JS_TABS_SET_ICON(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		case JavascriptApi::JS_TABS_SET_TITLE: retVal = JS_TABS_SET_TITLE(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType); break;
+		default: jsonOutput = Json(Json::object({{"error", "Unknown function"}})).dump(); break;
+		}
+
+		if (retVal)
 		{
-			if (argsWithoutFunc.size() < 2)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
+			CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create(internalMsgType);
+			CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
+			execute_args->SetInt(0, funcid);
+			execute_args->SetString(1, jsonOutput);
+			execute_args->SetInt(2, browserUuid);
 
-			int w = argsWithoutFunc[0]->GetInt();
-			int h = argsWithoutFunc[1]->GetInt();
-
-			if (w < 200 || h < 200 || w > 8096 || h > 8096)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			SlBrowser::instance().m_widget->resize(w, h);
-			break;
+			SendBrowserProcessMessage(browser, PID_RENDERER, msg);
 		}
-		case JavascriptApi::JS_BROWSER_BRING_FRONT:
-		{
-			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
-
-			if (::IsIconic(hwnd))
-				::ShowWindow(hwnd, SW_RESTORE);
-
-			WindowsFunctions::ForceForegroundWindow(hwnd);
-			break;
-		}
-		case JavascriptApi::JS_BROWSER_SET_WINDOW_POSITION:
-		{
-			if (argsWithoutFunc.size() < 2)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			int x = argsWithoutFunc[0]->GetInt();
-			int y = argsWithoutFunc[1]->GetInt();
-
-			SlBrowser::instance().m_widget->move(x, y);
-			break;
-		}
-		case JavascriptApi::JS_BROWSER_SET_ALLOW_HIDE_BROWSER:
-		{
-			if (argsWithoutFunc.size() < 1)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			SlBrowser::instance().m_allowHideBrowser = argsWithoutFunc[0]->GetBool();
-			break;
-		}
-		case JavascriptApi::JS_BROWSER_SET_HIDDEN_STATE:
-		{
-			if (argsWithoutFunc.size() < 1)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			SlBrowser::instance().m_widget->setHidden(argsWithoutFunc[0]->GetBool());
-			SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_widget->isHidden());
-
-			if (!SlBrowser::instance().m_widget->isHidden())
-			{
-				HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
-				WindowsFunctions::ForceForegroundWindow(hwnd);
-			}
-
-			break;
-		}
-		}
-
-		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
-		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
-		execute_args->SetInt(0, funcid);
-		execute_args->SetString(1, jsonOutput);
-
-		SendBrowserProcessMessage(browser, PID_RENDERER, msg);
 	}
 	else
 	{
@@ -292,7 +277,6 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			return false;
 		}
 	}
-
 
 	return true;
 }

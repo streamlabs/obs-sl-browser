@@ -104,6 +104,22 @@ public:
 		JS_WRITE_FILE,
 		JS_IS_PROCESS_RUNNING,
 		JS_STOP_PROCESS,
+		JS_TABS_CREATE_WINDOW,
+		JS_TABS_DESTROY_WINDOW,
+		JS_TABS_RESIZE_WINDOW,
+		JS_TABS_LOAD_URL,
+		JS_TABS_EXECUTE_JS,
+		JS_TABS_HIDE_WINDOW,
+		JS_TABS_SHOW_WINDOW,
+		JS_TABS_IS_WINDOW_HIDDEN,
+		JS_TAB_SEND_STRING_TO_MAIN,
+		JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS,
+		JS_MAIN_SEND_STRING_TO_TAB,
+		JS_TABS_REGISTER_MSG_RECEIVER,
+		JS_TABS_GET_WINDOW_CEF_IDENTIFIER,
+		JS_TABS_QUERY_ALL,
+		JS_TABS_SET_ICON,
+		JS_TABS_SET_TITLE,
 	};
 
 public:
@@ -615,6 +631,74 @@ public:
 			// .(@function(arg1), bool)`
 			//	DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
 			{"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
+
+			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional))
+			{"tabs_createWindow", JS_TABS_CREATE_WINDOW},
+
+			// .(@function(arg1), uidINT)
+			{"tabs_destroyWindow", JS_TABS_DESTROY_WINDOW},
+
+			// .(@function(arg1), uidINT, width, height)
+			{"tabs_resizeWindow", JS_TABS_RESIZE_WINDOW},
+
+			// .(@function(arg1), uidINT, url)
+			{"tabs_loadUrl", JS_TABS_LOAD_URL},
+
+			// .(@function(arg1), uidINT, codeStr)
+			{"tabs_executeJs", JS_TABS_EXECUTE_JS},
+
+			// .(@function(arg1), uidINT)
+			{"tabs_hideWindow", JS_TABS_HIDE_WINDOW},
+
+			// .(@function(arg1), uidINT)
+			{"tabs_showWindow", JS_TABS_SHOW_WINDOW},
+
+			// .(@function(arg1), uidINT)
+			//		Example arg1 = { "result": boolean }
+			{"tabs_getIsWindowHidden", JS_TABS_IS_WINDOW_HIDDEN},
+
+			// .(@function(arg1), uid)
+			//		Example arg1 = { "result": int32 }
+			{"tabs_getWindowCefId", JS_TABS_GET_WINDOW_CEF_IDENTIFIER},
+
+			// .(@function(arg1), uidINT, str)
+			{"tabs_sendStringToTab", JS_MAIN_SEND_STRING_TO_TAB},
+
+			// .(@function(arg1, arg2))
+			//		function is remembered internally and when called back it will be given args 'string, uid' (The message, and the uid it came from)
+			{"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
+
+			// .(@function(arg1))
+			//		Example arg1 = [{ "uid": int32, "url": str }, ..]
+			{"tabs_queryAll", JS_TABS_QUERY_ALL},
+
+			// .(@function(arg1), uidINT, pathStr)
+			//		pathStr can be a .png path
+			{"tabs_setIcon", JS_TABS_SET_ICON},
+
+			// .(@function(arg1), uidINT, titleStr)
+			{"tabs_setTitle", JS_TABS_SET_TITLE},
+		};
+
+		return names;
+	}
+
+	static std::map<std::string, JSFuncs> &getBrowserTabsFunctionNames()
+	{
+		// None of the api function belows are blocking, they return immediatelly, but can accept a function as arg1 thats invoked when work is complete, which should allow await/promise structure
+		static std::map<std::string, JSFuncs> names =
+		{
+			/**
+			* Browser Tabs
+			*/
+
+			// .(@function(arg1), str)
+			{"tab_sendStringToMain", JS_TAB_SEND_STRING_TO_MAIN},
+
+			// .(@function(arg1, arg2))
+			//	Same as tabs_registerMsgReceiver
+			{"tab_registerMsgReceiver", JS_TABS_REGISTER_MSG_RECEIVER},
+
 		};
 
 		return names;
@@ -636,6 +720,12 @@ public:
 		auto ref = getBrowserFunctionNames();
 		return ref.find(str) != ref.end();
 	}
+	
+	static bool isBrowserTabFunctionName(const std::string &str)
+	{
+		auto ref = getBrowserTabsFunctionNames();
+		return ref.find(str) != ref.end();
+	}
 
 	static JSFuncs getFunctionId(const std::string &funcName)
 	{
@@ -646,6 +736,12 @@ public:
 			return itr->second;
 
 		ref = getBrowserFunctionNames();
+		itr = ref.find(funcName);
+
+		if (itr != ref.end())
+			return itr->second;
+
+		ref = getBrowserTabsFunctionNames();
 		itr = ref.find(funcName);
 
 		if (itr != ref.end())
