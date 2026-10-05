@@ -752,10 +752,7 @@ public:
 	}
 
 	// tabs_* and tab_* drive windows and the app channel, so only a page's own main frame may call them
-	static bool isMainFrameOnlyFunctionName(const std::string &str)
-	{
-		return str.rfind("tabs_", 0) == 0 || str.rfind("tab_", 0) == 0;
-	}
+	static bool isMainFrameOnlyFunctionName(const std::string &str) { return str.rfind("tabs_", 0) == 0 || str.rfind("tab_", 0) == 0; }
 
 	static JSFuncs getFunctionId(const std::string &funcName)
 	{
