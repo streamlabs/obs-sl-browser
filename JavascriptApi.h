@@ -132,6 +132,9 @@ public:
 	// Test only: when set in the environment of the browser process, this one extra origin (scheme://host[:port]) is also allowed
 	static constexpr const char *kTestTabOriginEnvVar = "SL_PLUGIN_TEST_TAB_ORIGIN";
 
+	// Longest contextKey tabs_createWindow takes
+	static constexpr size_t kMaxTabContextKeyBytes = 64;
+
 	// Control over the plugin/OBS side
 	static std::map<std::string, JSFuncs> &getPluginFunctionNames()
 	{
@@ -640,10 +643,12 @@ public:
 			//	DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
 			{"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
 
-			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional), initScriptStr (optional), hideOnCloseBOOL (optional))
+			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional), initScriptStr (optional), hideOnCloseBOOL (optional), contextKeyStr (optional))
 			//		arg1 is called once the window and its browser exist, so every other tabs_* function can be used from then on. Example arg1 = {} or { "error": "." }
 			//		Until then, hide/show/resize/isHidden/executeJs/loadUrl/getWindowCefId on the uid answer { "error": "not ready" }
 			//		iconpathStr must be an existing .png, .ico, .jpg or .jpeg file inside %APPDATA%\StreamlabsOBS\. Anything else, such as UNC or \\?\ paths, is an error. Empty means the default icon
+			//		contextKeyStr names the tab's cookie and storage profile, kept on disk across restarts and shared by every tab using the same key (at most kMaxTabContextKeyBytes bytes, any characters). Different keys, and main, share nothing
+			//		When omitted or empty the tab gets its own in-memory profile, which is not shared with any other tab or with main and is lost when the tab is destroyed. It never uses main's profile
 			//		url must be https on one of kTabAllowedOrigins (everything else, such as http, file:, data:, javascript: and http://absolute/, is an error), and the tab's main frame can only navigate to those origins. Subframes are not restricted
 			//		initScriptStr is run in the tab's main frame at the start of every document load (including reloads and navigations), after slabsTab is defined and before the page's own scripts. Empty means none
 			//		hideOnCloseBOOL false (default): when the user closes the window it is destroyed and main is sent kTabClosedMessage. true: it is only hidden, and main is not told

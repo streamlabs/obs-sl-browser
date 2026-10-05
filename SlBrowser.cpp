@@ -158,6 +158,43 @@ bool SlBrowser::isApprovedTabUrl(const std::string &url)
 	return !testOrigin.empty() && origin == testOrigin;
 }
 
+// Empty when the key is empty or too long. Every byte outside [a-z0-9-] is escaped, so no two keys share a directory, even on a case-insensitive disk, and nothing can climb out of it
+/*static*/
+std::string SlBrowser::tabContextDirName(const std::string &key)
+{
+	if (key.empty() || key.size() > JavascriptApi::kMaxTabContextKeyBytes)
+		return "";
+
+	std::string name = "app-";
+
+	for (const unsigned char c : key)
+	{
+		if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')
+		{
+			name += static_cast<char>(c);
+		}
+		else
+		{
+			char escaped[4];
+			snprintf(escaped, sizeof(escaped), "_%02x", c);
+			name += escaped;
+		}
+	}
+
+	return name;
+}
+
+// A tab with a context directory gets a profile on disk under the cache root, shared by every tab using it. Without one, or without a cache root, it gets a private in-memory profile
+CefRefPtr<CefRequestContext> SlBrowser::createTabRequestContext(const std::string &contextDir) const
+{
+	CefRequestContextSettings settings;
+
+	if (!contextDir.empty() && !m_cefCachePath.empty())
+		CefString(&settings.cache_path) = m_cefCachePath + "\\apps\\" + contextDir;
+
+	return CefRequestContext::CreateContext(settings, nullptr);
+}
+
 // Empty on success, with the canonical path in resolved
 std::string SlBrowser::resolveTabIconPath(const std::string &path, std::wstring &resolved) const
 {
@@ -245,6 +282,7 @@ std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url
 	auto elements = std::make_shared<BrowserElements>();
 	elements->initScript = std::move(options.initScript);
 	elements->hideOnClose = options.hideOnClose;
+	elements->contextDir = std::move(options.contextDir);
 	elements->onCreated = std::move(options.onCreated);
 	const std::string err = registerBrowser(uid, elements);
 
@@ -291,8 +329,8 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 	// Now set the parent of the CEF browser to the QWidget
 	window_info.SetAsChild((HWND)browserElements->widget->winId(), CefRect(0, 0, realWidth, realHeight));
 
-	// Tabs share the global request context, and so share cookies and login with the main browser
-	CefRefPtr<CefRequestContext> request_context = CefRequestContext::GetGlobalContext();
+	// Only main uses the global context; a tab sharing it would share cookies and login with main
+	CefRefPtr<CefRequestContext> request_context = browserElements->uid == 0 ? CefRequestContext::GetGlobalContext() : SlBrowser::instance().createTabRequestContext(browserElements->contextDir);
 
 	// Reaches the renderer's OnBrowserCreated, which runs the script in every main-frame document of the tab
 	CefRefPtr<CefDictionaryValue> extra_info;
@@ -412,6 +450,8 @@ void SlBrowser::browserInit()
 	}
 
 	CefString(&settings.browser_subprocess_path) = path.c_str();
+
+	m_cefCachePath = cache_pathStdStr;
 
 	if (!cache_pathStdStr.empty())
 	{

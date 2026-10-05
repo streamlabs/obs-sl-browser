@@ -153,6 +153,22 @@ bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_
 	if (argsWithoutFunc.size() >= 6)
 		options.hideOnClose = argsWithoutFunc[5]->GetBool();
 
+	if (argsWithoutFunc.size() >= 7)
+	{
+		const std::string contextKey = argsWithoutFunc[6]->GetString();
+
+		if (!contextKey.empty())
+		{
+			options.contextDir = SlBrowser::tabContextDirName(contextKey);
+
+			if (options.contextDir.empty())
+			{
+				jsonOutput = Json(Json::object({{"error", "context key is too long"}})).dump();
+				return true;
+			}
+		}
+	}
+
 	// The reply waits for the browser, so the caller can use the tab as soon as it hears back
 	if (funcId != 0)
 	{

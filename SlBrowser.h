@@ -16,6 +16,7 @@ struct TabWindowOptions
 	std::wstring iconPath;
 	std::string initScript;
 	bool hideOnClose = false;
+	std::string contextDir;
 
 	// Called on the CEF UI thread once the browser exists, or has failed to
 	std::function<void(const std::string &err)> onCreated;
@@ -37,6 +38,7 @@ struct BrowserElements
 
 	std::string initScript;
 	bool hideOnClose = false;
+	std::string contextDir;
 	std::function<void(const std::string &err)> onCreated;
 
 	static void queueCleanupQtObj(QWidget *widget)
@@ -58,6 +60,7 @@ public:
 	void run(int argc, char *argv[]);
 	static std::string getDefaultUrl();
 	static bool isApprovedTabUrl(const std::string &url);
+	static std::string tabContextDirName(const std::string &key);
 	std::string resolveTabIconPath(const std::string &path, std::wstring &resolved) const;
 	std::string createTabWindow(const int32_t uid, const std::string &url, TabWindowOptions options);
 	std::string queueDestroyCefBrowser(const int32_t uuid);
@@ -108,6 +111,7 @@ private:
 	static void cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements);
 
 	std::wstring getCacheDir() const;
+	CefRefPtr<CefRequestContext> createTabRequestContext(const std::string &contextDir) const;
 
 	static void DebugInputThread();
 	static void CheckForObsThread();
@@ -115,6 +119,7 @@ private:
 	bool m_mainPageSuccess = false;
 	bool m_mainLoadingInProgress = false;
 	bool m_cefCreated = false;
+	std::string m_cefCachePath;
 
 	std::mutex m_mutex;
 	std::string m_lastError;
