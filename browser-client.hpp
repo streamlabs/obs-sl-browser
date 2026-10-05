@@ -74,15 +74,17 @@ public:
 	void RemoveBrowserFromCallback(CefRefPtr<CefBrowser> browser);
 
 public:
+	static int32_t GetReceiverFuncIdForBrowser(const int32_t browserCefId);
+	static void SendMsgToReceiver(CefRefPtr<CefBrowser> target, const std::string &msg, const int32_t senderUid);
+
+public:
 	static std::string cefListValueToJSONString(CefRefPtr<CefListValue> listValue);
 
 private:
 	void UpdateExtraTexture();
-	void AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid);
+	static void AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid);
 
 	bool valid() const;
-
-	int32_t GetReceiverFuncIdForBrowser(const int32_t browserCefId);
 
 	bool m_reroute_audio = true;
 	std::recursive_mutex m_recursiveMutex;
@@ -90,7 +92,7 @@ private:
 
 	CefRefPtr<CefBrowser> m_MostRecentRenderKnowOf = nullptr;
 
-	std::mutex m_mutex;
+	static std::mutex m_tabReceiverMutex;
 	static std::map<int32_t, int32_t> m_tabReceiverDictionary;
 
 private:

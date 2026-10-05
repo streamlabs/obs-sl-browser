@@ -2,6 +2,7 @@
 
 #include "browser-client.hpp"
 #include "browser-app.hpp"
+#include "SlBrowserWidget.h"
 
 #include <QWidget>
 #include <map>
@@ -9,11 +10,18 @@
 struct BrowserElements
 {
 	~BrowserElements();
-	QWidget* widget = nullptr;
+	int32_t uid = 0;
+	SlBrowserWidget *widget = nullptr;
 	CefRefPtr<CefBrowser> browser = nullptr;
 	CefRefPtr<BrowserClient> client = nullptr;
 
-	static void queueCleanupQtObj(QWidget *widget) { if (widget != nullptr) { QMetaObject::invokeMethod(widget, "deleteLater", Qt::QueuedConnection); } }
+	static void queueCleanupQtObj(QWidget *widget)
+	{
+		if (widget != nullptr)
+		{
+			QMetaObject::invokeMethod(widget, "deleteLater", Qt::QueuedConnection);
+		}
+	}
 };
 
 class SlBrowser
@@ -25,7 +33,9 @@ public:
 public:
 	void run(int argc, char *argv[]);
 	static std::string getDefaultUrl();
-	void queueDestroyCefBrowser(const int32_t uuid);
+	std::string createTabWindow(const int32_t uid, const std::string &url, const std::string &title, const std::string &iconPath);
+	std::string queueDestroyCefBrowser(const int32_t uuid);
+	void closeTabWindow(const int32_t uid);
 	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
 	void setMainLoadingInProgress(const bool b) { m_mainLoadingInProgress = b; }
 	void saveHiddenState(const bool b) const;
@@ -39,7 +49,7 @@ public:
 	int32_t getUuidFromCefId(const int32_t cefId);
 
 	std::shared_ptr<BrowserElements> getBrowserElements(const int32_t uid);
-	const std::map<int32_t, std::shared_ptr<BrowserElements>> &getExtraBrowsers() const { return m_browsers; }
+	std::map<int32_t, std::shared_ptr<BrowserElements>> getExtraBrowsers();
 
 	std::string popLastError();
 
@@ -65,6 +75,8 @@ private:
 	void browserInit();
 	void browserShutdown();
 	void browserManagerThread();
+
+	std::string registerBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements);
 
 	static void createCefBrowser_internal(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
 	static void cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements);

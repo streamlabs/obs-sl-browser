@@ -1,5 +1,6 @@
 #include "SlBrowser.h"
 #include "SlBrowserWidget.h"
+#include "JavascriptApi.h"
 #include "GrpcBrowser.h"
 #include "CrashHandler.h"
 
@@ -116,21 +117,65 @@ std::string SlBrowser::getDefaultUrl()
 	return "https://obs-plugin.streamlabs.com";
 }
 
-void SlBrowser::createCefBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements, const std::string& url, const bool startHidden, const bool keepOnTop)
+std::string SlBrowser::registerBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements)
 {
 	std::lock_guard<std::mutex> g(m_mutex);
 
-	m_lastError.clear();
-
 	if (m_browsers.find(uuid) != m_browsers.end())
+		return "uuid already exists";
+
+	browserElements->uid = uuid;
+	m_browsers[uuid] = browserElements;
+	return "";
+}
+
+void SlBrowser::createCefBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop)
+{
+	const std::string err = registerBrowser(uuid, browserElements);
+
+	if (!err.empty())
 	{
-		m_lastError = "createCefBrowser, uuid already exists";
+		printf("sl-proxy: createCefBrowser, %s\n", err.c_str());
 		return;
 	}
 
-	m_browsers[uuid] = browserElements;
+	browserElements->widget->setElements(browserElements);
 
 	CefPostTask(TID_UI, base::BindOnce(&createCefBrowser_internal, browserElements, url, startHidden, keepOnTop));
+}
+
+std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url, const std::string &title, const std::string &iconPath)
+{
+	if (uid == 0)
+		return "uid 0 is the main browser";
+
+	// Reserved now so a duplicate uid is rejected in the reply; the widget has to be built on the Qt thread
+	auto elements = std::make_shared<BrowserElements>();
+	const std::string err = registerBrowser(uid, elements);
+
+	if (!err.empty())
+		return err;
+
+	QMetaObject::invokeMethod(
+		qApp,
+		[elements, url, title, iconPath]() {
+			elements->widget = new SlBrowserWidget;
+			elements->widget->setElements(elements);
+			elements->widget->setWindowTitle(title.c_str());
+			elements->widget->setMinimumSize(320, 240);
+			elements->widget->resize(1280, 720);
+
+			if (!iconPath.empty())
+				elements->widget->window()->setWindowIcon(QIcon(iconPath.c_str()));
+
+			// The HWND is not made until the widget is shown at least once
+			elements->widget->showMinimized();
+
+			CefPostTask(TID_UI, base::BindOnce(&createCefBrowser_internal, elements, url, false, false));
+		},
+		Qt::QueuedConnection);
+
+	return "";
 }
 
 /*static*/
@@ -264,46 +309,44 @@ void SlBrowser::browserInit()
 	CefRegisterSchemeHandlerFactory("http", "absolute", new BrowserSchemeHandlerFactory());
 }
 
-void SlBrowser::queueDestroyCefBrowser(const int32_t uid)
+std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid)
 {
 	std::lock_guard<std::mutex> g(m_mutex);
 
-	m_lastError.clear();
-
 	if (uid == 0)
-	{
-		m_lastError = "queueDestroyCefBrowser, param is 0, which is the main browser, which may not be destroyed.";
-		return;
-	}
+		return "uid 0 is the main browser, which may not be destroyed";
 
 	auto browserElements = m_browsers.find(uid);
 
 	if (browserElements == m_browsers.end())
-	{
-		m_lastError = "queueDestroyCefBrowser, uid not found";
-		return;
-	}
+		return "uid not found";
 
 	std::shared_ptr<BrowserElements> ptr = browserElements->second;
 
-	if (ptr == nullptr)
-	{
-		m_lastError = "queueDestroyCefBrowser, internal error, the browser is null";
-		return;
-	}
-
-	QWidget *mainWindow = m_mainBrowser->widget;
-
+	// The widget is released with the elements, after the CEF browser is closed
 	QMetaObject::invokeMethod(
-		mainWindow,
+		qApp,
 		[ptr]() {
-			delete ptr->widget;
-			ptr->widget = nullptr;
+			if (ptr->widget)
+				ptr->widget->hide();
+
 			CefPostTask(TID_UI, base::BindOnce(&cleanupCefBrowser_Internal, ptr));
 		},
 		Qt::QueuedConnection);
 
 	m_browsers.erase(browserElements);
+	return "";
+}
+
+void SlBrowser::closeTabWindow(const int32_t uid)
+{
+	if (!queueDestroyCefBrowser(uid).empty())
+		return;
+
+	if (m_mainBrowser == nullptr)
+		return;
+
+	CefPostTask(TID_UI, base::BindOnce(&BrowserClient::SendMsgToReceiver, m_mainBrowser->browser, std::string(JavascriptApi::kTabClosedMessage), uid));
 }
 
 /*static*/
@@ -311,15 +354,16 @@ void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> brow
 {
 	if (browserElements->browser)
 	{
-		browserElements->browser->GetMainFrame()->LoadURL("about:blank");
+		if (auto frame = browserElements->browser->GetMainFrame())
+			frame->LoadURL("about:blank");
 
 		if (browserElements->client)
 			browserElements->client->RemoveBrowserFromCallback(browserElements->browser);
- 
+
 		browserElements->browser->GetHost()->CloseBrowser(true);
 		browserElements->browser = nullptr;
 	}
-	
+
 	if (browserElements->client)
 		browserElements->client = nullptr;
 }
@@ -392,9 +436,9 @@ int32_t SlBrowser::getUuidFromCefId(const int32_t cefId)
 {
 	std::lock_guard<std::mutex> g(m_mutex);
 
-	for (auto& itr : m_browsers)
+	for (auto &itr : m_browsers)
 	{
-		if (itr.second->browser->GetIdentifier() == cefId)
+		if (itr.second && itr.second->browser && itr.second->browser->GetIdentifier() == cefId)
 			return itr.first;
 	}
 
@@ -404,9 +448,21 @@ int32_t SlBrowser::getUuidFromCefId(const int32_t cefId)
 int32_t SlBrowser::getBrowserCefId(const int32_t uid)
 {
 	if (auto ptr = getBrowserElements(uid))
-		return ptr->browser->GetIdentifier();
+	{
+		if (ptr->browser)
+			return ptr->browser->GetIdentifier();
+	}
 
 	return 0;
+}
+
+std::map<int32_t, std::shared_ptr<BrowserElements>> SlBrowser::getExtraBrowsers()
+{
+	std::lock_guard<std::mutex> g(m_mutex);
+
+	auto extra = m_browsers;
+	extra.erase(0);
+	return extra;
 }
 
 std::shared_ptr<BrowserElements> SlBrowser::getBrowserElements(const int32_t uid)

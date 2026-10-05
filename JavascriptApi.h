@@ -123,6 +123,8 @@ public:
 	};
 
 public:
+	// Sent to the main window's tabs_registerMsgReceiver function when the user closes a tab window
+	static constexpr const char *kTabClosedMessage = "{\"event\":\"tabClosed\"}";
 
 	// Control over the plugin/OBS side
 	static std::map<std::string, JSFuncs> &getPluginFunctionNames()
@@ -662,14 +664,16 @@ public:
 			{"tabs_getWindowCefId", JS_TABS_GET_WINDOW_CEF_IDENTIFIER},
 
 			// .(@function(arg1), uidINT, str)
+			//		Example arg1 = { "error": "." } if the uid is unknown or the tab has not registered a receiver
 			{"tabs_sendStringToTab", JS_MAIN_SEND_STRING_TO_TAB},
 
 			// .(@function(arg1, arg2))
-			//		function is remembered internally and when called back it will be given args 'string, uid' (The message, and the uid it came from)
+			//		function is remembered internally and is not called on registration, only when a tab sends a message. It is given args 'string, uid' (The message, and the uid it came from)
+			//		When a tab window is closed by the user, it is destroyed and the function is called with the message kTabClosedMessage and the uid of the closed tab
 			{"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
 
 			// .(@function(arg1))
-			//		Example arg1 = [{ "uid": int32, "url": str }, ..]
+			//		Example arg1 = [{ "uid": int32, "url": str }, ..], the main window (uid 0) is not listed
 			{"tabs_queryAll", JS_TABS_QUERY_ALL},
 
 			// .(@function(arg1), uidINT, pathStr)
@@ -693,10 +697,11 @@ public:
 			*/
 
 			// .(@function(arg1), str)
+			//		Example arg1 = { "error": "." } if main has not registered a receiver
 			{"tab_sendStringToMain", JS_TAB_SEND_STRING_TO_MAIN},
 
-			// .(@function(arg1, arg2))
-			//	Same as tabs_registerMsgReceiver
+			// .(@function(arg1))
+			//		function is remembered internally and is not called on registration, only when main sends a message. It is given arg 'string'
 			{"tab_registerMsgReceiver", JS_TABS_REGISTER_MSG_RECEIVER},
 
 		};
@@ -720,7 +725,7 @@ public:
 		auto ref = getBrowserFunctionNames();
 		return ref.find(str) != ref.end();
 	}
-	
+
 	static bool isBrowserTabFunctionName(const std::string &str)
 	{
 		auto ref = getBrowserTabsFunctionNames();
