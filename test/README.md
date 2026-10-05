@@ -109,6 +109,9 @@ then tear everything down and dump the observer's events to `test/.work/<suite>/
 | | |
 | --- | --- |
 | `cdp.call(fn, ...args)` | call a plugin api function, get its reply parsed. `{__missing}`, `{__timeout}` and `{__raw}` are the diagnostic shapes; a setter answering with an empty string parses to `{}` |
+| `cdp.callOn(global, fn, ...args)` | like `call`, on `slabsGlobal` or on `slabsTab` (a tab window) |
+| `cdp.listen(global, registerFn)`, `cdp.inbox()` | register a receiver that stays registered, and read back the arguments of every invocation |
+| `port` | the DevTools port, for `attachTo(port, urlSubstring)` from `harness/cdp.mjs` to drive a further page |
 | `cdp.evaluate(expr, {awaitPromise})` | run anything in the page |
 | `cdp.inject(file)` | load a classic script into the page — how a large in-page suite gets there |
 | `observer.events` | everything any page has reported, newest last |
@@ -143,6 +146,8 @@ in `RegisterCallback`. Until the page calls *some* `slabsGlobal` function, that 
 and pushes are dropped to a `printf`. A page that only listens never hears anything. The
 harness makes a priming call after attaching, so suites inherit this already done; a page
 that runs standalone in a browser has to do it itself.
+
+**Tab urls must not contain `page.html`.** Tab windows show up in the same `/json/list` as the main page, and `waitForPage` matches by substring, so a tab served as `page.html` could be attached to instead of the main window. The `multi-browser` suite names its tab page `tab.html` for that reason.
 
 **Browser sources load late.** A browser source can take anywhere from ten seconds to over a
 minute to load its page after OBS starts, and nothing announces when it has. Repeat and wait
@@ -179,6 +184,7 @@ test/
     obs.mjs        find, start and stop OBS
     profile.mjs    the throwaway portable profile
     cdp.mjs        DevTools client, page attachment, api calls
+    windows.mjs    top-level window titles, and closing one the way a user does
     inpage.js      the shared in-page helpers (window.__slt)
     observer.mjs   the suite web server and its out-of-band report log
     suite.mjs      the suite contract, results(), until()
@@ -187,4 +193,5 @@ test/
     smoke/         the plugin comes up and answers
     source-message/ browsersource_sendMessage reaches the right browser source
     filesystem-api/ the sandboxed filesystem and process api, and its containment
+    multi-browser/ the tabs_* windows: privilege boundary, messaging, resize, lifecycle
 ```
