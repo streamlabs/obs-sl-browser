@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <functional>
 #include <mutex>
+#include <set>
 
 #include "cef-headers.hpp"
 
@@ -11,10 +12,11 @@ typedef std::function<void(CefRefPtr<CefBrowser>)> BrowserFunc;
 
 class BrowserApp : public CefApp, public CefRenderProcessHandler, public CefBrowserProcessHandler, public CefV8Handler
 {
-
+	bool m_isMainPluginWindow = false;
 	int m_callbackIdCounter = 0;
-	std::map<int, std::pair<CefRefPtr<CefV8Value>, CefRefPtr<CefV8Context>>> m_callbackMap;
 	std::recursive_mutex m_callbackMutex;
+	std::map<int, std::pair<CefRefPtr<CefV8Value>, CefRefPtr<CefV8Context>>> m_callbackMap;
+	std::set<std::string> m_functionNames;
 
 public:
 	inline BrowserApp() {}
