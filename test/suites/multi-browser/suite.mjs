@@ -12,7 +12,19 @@
  *               again through a CDP client attached to the tab.
  *   routing     a string goes to the browser it was addressed to, byte for byte, exactly once.
  *   per window  resizing a tab resizes that tab, not the main window, and to the size asked for.
- *   lifecycle   destroying a window, or the user closing it, removes it everywhere.
+ *   lifecycle   destroying a window, or the user closing it, removes it everywhere, unless it asked
+ *               to be hidden on close instead.
+ *   readiness   tabs_createWindow replies once the tab exists, and a call that beats it says so.
+ *   init script an initScript is in place before the page runs, on every document load.
+ *   allow-list  a tab only loads, and only navigates to, approved origins; icons only come from
+ *               under %APPDATA%\StreamlabsOBS.
+ *   iframes     a subframe gets no tabs_* or tab_*, and a tab's subframe gets no slabsTab.
+ *   cookies     a tab shares cookies with no one but tabs created with the same key.
+ *
+ * Tab pages are served from the harness, which launchObs makes an approved origin through
+ * SL_PLUGIN_TEST_TAB_ORIGIN. That is why this suite cannot run with --no-launch. The browser
+ * process's own refusal of calls from a browser of the wrong role is not reachable from a page,
+ * so it is not covered here; only that no legitimate call is refused.
  *
  * Tab windows open on the real desktop, so nothing else should be driven interactively while
  * this runs.
