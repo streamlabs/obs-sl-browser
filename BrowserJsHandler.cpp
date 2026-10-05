@@ -133,7 +133,19 @@ bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_
 		options.title = argsWithoutFunc[2]->GetString();
 
 	if (argsWithoutFunc.size() >= 4)
-		options.iconPath = argsWithoutFunc[3]->GetString();
+	{
+		const std::string iconPath = argsWithoutFunc[3]->GetString();
+		std::string err;
+
+		if (!iconPath.empty())
+			err = SlBrowser::instance().resolveTabIconPath(iconPath, options.iconPath);
+
+		if (!err.empty())
+		{
+			jsonOutput = Json(Json::object({{"error", err}})).dump();
+			return true;
+		}
+	}
 
 	if (argsWithoutFunc.size() >= 5)
 		options.initScript = argsWithoutFunc[4]->GetString();
@@ -480,7 +492,14 @@ bool BrowserClient::JS_TABS_SET_ICON(CefRefPtr<CefBrowser> &browser, int32_t &fu
 		return true;
 	}
 
-	std::string path = argsWithoutFunc[1]->GetString();
+	std::wstring path;
+	std::string err = SlBrowser::instance().resolveTabIconPath(argsWithoutFunc[1]->GetString(), path);
+
+	if (!err.empty())
+	{
+		jsonOutput = Json(Json::object({{"error", err}})).dump();
+		return true;
+	}
 
 	QWidget *mainWindow = SlBrowser::instance().m_mainBrowser->widget;
 
@@ -488,7 +507,7 @@ bool BrowserClient::JS_TABS_SET_ICON(CefRefPtr<CefBrowser> &browser, int32_t &fu
 		mainWindow,
 		[path, ptr]() {
 			if (ptr->widget)
-				ptr->widget->window()->setWindowIcon(QIcon(path.c_str()));
+				ptr->widget->window()->setWindowIcon(QIcon(QString::fromStdWString(path)));
 		},
 		Qt::QueuedConnection);
 

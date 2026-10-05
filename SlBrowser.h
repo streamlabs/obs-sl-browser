@@ -13,7 +13,7 @@
 struct TabWindowOptions
 {
 	std::string title;
-	std::string iconPath;
+	std::wstring iconPath;
 	std::string initScript;
 	bool hideOnClose = false;
 
@@ -58,6 +58,7 @@ public:
 	void run(int argc, char *argv[]);
 	static std::string getDefaultUrl();
 	static bool isApprovedTabUrl(const std::string &url);
+	std::string resolveTabIconPath(const std::string &path, std::wstring &resolved) const;
 	std::string createTabWindow(const int32_t uid, const std::string &url, TabWindowOptions options);
 	std::string queueDestroyCefBrowser(const int32_t uuid);
 	void closeTabWindow(const int32_t uid);
