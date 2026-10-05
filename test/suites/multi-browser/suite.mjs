@@ -212,6 +212,107 @@ export default {
 				if (!isError(await cdp.call("tabs_hideWindow", 999))) return "an unknown uid did not error";
 			});
 
+			/* ---------------------------------------------------------------- readiness --- */
+
+			await r.step("tabs_createWindow replies once the tab exists: an immediate hide, show, resize and cef id all work", async () => {
+				const res = await cdp.call("tabs_createWindow", 110, tabUrl(110), "T110");
+				created.add(110);
+				if (isError(res) || res.__timeout) return `create: ${JSON.stringify(res)}`;
+
+				// Straight after the reply, with no waiting for the page to load.
+				const hide = await cdp.call("tabs_hideWindow", 110);
+				if (isError(hide)) return `hide: ${hide.error}`;
+				const hidden = await cdp.call("tabs_getIsWindowHidden", 110);
+				if (hidden.result !== true) return `after hide: ${JSON.stringify(hidden)}`;
+				const show = await cdp.call("tabs_showWindow", 110);
+				if (isError(show)) return `show: ${show.error}`;
+				if ((await cdp.call("tabs_getIsWindowHidden", 110)).result !== false) return "after show the tab is still hidden";
+				const resize = await cdp.call("tabs_resizeWindow", 110, 640, 480);
+				if (isError(resize)) return `resize: ${resize.error}`;
+				const id = await cdp.call("tabs_getWindowCefId", 110);
+				if (!Number.isInteger(id.result) || id.result <= 1) return `cef id: ${JSON.stringify(id)}`;
+				const exec = await cdp.call("tabs_executeJs", 110, "1");
+				if (isError(exec)) return `executeJs: ${exec.error}`;
+				const nav = await cdp.call("tabs_loadUrl", 110, tabUrl(110, "&nav=3"));
+				if (isError(nav)) return `loadUrl: ${nav.error}`;
+				const loaded = await observer.waitFor((evs) => evs.some((e) => e.who === "tab110" && e.event === "LOADED" && e.data?.nav === "3"), { timeoutMs: 30000 });
+				if (!loaded) return "the tab never loaded after the immediate calls";
+			});
+
+			await r.step("a tab call issued before the tab is ready answers not ready, or has its effect", async () => {
+				// All issued in one turn of the page's script, so they reach the proxy back to back,
+				// before the Qt thread has built the window.
+				const calls = [
+					["tabs_createWindow", 111, tabUrl(111), "T111"],
+					["tabs_hideWindow", 111],
+					["tabs_getIsWindowHidden", 111],
+					["tabs_resizeWindow", 111, 700, 500],
+					["tabs_executeJs", 111, "1"],
+					["tabs_loadUrl", 111, tabUrl(111, "&nav=4")],
+					["tabs_getWindowCefId", 111],
+					["tabs_showWindow", 111],
+				];
+				const replies = await cdp.evaluate(`Promise.all(${JSON.stringify(calls)}.map((c) => __slt.call(...c)))`, { awaitPromise: true });
+				created.add(111);
+				const [create, hide, hidden, resize, exec, nav, cefId, show] = replies;
+				if (isError(create) || create.__timeout) return `create: ${JSON.stringify(create)}`;
+
+				r.info("calls answered not ready before the tab existed", [["hide", hide], ["isHidden", hidden], ["resize", resize], ["executeJs", exec], ["loadUrl", nav], ["cefId", cefId], ["show", show]].filter(([, x]) => x.error === "not ready").map(([n]) => n).join(", ") || "none");
+
+				// A call may only succeed if it really did something; "not ready" is the one honest failure.
+				for (const [name, reply] of [["hide", hide], ["isHidden", hidden], ["resize", resize], ["executeJs", exec], ["loadUrl", nav], ["cefId", cefId], ["show", show]]) {
+					if (isError(reply) && reply.error !== "not ready") return `${name}: ${JSON.stringify(reply)}`;
+				}
+
+				// The same calls once the tab is ready.
+				if (isError(await cdp.call("tabs_hideWindow", 111))) return "hide errored once the tab was ready";
+				if ((await cdp.call("tabs_getIsWindowHidden", 111)).result !== true) return "the tab was not hidden by a hide once ready";
+				if (isError(await cdp.call("tabs_showWindow", 111))) return "show errored once the tab was ready";
+
+				for (const uid of [110, 111]) {
+					await cdp.call("tabs_destroyWindow", uid);
+					created.delete(uid);
+				}
+			});
+
+			await r.step("a hide or show that claimed success before the tab was ready took effect", async () => {
+				const calls = [
+					["tabs_createWindow", 113, tabUrl(113), "T113"],
+					["tabs_hideWindow", 113],
+				];
+				const [create, hide] = await cdp.evaluate(`Promise.all(${JSON.stringify(calls)}.map((c) => __slt.call(...c)))`, { awaitPromise: true });
+				created.add(113);
+				if (isError(create) || create.__timeout) return `create: ${JSON.stringify(create)}`;
+				if (isError(hide)) {
+					if (hide.error !== "not ready") return `hide: ${JSON.stringify(hide)}`;
+				} else if ((await cdp.call("tabs_getIsWindowHidden", 113)).result !== true) {
+					return "the early hide answered success but the tab is not hidden";
+				}
+				await cdp.call("tabs_destroyWindow", 113);
+				created.delete(113);
+			});
+
+			await r.step("a burst of tabs_resizeWindow calls ends at the last size, and main is untouched", async () => {
+				const before = await mainSize();
+				const res = await createTab(112, "T112");
+				if (isError(res)) return res.error;
+				const sizes = [[600, 400], [800, 600], [640, 480], [900, 500], [700, 450]];
+				for (let i = 0; i < 40; i++) {
+					const [w, h] = sizes[i % sizes.length];
+					if (isError(await cdp.call("tabs_resizeWindow", 112, w, h))) return `resize ${i} errored`;
+				}
+				const near = (v, want) => Math.abs(v - want) <= 24;
+				const ok = await observer.waitFor(() => {
+					const s = lastState(112);
+					return s && near(s.innerWidth, 700) && near(s.innerHeight, 450);
+				}, { timeoutMs: 15000 });
+				if (!ok) return `the tab ended at ${lastState(112)?.innerWidth}x${lastState(112)?.innerHeight}, not 700x450`;
+				const after = await mainSize();
+				if (after.w !== before.w || after.h !== before.h) return `main changed from ${before.w}x${before.h} to ${after.w}x${after.h}`;
+				await cdp.call("tabs_destroyWindow", 112);
+				created.delete(112);
+			});
+
 			/* ------------------------------------------------------------------ resize --- */
 
 			await r.step("tabs_resizeWindow resizes that tab to width x height, and leaves main alone", async () => {

@@ -5,6 +5,8 @@
 #include "SlBrowserWidget.h"
 
 #include <QWidget>
+#include <atomic>
+#include <functional>
 #include <map>
 
 struct BrowserElements
@@ -14,6 +16,15 @@ struct BrowserElements
 	SlBrowserWidget *widget = nullptr;
 	CefRefPtr<CefBrowser> browser = nullptr;
 	CefRefPtr<BrowserClient> client = nullptr;
+
+	// Set once widget and browser both exist. The widget is made on the Qt thread and the browser on the CEF UI thread, so neither can be trusted before this
+	std::atomic<bool> ready = false;
+
+	// Mirrors widget->isHidden() so it can be read from any thread
+	std::atomic<bool> hidden = true;
+
+	// Called on the CEF UI thread once the browser exists, or has failed to
+	std::function<void(const std::string &err)> onCreated;
 
 	static void queueCleanupQtObj(QWidget *widget)
 	{
@@ -33,7 +44,7 @@ public:
 public:
 	void run(int argc, char *argv[]);
 	static std::string getDefaultUrl();
-	std::string createTabWindow(const int32_t uid, const std::string &url, const std::string &title, const std::string &iconPath);
+	std::string createTabWindow(const int32_t uid, const std::string &url, const std::string &title, const std::string &iconPath, std::function<void(const std::string &err)> onCreated);
 	std::string queueDestroyCefBrowser(const int32_t uuid);
 	void closeTabWindow(const int32_t uid);
 	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
