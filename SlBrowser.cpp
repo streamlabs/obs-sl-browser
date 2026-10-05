@@ -152,6 +152,7 @@ std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url
 	// Reserved now so a duplicate uid is rejected in the reply; the widget has to be built on the Qt thread
 	auto elements = std::make_shared<BrowserElements>();
 	elements->initScript = std::move(options.initScript);
+	elements->hideOnClose = options.hideOnClose;
 	elements->onCreated = std::move(options.onCreated);
 	const std::string err = registerBrowser(uid, elements);
 

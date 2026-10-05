@@ -131,6 +131,9 @@ bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_
 	if (argsWithoutFunc.size() >= 5)
 		options.initScript = argsWithoutFunc[4]->GetString();
 
+	if (argsWithoutFunc.size() >= 6)
+		options.hideOnClose = argsWithoutFunc[5]->GetBool();
+
 	// The reply waits for the browser, so the caller can use the tab as soon as it hears back
 	if (funcId != 0)
 	{

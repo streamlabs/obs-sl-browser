@@ -550,6 +550,48 @@ export default {
 				created.delete(103);
 			});
 
+			/* ------------------------------------------------------------ close flag --- */
+
+			await r.step("a tab created with hideOnClose is only hidden when the user closes it, and main is not told", async () => {
+				const title = "SLT-hide-on-close-130";
+				const res = await createTab(130, title, "", ["", "", true]);
+				if (isError(res)) return res.error;
+				const before = (await cdp.inbox()).length;
+
+				if (!closeWindow(workDir, title)) return `no window titled "${title}" to close`;
+
+				const hidden = await until(async () => (await cdp.call("tabs_getIsWindowHidden", 130)).result === true, { timeoutMs: 10000, everyMs: 250 });
+				if (!hidden) return "the tab was not hidden";
+				await settle(SETTLE_MS);
+				const told = (await cdp.inbox()).slice(before).filter((m) => m[1] === 130);
+				if (told.length) return `main was told: ${JSON.stringify(told)}`;
+				if (!(await queryAll()).some((t) => t.uid === 130)) return "the tab is no longer listed";
+				if (!windowTitles(workDir).includes(title)) return "the window is gone";
+
+				// Still a working tab: it can be shown again and closed again without being destroyed.
+				if (isError(await cdp.call("tabs_showWindow", 130))) return "show errored";
+				if ((await cdp.call("tabs_getIsWindowHidden", 130)).result !== false) return "show did not unhide it";
+				if (!closeWindow(workDir, title)) return "the second close found no window";
+				const again = await until(async () => (await cdp.call("tabs_getIsWindowHidden", 130)).result === true, { timeoutMs: 10000, everyMs: 250 });
+				if (!again) return "the second close did not hide it";
+
+				if (isError(await cdp.call("tabs_destroyWindow", 130))) return "destroy errored";
+				created.delete(130);
+			});
+
+			await r.step("a tab created with hideOnClose false is destroyed when the user closes it, as by default", async () => {
+				const title = "SLT-destroy-on-close-131";
+				const res = await createTab(131, title, "", ["", "", false]);
+				if (isError(res)) return res.error;
+				const before = (await cdp.inbox()).length;
+
+				if (!closeWindow(workDir, title)) return `no window titled "${title}" to close`;
+				const told = await until(async () => (await cdp.inbox()).slice(before).some((m) => m[0] === TAB_CLOSED && m[1] === 131), { timeoutMs: 15000, everyMs: 250 });
+				if (!told) return "main was not told";
+				created.delete(131);
+				if ((await queryAll()).some((t) => t.uid === 131)) return "the tab is still listed";
+			});
+
 			/* ------------------------------------------------------------------ churn --- */
 
 			await r.step("create and destroy churn leaves the proxy answering", async () => {
