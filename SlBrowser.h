@@ -57,6 +57,7 @@ public:
 public:
 	void run(int argc, char *argv[]);
 	static std::string getDefaultUrl();
+	static bool isApprovedTabUrl(const std::string &url);
 	std::string createTabWindow(const int32_t uid, const std::string &url, TabWindowOptions options);
 	std::string queueDestroyCefBrowser(const int32_t uuid);
 	void closeTabWindow(const int32_t uid);

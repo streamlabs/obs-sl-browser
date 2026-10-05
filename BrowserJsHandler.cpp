@@ -119,6 +119,13 @@ bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_
 
 	int uid = argsWithoutFunc[0]->GetInt();
 	std::string url = argsWithoutFunc[1]->GetString();
+
+	if (!SlBrowser::isApprovedTabUrl(url))
+	{
+		jsonOutput = Json(Json::object({{"error", "url is not allowed"}})).dump();
+		return true;
+	}
+
 	TabWindowOptions options;
 	options.title = "Streamlabs App Store";
 
@@ -185,6 +192,12 @@ bool BrowserClient::JS_TABS_LOAD_URL(CefRefPtr<CefBrowser> &browser, int32_t &fu
 
 	int32_t uid = argsWithoutFunc[0]->GetInt();
 	std::string url = argsWithoutFunc[1]->GetString();
+
+	if (!SlBrowser::isApprovedTabUrl(url))
+	{
+		jsonOutput = Json(Json::object({{"error", "url is not allowed"}})).dump();
+		return true;
+	}
 
 	auto elementsPtr = SlBrowser::instance().getBrowserElements(uid);
 

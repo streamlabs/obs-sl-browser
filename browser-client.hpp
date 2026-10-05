@@ -13,6 +13,9 @@ class BrowserClient : public CefClient, public CefDisplayHandler, public CefLife
 public:
 	inline BrowserClient(bool reroute_audio_) : m_reroute_audio(reroute_audio_) {}
 
+	// Must be set before the browser is created
+	void SetIsMain(const bool b) { m_isMain = b; }
+
 	/* CefClient */
 	CefRefPtr<CefLoadHandler> GetLoadHandler() override;
 	CefRefPtr<CefRenderHandler> GetRenderHandler() override;
@@ -35,6 +38,8 @@ public:
 
 	/* CefRequestHandler */
 	CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool is_navigation, bool is_download, const CefString &request_initiator, bool &disable_default_handling) override;
+
+	bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool user_gesture, bool is_redirect) override;
 
 	/* CefResourceRequestHandler */
 	CefResourceRequestHandler::ReturnValue OnBeforeResourceLoad(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, CefRefPtr<CefCallback> callback) override;
@@ -87,6 +92,7 @@ private:
 	bool valid() const;
 
 	bool m_reroute_audio = true;
+	bool m_isMain = false;
 	std::recursive_mutex m_recursiveMutex;
 	std::map<int32_t, CefRefPtr<CefBrowser>> m_callbackDictionary;
 

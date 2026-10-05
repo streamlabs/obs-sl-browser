@@ -126,6 +126,12 @@ public:
 	// Sent to the main window's tabs_registerMsgReceiver function when the user closes a tab window
 	static constexpr const char *kTabClosedMessage = "{\"event\":\"tabClosed\"}";
 
+	// The only origins a tab window may load, for tabs_createWindow, tabs_loadUrl and main-frame navigation inside the tab
+	static constexpr const char *kTabAllowedOrigins[] = {"https://platform-cdn.streamlabs.com"};
+
+	// Test only: when set in the environment of the browser process, this one extra origin (scheme://host[:port]) is also allowed
+	static constexpr const char *kTestTabOriginEnvVar = "SL_PLUGIN_TEST_TAB_ORIGIN";
+
 	// Control over the plugin/OBS side
 	static std::map<std::string, JSFuncs> &getPluginFunctionNames()
 	{
@@ -637,6 +643,7 @@ public:
 			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional), initScriptStr (optional), hideOnCloseBOOL (optional))
 			//		arg1 is called once the window and its browser exist, so every other tabs_* function can be used from then on. Example arg1 = {} or { "error": "." }
 			//		Until then, hide/show/resize/isHidden/executeJs/loadUrl/getWindowCefId on the uid answer { "error": "not ready" }
+			//		url must be https on one of kTabAllowedOrigins (everything else, such as http, file:, data:, javascript: and http://absolute/, is an error), and the tab's main frame can only navigate to those origins. Subframes are not restricted
 			//		initScriptStr is run in the tab's main frame at the start of every document load (including reloads and navigations), after slabsTab is defined and before the page's own scripts. Empty means none
 			//		hideOnCloseBOOL false (default): when the user closes the window it is destroyed and main is sent kTabClosedMessage. true: it is only hidden, and main is not told
 			{"tabs_createWindow", JS_TABS_CREATE_WINDOW},
@@ -648,6 +655,7 @@ public:
 			{"tabs_resizeWindow", JS_TABS_RESIZE_WINDOW},
 
 			// .(@function(arg1), uidINT, url)
+			//		url is restricted as for tabs_createWindow
 			{"tabs_loadUrl", JS_TABS_LOAD_URL},
 
 			// .(@function(arg1), uidINT, codeStr)

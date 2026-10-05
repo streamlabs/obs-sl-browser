@@ -96,7 +96,8 @@ export async function launchObs({ exe, pageUrl, collection, port, timeoutMs = 12
 	try {
 		child = spawn(exe, args, {
 			cwd: dirname(exe), // OBS resolves data\, obs-plugins\ and its portable config relative to cwd
-			env: { ...process.env, SL_PLUGIN_DEFAULT_URL: pageUrl },
+			// Tab windows may only load approved origins, so the harness's own is approved for the run
+			env: { ...process.env, SL_PLUGIN_DEFAULT_URL: pageUrl, SL_PLUGIN_TEST_TAB_ORIGIN: new URL(pageUrl).origin },
 			detached: true,
 			stdio: "ignore",
 		});

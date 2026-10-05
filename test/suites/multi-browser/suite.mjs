@@ -550,6 +550,93 @@ export default {
 				created.delete(103);
 			});
 
+			/* ------------------------------------------------------------- url allow-list --- */
+
+			// Everything but https on the CDN host. The harness's own origin is let through by
+			// SL_PLUGIN_TEST_TAB_ORIGIN, which is how these tests load pages at all.
+			const BAD_URLS = [
+				"http://absolute/C:/x.html", "file:///C:/Windows/win.ini", "data:text/html,<b>x</b>", "javascript:1", "chrome://version",
+				"devtools://devtools/bundled/inspector.html", "about:blank", "", "ws://platform-cdn.streamlabs.com/",
+				"http://platform-cdn.streamlabs.com/", "https://platform-cdn.streamlabs.com.example.com/",
+				"https://example.com/?https://platform-cdn.streamlabs.com/", "https://platform-cdn.streamlabs.com@example.com/",
+				"https://user:pw@platform-cdn.streamlabs.com/", "//platform-cdn.streamlabs.com/", "https://streamlabs.com/",
+				"https://platform-cdn.streamlabs.com:8443/", "http://127.0.0.1:1/tab.html",
+			];
+
+			await r.step("tabs_createWindow refuses every url that is not https on the CDN host", async () => {
+				for (const url of BAD_URLS) {
+					const res = await cdp.call("tabs_createWindow", 140, url, "bad");
+					if (!isError(res)) {
+						await cdp.call("tabs_destroyWindow", 140);
+						return `${JSON.stringify(url)} was accepted: ${JSON.stringify(res)}`;
+					}
+				}
+				// None of the refusals may have taken the uid.
+				if ((await queryAll()).some((t) => t.uid === 140)) return "a refused create left uid 140 listed";
+				const ok = await createTab(140, "T140");
+				if (isError(ok)) return `uid 140 was not free after the refusals: ${ok.error}`;
+				await cdp.call("tabs_destroyWindow", 140);
+				created.delete(140);
+			});
+
+			await r.step("tabs_createWindow accepts the CDN origin, however its host and default port are spelled", async () => {
+				for (const url of ["https://platform-cdn.streamlabs.com/", "HTTPS://PLATFORM-CDN.STREAMLABS.COM:443/index.html"]) {
+					const res = await cdp.call("tabs_createWindow", 141, url, "cdn");
+					created.add(141);
+					if (isError(res) || res.__timeout) return `${url}: ${JSON.stringify(res)}`;
+					const d = await cdp.call("tabs_destroyWindow", 141);
+					created.delete(141);
+					if (isError(d)) return `${url}: destroy ${JSON.stringify(d)}`;
+				}
+			});
+
+			await r.step("tabs_loadUrl refuses the same urls, and leaves the tab where it was", async () => {
+				const res = await createTab(142, "T142");
+				if (isError(res)) return res.error;
+				for (const url of BAD_URLS) {
+					if (!isError(await cdp.call("tabs_loadUrl", 142, url))) return `${JSON.stringify(url)} was accepted by tabs_loadUrl`;
+				}
+				await settle(1000);
+				const mine = (await queryAll()).find((t) => t.uid === 142);
+				if (mine?.url !== tabUrl(142)) return `the tab is at ${mine?.url}`;
+				await cdp.call("tabs_destroyWindow", 142);
+				created.delete(142);
+			});
+
+			/* ------------------------------------------------------------ navigation lock --- */
+
+			await r.step("a tab's main frame cannot navigate off the approved origin, by script or by location", async () => {
+				const res = await createTab(143, "T143");
+				if (isError(res)) return res.error;
+				const t = await attach(143);
+
+				// Same host name, different origin (localhost is not 127.0.0.1), so it would load if allowed.
+				const otherOrigin = observer.origin.replace("127.0.0.1", "localhost");
+				const targets = [`${otherOrigin}/tab.html?uid=143&off=1`, "https://example.com/", "http://absolute/C:/x.html", "file:///C:/Windows/win.ini"];
+
+				for (const target of targets) {
+					await t.evaluate(`location.href = ${JSON.stringify(target)}`).catch(() => {});
+					await settle(1500);
+				}
+				await t.evaluate(`location.assign(${JSON.stringify(targets[0])})`).catch(() => {});
+				await t.evaluate(`location.replace(${JSON.stringify(targets[0])})`).catch(() => {});
+				await settle(2000);
+
+				if (tabEvents(143, "LOADED").some((e) => e.data?.off === "1" || e.data?.href !== tabUrl(143))) return `the tab loaded somewhere else: ${JSON.stringify(tabEvents(143, "LOADED").map((e) => e.data?.href))}`;
+				const href = await t.evaluate("location.href");
+				if (href !== tabUrl(143)) return `the tab is at ${href}`;
+				if (observer.events.some((e) => e.event === "served" && String(e.data).includes("off=1"))) return "the off-origin page was requested from the server";
+
+				// The tab still works, and still moves within its origin.
+				const n = loads(143).length;
+				if (isError(await cdp.call("tabs_loadUrl", 143, tabUrl(143, "&nav=7")))) return "loadUrl within the origin errored";
+				if (!(await observer.waitFor(() => loads(143).length > n, { timeoutMs: 20000 }))) return "no load within the origin afterwards";
+				t.close();
+				tabCdp.delete(143);
+				await cdp.call("tabs_destroyWindow", 143);
+				created.delete(143);
+			});
+
 			/* ------------------------------------------------------------ close flag --- */
 
 			await r.step("a tab created with hideOnClose is only hidden when the user closes it, and main is not told", async () => {

@@ -2,6 +2,8 @@
 
 Defining SL_PLUGIN_DEFAULT_URL as an env variable will override the default URL loaded by the plugin's browser.
 
+Test only: defining SL_PLUGIN_TEST_TAB_ORIGIN (scheme://host[:port]) adds that one origin to the ones `tabs_createWindow` and `tabs_loadUrl` accept, so the e2e harness can serve tab pages from its own http server. Nothing else widens the list, and it is unset in normal use.
+
 ## Local Build Instructions
 
 1. Build OBS (clone recursive).

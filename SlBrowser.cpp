@@ -117,6 +117,46 @@ std::string SlBrowser::getDefaultUrl()
 	return "https://obs-plugin.streamlabs.com";
 }
 
+/*static*/
+bool SlBrowser::isApprovedTabUrl(const std::string &url)
+{
+	CefURLParts parts;
+
+	if (!CefParseURL(url, parts))
+		return false;
+
+	if (!CefString(&parts.username).empty() || !CefString(&parts.password).empty())
+		return false;
+
+	// The parsed origin is lowercased and drops a default port, whatever the url's own spelling
+	std::string origin = CefString(&parts.origin).ToString();
+
+	while (!origin.empty() && origin.back() == '/')
+		origin.pop_back();
+
+	if (origin.empty())
+		return false;
+
+	for (const char *allowed : JavascriptApi::kTabAllowedOrigins)
+	{
+		if (origin == allowed)
+			return true;
+	}
+
+	static const std::string testOrigin = []() {
+		char buffer[MAX_PATH];
+		DWORD len = GetEnvironmentVariableA(JavascriptApi::kTestTabOriginEnvVar, buffer, MAX_PATH);
+		std::string value = (len > 0 && len < MAX_PATH) ? std::string(buffer, len) : std::string();
+
+		while (!value.empty() && value.back() == '/')
+			value.pop_back();
+
+		return value;
+	}();
+
+	return !testOrigin.empty() && origin == testOrigin;
+}
+
 std::string SlBrowser::registerBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements)
 {
 	std::lock_guard<std::mutex> g(m_mutex);
@@ -187,6 +227,7 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 	CefWindowInfo window_info;
 	CefBrowserSettings browser_settings;
 	browserElements->client = new BrowserClient(false);
+	browserElements->client->SetIsMain(browserElements->uid == 0);
 
 	// Adjust for possible DPI
 	int realWidth = browserElements->widget->width();

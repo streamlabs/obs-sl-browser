@@ -65,6 +65,21 @@ CefRefPtr<CefResourceRequestHandler> BrowserClient::GetResourceRequestHandler(Ce
 	return nullptr;
 }
 
+bool BrowserClient::OnBeforeBrowse(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool, bool)
+{
+	// Only a tab's own page is held to the approved origins; its subframes and main's pages are not
+	if (m_isMain || !frame->IsMain())
+		return false;
+
+	const std::string url = request->GetURL();
+
+	// A tab is blanked this way before it is closed
+	if (url == "about:blank")
+		return false;
+
+	return !SlBrowser::isApprovedTabUrl(url);
+}
+
 CefResourceRequestHandler::ReturnValue BrowserClient::OnBeforeResourceLoad(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, CefRefPtr<CefCallback>)
 {
 	return RV_CONTINUE;
