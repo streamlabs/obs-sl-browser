@@ -16,7 +16,7 @@
 
 using namespace json11;
 
-bool BrowserClient::JS_BROWSER_RESIZE_BROWSER(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_BROWSER_RESIZE_BROWSER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 2)
 	{
@@ -38,7 +38,7 @@ bool BrowserClient::JS_BROWSER_RESIZE_BROWSER(CefRefPtr<CefBrowser>& browser, in
 	return true;
 }
 
-bool BrowserClient::JS_BROWSER_BRING_FRONT(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_BROWSER_BRING_FRONT(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	HWND hwnd = HWND(SlBrowser::instance().m_mainBrowser->widget->winId());
 
@@ -50,7 +50,7 @@ bool BrowserClient::JS_BROWSER_BRING_FRONT(CefRefPtr<CefBrowser>& browser, int32
 	return true;
 }
 
-bool BrowserClient::JS_BROWSER_SET_WINDOW_POSITION(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_BROWSER_SET_WINDOW_POSITION(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 2)
 	{
@@ -66,7 +66,7 @@ bool BrowserClient::JS_BROWSER_SET_WINDOW_POSITION(CefRefPtr<CefBrowser>& browse
 	return true;
 }
 
-bool BrowserClient::JS_BROWSER_SET_ALLOW_HIDE_BROWSER(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_BROWSER_SET_ALLOW_HIDE_BROWSER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 1)
 	{
@@ -79,7 +79,7 @@ bool BrowserClient::JS_BROWSER_SET_ALLOW_HIDE_BROWSER(CefRefPtr<CefBrowser>& bro
 	return true;
 }
 
-bool BrowserClient::JS_BROWSER_SET_HIDDEN_STATE(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_BROWSER_SET_HIDDEN_STATE(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 1)
 	{
@@ -99,7 +99,7 @@ bool BrowserClient::JS_BROWSER_SET_HIDDEN_STATE(CefRefPtr<CefBrowser>& browser, 
 	return true;
 }
 
-bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 2)
 	{
@@ -118,23 +118,7 @@ bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser>& browser, int32_
 	if (argsWithoutFunc.size() >= 4)
 		iconPath = argsWithoutFunc[3]->GetString();
 
-	auto elements = std::make_shared<BrowserElements>();
-	elements->widget = new SlBrowserWidget;
-	elements->widget->setWindowTitle(title.c_str());
-	elements->widget->setMinimumSize(320, 240);
-	elements->widget->resize(1280, 720);
-
-	if (!iconPath.empty())
-	{
-		QIcon icon2(iconPath.c_str());
-		elements->widget->window()->setWindowIcon(icon2);
-	}
-
-	elements->widget->showMinimized();
-
-	SlBrowser::instance().createCefBrowser(uid, elements, url, false, false);
-
-	std::string err = SlBrowser::instance().popLastError();
+	std::string err = SlBrowser::instance().createTabWindow(uid, url, title, iconPath);
 
 	if (!err.empty())
 		jsonOutput = Json(Json::object({{"error", err}})).dump();
@@ -142,7 +126,7 @@ bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser>& browser, int32_
 	return true;
 }
 
-bool BrowserClient::JS_TABS_DESTROY_WINDOW(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_TABS_DESTROY_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 1)
 	{
@@ -151,9 +135,7 @@ bool BrowserClient::JS_TABS_DESTROY_WINDOW(CefRefPtr<CefBrowser>& browser, int32
 	}
 
 	int32_t uid = argsWithoutFunc[0]->GetInt();
-	SlBrowser::instance().queueDestroyCefBrowser(uid);
-
-	std::string err = SlBrowser::instance().popLastError();
+	std::string err = SlBrowser::instance().queueDestroyCefBrowser(uid);
 
 	if (!err.empty())
 		jsonOutput = Json(Json::object({{"error", err}})).dump();
@@ -161,7 +143,7 @@ bool BrowserClient::JS_TABS_DESTROY_WINDOW(CefRefPtr<CefBrowser>& browser, int32
 	return true;
 }
 
-bool BrowserClient::JS_TABS_LOAD_URL(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_TABS_LOAD_URL(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 2)
 	{
@@ -180,15 +162,16 @@ bool BrowserClient::JS_TABS_LOAD_URL(CefRefPtr<CefBrowser>& browser, int32_t& fu
 		return true;
 	}
 
-	auto browserPtr = elementsPtr->browser;
-
-	if (auto mainFramePtr = browserPtr->GetMainFrame())
-		mainFramePtr->LoadURL(url);
+	if (auto browserPtr = elementsPtr->browser)
+	{
+		if (auto mainFramePtr = browserPtr->GetMainFrame())
+			mainFramePtr->LoadURL(url);
+	}
 
 	return true;
 }
 
-bool BrowserClient::JS_TABS_RESIZE_WINDOW(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_TABS_RESIZE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 3)
 	{
@@ -198,7 +181,13 @@ bool BrowserClient::JS_TABS_RESIZE_WINDOW(CefRefPtr<CefBrowser>& browser, int32_
 
 	int32_t uid = argsWithoutFunc[0]->GetInt();
 	int32_t w = argsWithoutFunc[1]->GetInt();
-	int32_t h = argsWithoutFunc[1]->GetInt();
+	int32_t h = argsWithoutFunc[2]->GetInt();
+
+	if (w < 200 || h < 200 || w > 8096 || h > 8096)
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		return true;
+	}
 
 	auto elementsPtr = SlBrowser::instance().getBrowserElements(uid);
 
@@ -214,7 +203,7 @@ bool BrowserClient::JS_TABS_RESIZE_WINDOW(CefRefPtr<CefBrowser>& browser, int32_
 	return true;
 }
 
-bool BrowserClient::JS_TABS_HIDE_WINDOW(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_TABS_HIDE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 1)
 	{
@@ -238,7 +227,7 @@ bool BrowserClient::JS_TABS_HIDE_WINDOW(CefRefPtr<CefBrowser>& browser, int32_t&
 	return true;
 }
 
-bool BrowserClient::JS_TABS_SHOW_WINDOW(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_TABS_SHOW_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 1)
 	{
@@ -271,7 +260,7 @@ bool BrowserClient::JS_TABS_SHOW_WINDOW(CefRefPtr<CefBrowser>& browser, int32_t&
 	return true;
 }
 
-bool BrowserClient::JS_TABS_IS_WINDOW_HIDDEN(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+bool BrowserClient::JS_TABS_IS_WINDOW_HIDDEN(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 1)
 	{
@@ -327,23 +316,25 @@ bool BrowserClient::JS_TABS_GET_WINDOW_CEF_IDENTIFIER(CefRefPtr<CefBrowser> &bro
 bool BrowserClient::JS_TABS_REGISTER_MSG_RECEIVER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	AssignMsgReceiverFunc(browser->GetIdentifier(), funcId);
-	internalMsgType = "executeCallback_NoDelete";
-	return true;
+
+	// No reply: the callback is only invoked with messages
+	return false;
 }
 
 bool BrowserClient::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	std::shared_ptr<BrowserElements> ptr = SlBrowser::instance().getBrowserElements(0);
 
-	if (ptr == nullptr)
+	if (ptr == nullptr || ptr->browser == nullptr)
 	{
 		jsonOutput = Json(Json::object({{"error", "main not found"}})).dump();
 		return true;
 	}
 
 	AssignMsgReceiverFunc(ptr->browser->GetIdentifier(), funcId);
-	internalMsgType = "executeCallback_NoDelete";
-	return true;
+
+	// No reply: the callback is only invoked with messages
+	return false;
 }
 
 bool BrowserClient::JS_TAB_SEND_STRING_TO_MAIN(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
@@ -356,18 +347,19 @@ bool BrowserClient::JS_TAB_SEND_STRING_TO_MAIN(CefRefPtr<CefBrowser> &browser, i
 
 	std::shared_ptr<BrowserElements> ptr = SlBrowser::instance().getBrowserElements(0);
 
-	if (ptr == nullptr)
+	if (ptr == nullptr || ptr->browser == nullptr)
 	{
 		jsonOutput = Json(Json::object({{"error", "main not found"}})).dump();
 		return true;
 	}
 
-	std::string msgStr = argsWithoutFunc[0]->GetString();
+	if (GetReceiverFuncIdForBrowser(ptr->browser->GetIdentifier()) == 0)
+	{
+		jsonOutput = Json(Json::object({{"error", "main has no receiver"}})).dump();
+		return true;
+	}
 
-	browser = ptr->browser;
-	internalMsgType = "executeCallback_NoDelete";
-	funcId = GetReceiverFuncIdForBrowser(browser->GetIdentifier());
-	jsonOutput = msgStr;
+	SendMsgToReceiver(ptr->browser, argsWithoutFunc[0]->GetString(), SlBrowser::instance().getUuidFromCefId(browser->GetIdentifier()));
 	return true;
 }
 
@@ -395,12 +387,13 @@ bool BrowserClient::JS_MAIN_SEND_STRING_TO_TAB(CefRefPtr<CefBrowser> &browser, i
 		return true;
 	}
 
-	std::string msgStr = argsWithoutFunc[1]->GetString();
+	if (ptr->browser == nullptr || GetReceiverFuncIdForBrowser(ptr->browser->GetIdentifier()) == 0)
+	{
+		jsonOutput = Json(Json::object({{"error", "tab has no receiver"}})).dump();
+		return true;
+	}
 
-	browser = ptr->browser;
-	internalMsgType = "executeCallback_NoDelete";
-	funcId = GetReceiverFuncIdForBrowser(browser->GetIdentifier());
-	jsonOutput = msgStr;
+	SendMsgToReceiver(ptr->browser, argsWithoutFunc[1]->GetString(), 0);
 	return true;
 }
 
@@ -435,8 +428,8 @@ bool BrowserClient::JS_TABS_SET_ICON(CefRefPtr<CefBrowser> &browser, int32_t &fu
 	QMetaObject::invokeMethod(
 		mainWindow,
 		[path, ptr]() {
-			QIcon icon2(path.c_str());
-			ptr->widget->window()->setWindowIcon(icon2);
+			if (ptr->widget)
+				ptr->widget->window()->setWindowIcon(QIcon(path.c_str()));
 		},
 		Qt::QueuedConnection);
 
@@ -473,16 +466,16 @@ bool BrowserClient::JS_TABS_SET_TITLE(CefRefPtr<CefBrowser> &browser, int32_t &f
 
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[text, ptr]()
-		{
-			ptr->widget->window()->setWindowTitle(text.c_str());
+		[text, ptr]() {
+			if (ptr->widget)
+				ptr->widget->window()->setWindowTitle(text.c_str());
 		},
 		Qt::QueuedConnection);
 
 	return true;
 }
 
-bool BrowserClient::JS_TABS_EXECUTE_JS(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput, std::string& internalMsgType)
+bool BrowserClient::JS_TABS_EXECUTE_JS(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 2)
 	{
@@ -517,7 +510,7 @@ bool BrowserClient::JS_TABS_EXECUTE_JS(CefRefPtr<CefBrowser>& browser, int32_t& 
 	return true;
 }
 
-bool BrowserClient::JS_TABS_QUERY_ALL(CefRefPtr<CefBrowser>& browser, int32_t& funcId, const std::vector<CefRefPtr<CefValue>>& argsWithoutFunc, std::string& jsonOutput, std::string& internalMsgType)
+bool BrowserClient::JS_TABS_QUERY_ALL(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	const std::map<int32_t, std::shared_ptr<BrowserElements>> &browsers = SlBrowser::instance().getExtraBrowsers();
 
