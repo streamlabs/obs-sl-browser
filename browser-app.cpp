@@ -58,6 +58,21 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 	command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:9123");
 }
 
+void BrowserApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionaryValue> extra_info)
+{
+	if (!extra_info || !extra_info->HasKey("initScript"))
+		return;
+
+	std::lock_guard<std::mutex> grd(m_initScriptMutex);
+	m_initScripts[browser->GetIdentifier()] = extra_info->GetString("initScript");
+}
+
+void BrowserApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
+{
+	std::lock_guard<std::mutex> grd(m_initScriptMutex);
+	m_initScripts.erase(browser->GetIdentifier());
+}
+
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
 	if (isMainBrowser(browser))
@@ -71,9 +86,14 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
 
 		for (auto &itr : JavascriptApi::getBrowserFunctionNames())
+		{
+			if (!frame->IsMain() && JavascriptApi::isMainFrameOnlyFunctionName(itr.first))
+				continue;
+
 			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+		}
 	}
-	else
+	else if (frame->IsMain())
 	{
 		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
 		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
@@ -82,6 +102,24 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 
 		for (auto &itr : JavascriptApi::getBrowserTabsFunctionNames())
 			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		std::string initScript;
+
+		{
+			std::lock_guard<std::mutex> grd(m_initScriptMutex);
+			auto itr = m_initScripts.find(browser->GetIdentifier());
+
+			if (itr != m_initScripts.end())
+				initScript = itr->second;
+		}
+
+		// Eval, not ExecuteJavaScript: it runs now, before any script of the page
+		if (!initScript.empty())
+		{
+			CefRefPtr<CefV8Value> retval;
+			CefRefPtr<CefV8Exception> exception;
+			context->Eval(initScript, frame->GetURL(), 0, retval, exception);
+		}
 	}
 }
 
@@ -123,11 +161,13 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const CefV8ValueList &arguments, CefRefPtr<CefV8Value> &, CefString &)
 {
-	CefRefPtr<CefBrowser> browser = CefV8Context::GetCurrentContext()->GetBrowser();
+	CefRefPtr<CefV8Context> current = CefV8Context::GetCurrentContext();
+	CefRefPtr<CefBrowser> browser = current->GetBrowser();
 
 	// Allowed functions depend on the calling browser, not on shared renderer state
 	const std::string funcName = name.ToString();
-	const bool allowed = isMainBrowser(browser) ? (JavascriptApi::isPluginFunctionName(funcName) || JavascriptApi::isBrowserFunctionName(funcName)) : JavascriptApi::isBrowserTabFunctionName(funcName);
+	const bool allowedForBrowser = isMainBrowser(browser) ? (JavascriptApi::isPluginFunctionName(funcName) || JavascriptApi::isBrowserFunctionName(funcName)) : JavascriptApi::isBrowserTabFunctionName(funcName);
+	const bool allowed = allowedForBrowser && (current->GetFrame()->IsMain() || !JavascriptApi::isMainFrameOnlyFunctionName(funcName));
 
 	if (allowed)
 	{

@@ -16,6 +16,16 @@
 
 using namespace json11;
 
+// True, with the reply filled in, while the tab's widget or browser is still being made
+static bool replyIfNotReady(const std::shared_ptr<BrowserElements> &elements, std::string &jsonOutput)
+{
+	if (elements->ready && elements->widget && elements->browser)
+		return false;
+
+	jsonOutput = Json(Json::object({{"error", "not ready"}})).dump();
+	return true;
+}
+
 bool BrowserClient::JS_BROWSER_RESIZE_BROWSER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 2)
@@ -109,21 +119,78 @@ bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_
 
 	int uid = argsWithoutFunc[0]->GetInt();
 	std::string url = argsWithoutFunc[1]->GetString();
-	std::string title = "Streamlabs App Store";
-	std::string iconPath;
+
+	if (!SlBrowser::isApprovedTabUrl(url))
+	{
+		jsonOutput = Json(Json::object({{"error", "url is not allowed"}})).dump();
+		return true;
+	}
+
+	TabWindowOptions options;
+	options.title = "Streamlabs App Store";
 
 	if (argsWithoutFunc.size() >= 3)
-		title = argsWithoutFunc[2]->GetString();
+		options.title = argsWithoutFunc[2]->GetString();
 
 	if (argsWithoutFunc.size() >= 4)
-		iconPath = argsWithoutFunc[3]->GetString();
+	{
+		const std::string iconPath = argsWithoutFunc[3]->GetString();
+		std::string err;
 
-	std::string err = SlBrowser::instance().createTabWindow(uid, url, title, iconPath);
+		if (!iconPath.empty())
+			err = SlBrowser::instance().resolveTabIconPath(iconPath, options.iconPath);
+
+		if (!err.empty())
+		{
+			jsonOutput = Json(Json::object({{"error", err}})).dump();
+			return true;
+		}
+	}
+
+	if (argsWithoutFunc.size() >= 5)
+		options.initScript = argsWithoutFunc[4]->GetString();
+
+	if (argsWithoutFunc.size() >= 6)
+		options.hideOnClose = argsWithoutFunc[5]->GetBool();
+
+	if (argsWithoutFunc.size() >= 7)
+	{
+		const std::string contextKey = argsWithoutFunc[6]->GetString();
+
+		if (!contextKey.empty())
+		{
+			options.contextDir = SlBrowser::tabContextDirName(contextKey);
+
+			if (options.contextDir.empty())
+			{
+				jsonOutput = Json(Json::object({{"error", "context key is too long"}})).dump();
+				return true;
+			}
+		}
+	}
+
+	// The reply waits for the browser, so the caller can use the tab as soon as it hears back
+	if (funcId != 0)
+	{
+		options.onCreated = [browser, funcId](const std::string &err) {
+			CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
+			CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
+			execute_args->SetInt(0, funcId);
+			execute_args->SetString(1, err.empty() ? "{}" : Json(Json::object({{"error", err}})).dump());
+
+			SendBrowserProcessMessage(browser, PID_RENDERER, msg);
+		};
+	}
+
+	std::string err = SlBrowser::instance().createTabWindow(uid, url, std::move(options));
 
 	if (!err.empty())
+	{
 		jsonOutput = Json(Json::object({{"error", err}})).dump();
+		return true;
+	}
 
-	return true;
+	return false;
 }
 
 bool BrowserClient::JS_TABS_DESTROY_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
@@ -154,6 +221,12 @@ bool BrowserClient::JS_TABS_LOAD_URL(CefRefPtr<CefBrowser> &browser, int32_t &fu
 	int32_t uid = argsWithoutFunc[0]->GetInt();
 	std::string url = argsWithoutFunc[1]->GetString();
 
+	if (!SlBrowser::isApprovedTabUrl(url))
+	{
+		jsonOutput = Json(Json::object({{"error", "url is not allowed"}})).dump();
+		return true;
+	}
+
 	auto elementsPtr = SlBrowser::instance().getBrowserElements(uid);
 
 	if (elementsPtr == nullptr)
@@ -162,11 +235,11 @@ bool BrowserClient::JS_TABS_LOAD_URL(CefRefPtr<CefBrowser> &browser, int32_t &fu
 		return true;
 	}
 
-	if (auto browserPtr = elementsPtr->browser)
-	{
-		if (auto mainFramePtr = browserPtr->GetMainFrame())
-			mainFramePtr->LoadURL(url);
-	}
+	if (replyIfNotReady(elementsPtr, jsonOutput))
+		return true;
+
+	if (auto mainFramePtr = elementsPtr->browser->GetMainFrame())
+		mainFramePtr->LoadURL(url);
 
 	return true;
 }
@@ -197,8 +270,10 @@ bool BrowserClient::JS_TABS_RESIZE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_
 		return true;
 	}
 
-	if (auto widget = elementsPtr->widget)
-		widget->resize(w, h);
+	if (replyIfNotReady(elementsPtr, jsonOutput))
+		return true;
+
+	QMetaObject::invokeMethod(qApp, [elementsPtr, w, h]() { elementsPtr->widget->resize(w, h); }, Qt::QueuedConnection);
 
 	return true;
 }
@@ -221,8 +296,13 @@ bool BrowserClient::JS_TABS_HIDE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t 
 		return true;
 	}
 
-	if (auto widget = elementsPtr->widget)
-		widget->hide();
+	if (replyIfNotReady(elementsPtr, jsonOutput))
+		return true;
+
+	// Set now so a read right after this call sees it; the widget's events keep it right afterwards
+	elementsPtr->hidden = true;
+
+	QMetaObject::invokeMethod(qApp, [elementsPtr]() { elementsPtr->widget->hide(); }, Qt::QueuedConnection);
 
 	return true;
 }
@@ -245,17 +325,24 @@ bool BrowserClient::JS_TABS_SHOW_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t 
 		return true;
 	}
 
-	if (auto widget = elementsPtr->widget)
-	{
-		widget->show();
+	if (replyIfNotReady(elementsPtr, jsonOutput))
+		return true;
 
-		HWND hwnd = HWND(widget->winId());
+	elementsPtr->hidden = false;
 
-		if (::IsIconic(hwnd))
-			::ShowWindow(hwnd, SW_RESTORE);
+	QMetaObject::invokeMethod(
+		qApp,
+		[elementsPtr]() {
+			elementsPtr->widget->show();
 
-		WindowsFunctions::ForceForegroundWindow(hwnd);
-	}
+			HWND hwnd = HWND(elementsPtr->widget->winId());
+
+			if (::IsIconic(hwnd))
+				::ShowWindow(hwnd, SW_RESTORE);
+
+			WindowsFunctions::ForceForegroundWindow(hwnd);
+		},
+		Qt::QueuedConnection);
 
 	return true;
 }
@@ -278,11 +365,10 @@ bool BrowserClient::JS_TABS_IS_WINDOW_HIDDEN(CefRefPtr<CefBrowser> &browser, int
 		return true;
 	}
 
-	if (auto widget = elementsPtr->widget)
-		jsonOutput = Json(Json::object({{"result", widget->isHidden()}})).dump();
-	else
-		jsonOutput = Json(Json::object({{"error", "Internal error, null ptr"}})).dump();
+	if (replyIfNotReady(elementsPtr, jsonOutput))
+		return true;
 
+	jsonOutput = Json(Json::object({{"result", elementsPtr->hidden.load()}})).dump();
 	return true;
 }
 
@@ -305,7 +391,8 @@ bool BrowserClient::JS_TABS_GET_WINDOW_CEF_IDENTIFIER(CefRefPtr<CefBrowser> &bro
 
 	if (result <= 0)
 	{
-		jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
+		const bool known = SlBrowser::instance().getBrowserElements(uid) != nullptr;
+		jsonOutput = Json(Json::object({{"error", known ? "not ready" : "Invalid parameters"}})).dump();
 		return true;
 	}
 
@@ -421,7 +508,14 @@ bool BrowserClient::JS_TABS_SET_ICON(CefRefPtr<CefBrowser> &browser, int32_t &fu
 		return true;
 	}
 
-	std::string path = argsWithoutFunc[1]->GetString();
+	std::wstring path;
+	std::string err = SlBrowser::instance().resolveTabIconPath(argsWithoutFunc[1]->GetString(), path);
+
+	if (!err.empty())
+	{
+		jsonOutput = Json(Json::object({{"error", err}})).dump();
+		return true;
+	}
 
 	QWidget *mainWindow = SlBrowser::instance().m_mainBrowser->widget;
 
@@ -429,7 +523,7 @@ bool BrowserClient::JS_TABS_SET_ICON(CefRefPtr<CefBrowser> &browser, int32_t &fu
 		mainWindow,
 		[path, ptr]() {
 			if (ptr->widget)
-				ptr->widget->window()->setWindowIcon(QIcon(path.c_str()));
+				ptr->widget->window()->setWindowIcon(QIcon(QString::fromStdWString(path)));
 		},
 		Qt::QueuedConnection);
 
@@ -501,11 +595,11 @@ bool BrowserClient::JS_TABS_EXECUTE_JS(CefRefPtr<CefBrowser> &browser, int32_t &
 
 	std::string code = argsWithoutFunc[1]->GetString();
 
-	if (auto browser = ptr->browser)
-	{
-		if (auto fr = browser->GetMainFrame())
-			fr->ExecuteJavaScript(code, fr->GetURL(), 0);
-	}
+	if (replyIfNotReady(ptr, jsonOutput))
+		return true;
+
+	if (auto fr = ptr->browser->GetMainFrame())
+		fr->ExecuteJavaScript(code, fr->GetURL(), 0);
 
 	return true;
 }
@@ -521,7 +615,7 @@ bool BrowserClient::JS_TABS_QUERY_ALL(CefRefPtr<CefBrowser> &browser, int32_t &f
 		int32_t uid = pair.first;
 		std::shared_ptr<BrowserElements> browserElement = pair.second;
 
-		if (browserElement && browserElement->browser)
+		if (browserElement && browserElement->ready && browserElement->browser)
 		{
 			// Get the URL of the main frame of the browser
 			if (auto fr = browserElement->browser->GetMainFrame())

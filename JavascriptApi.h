@@ -126,6 +126,15 @@ public:
 	// Sent to the main window's tabs_registerMsgReceiver function when the user closes a tab window
 	static constexpr const char *kTabClosedMessage = "{\"event\":\"tabClosed\"}";
 
+	// The only origins a tab window may load, for tabs_createWindow, tabs_loadUrl and main-frame navigation inside the tab
+	static constexpr const char *kTabAllowedOrigins[] = {"https://platform-cdn.streamlabs.com"};
+
+	// Test only: when set in the environment of the browser process, this one extra origin (scheme://host[:port]) is also allowed
+	static constexpr const char *kTestTabOriginEnvVar = "SL_PLUGIN_TEST_TAB_ORIGIN";
+
+	// Longest contextKey tabs_createWindow takes
+	static constexpr size_t kMaxTabContextKeyBytes = 64;
+
 	// Control over the plugin/OBS side
 	static std::map<std::string, JSFuncs> &getPluginFunctionNames()
 	{
@@ -634,7 +643,15 @@ public:
 			//	DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
 			{"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
 
-			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional))
+			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional), initScriptStr (optional), hideOnCloseBOOL (optional), contextKeyStr (optional))
+			//		arg1 is called once the window and its browser exist, so every other tabs_* function can be used from then on. Example arg1 = {} or { "error": "." }
+			//		Until then, hide/show/resize/isHidden/executeJs/loadUrl/getWindowCefId on the uid answer { "error": "not ready" }
+			//		iconpathStr must be an existing .png, .ico, .jpg or .jpeg file inside %APPDATA%\StreamlabsOBS\. Anything else, such as UNC or \\?\ paths, is an error. Empty means the default icon
+			//		contextKeyStr names the tab's cookie and storage profile, kept on disk across restarts and shared by every tab using the same key (at most kMaxTabContextKeyBytes bytes, any characters). Different keys, and main, share nothing
+			//		When omitted or empty the tab gets its own in-memory profile, which is not shared with any other tab or with main and is lost when the tab is destroyed. It never uses main's profile
+			//		url must be https on one of kTabAllowedOrigins (everything else, such as http, file:, data:, javascript: and http://absolute/, is an error), and the tab's main frame can only navigate to those origins. Subframes are not restricted
+			//		initScriptStr is run in the tab's main frame at the start of every document load (including reloads and navigations), after slabsTab is defined and before the page's own scripts. Empty means none
+			//		hideOnCloseBOOL false (default): when the user closes the window it is destroyed and main is sent kTabClosedMessage. true: it is only hidden, and main is not told
 			{"tabs_createWindow", JS_TABS_CREATE_WINDOW},
 
 			// .(@function(arg1), uidINT)
@@ -644,6 +661,7 @@ public:
 			{"tabs_resizeWindow", JS_TABS_RESIZE_WINDOW},
 
 			// .(@function(arg1), uidINT, url)
+			//		url is restricted as for tabs_createWindow
 			{"tabs_loadUrl", JS_TABS_LOAD_URL},
 
 			// .(@function(arg1), uidINT, codeStr)
@@ -669,7 +687,8 @@ public:
 
 			// .(@function(arg1, arg2))
 			//		function is remembered internally and is not called on registration, only when a tab sends a message. It is given args 'string, uid' (The message, and the uid it came from)
-			//		When a tab window is closed by the user, it is destroyed and the function is called with the message kTabClosedMessage and the uid of the closed tab
+			//		When a tab window is closed by the user, it is destroyed and the function is called with the message kTabClosedMessage and the uid of the closed tab, unless the tab was created with hideOnClose
+			//		Only the main frame of a page can use this and the other tabs_* and tab_* functions; they are not defined in iframes, and calls that reach the browser process from an iframe, or from a browser of the wrong kind, are refused
 			{"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
 
 			// .(@function(arg1))
@@ -677,7 +696,7 @@ public:
 			{"tabs_queryAll", JS_TABS_QUERY_ALL},
 
 			// .(@function(arg1), uidINT, pathStr)
-			//		pathStr can be a .png path
+			//		pathStr is restricted as iconpathStr is for tabs_createWindow
 			{"tabs_setIcon", JS_TABS_SET_ICON},
 
 			// .(@function(arg1), uidINT, titleStr)
@@ -731,6 +750,9 @@ public:
 		auto ref = getBrowserTabsFunctionNames();
 		return ref.find(str) != ref.end();
 	}
+
+	// tabs_* and tab_* drive windows and the app channel, so only a page's own main frame may call them
+	static bool isMainFrameOnlyFunctionName(const std::string &str) { return str.rfind("tabs_", 0) == 0 || str.rfind("tab_", 0) == 0; }
 
 	static JSFuncs getFunctionId(const std::string &funcName)
 	{

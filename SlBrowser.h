@@ -5,7 +5,22 @@
 #include "SlBrowserWidget.h"
 
 #include <QWidget>
+#include <atomic>
+#include <functional>
 #include <map>
+
+// What a tab window is made with, beyond its uid and url
+struct TabWindowOptions
+{
+	std::string title;
+	std::wstring iconPath;
+	std::string initScript;
+	bool hideOnClose = false;
+	std::string contextDir;
+
+	// Called on the CEF UI thread once the browser exists, or has failed to
+	std::function<void(const std::string &err)> onCreated;
+};
 
 struct BrowserElements
 {
@@ -14,6 +29,17 @@ struct BrowserElements
 	SlBrowserWidget *widget = nullptr;
 	CefRefPtr<CefBrowser> browser = nullptr;
 	CefRefPtr<BrowserClient> client = nullptr;
+
+	// Set once widget and browser both exist. The widget is made on the Qt thread and the browser on the CEF UI thread, so neither can be trusted before this
+	std::atomic<bool> ready = false;
+
+	// Mirrors widget->isHidden() so it can be read from any thread
+	std::atomic<bool> hidden = true;
+
+	std::string initScript;
+	bool hideOnClose = false;
+	std::string contextDir;
+	std::function<void(const std::string &err)> onCreated;
 
 	static void queueCleanupQtObj(QWidget *widget)
 	{
@@ -33,7 +59,10 @@ public:
 public:
 	void run(int argc, char *argv[]);
 	static std::string getDefaultUrl();
-	std::string createTabWindow(const int32_t uid, const std::string &url, const std::string &title, const std::string &iconPath);
+	static bool isApprovedTabUrl(const std::string &url);
+	static std::string tabContextDirName(const std::string &key);
+	std::string resolveTabIconPath(const std::string &path, std::wstring &resolved) const;
+	std::string createTabWindow(const int32_t uid, const std::string &url, TabWindowOptions options);
 	std::string queueDestroyCefBrowser(const int32_t uuid);
 	void closeTabWindow(const int32_t uid);
 	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
@@ -82,6 +111,7 @@ private:
 	static void cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements);
 
 	std::wstring getCacheDir() const;
+	CefRefPtr<CefRequestContext> createTabRequestContext(const std::string &contextDir) const;
 
 	static void DebugInputThread();
 	static void CheckForObsThread();
@@ -89,6 +119,7 @@ private:
 	bool m_mainPageSuccess = false;
 	bool m_mainLoadingInProgress = false;
 	bool m_cefCreated = false;
+	std::string m_cefCachePath;
 
 	std::mutex m_mutex;
 	std::string m_lastError;
