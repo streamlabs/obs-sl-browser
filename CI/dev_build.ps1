@@ -3,9 +3,8 @@
     Builds OBS and the sl-browser plugin locally, in place, for repeated iteration.
 
 .DESCRIPTION
-    local_build.ps1 is the one-shot CI recipe: it clones obs-sl-browser, clones OBS next to it,
-    copies the plugin in, and builds once. That is wrong for development - the copy means your
-    edits are invisible to the build, and every run starts from scratch.
+    local_build.ps1 forwards to this script for compatibility. Older one-shot clone recipes
+    copied the plugin and started from scratch on every run, hiding edits in this working copy.
 
     This script instead:
       * uses the working copy this script lives in, never a clone of it
@@ -396,48 +395,9 @@ Info "$copied changed file(s) copied; $($sourceFiles.Count) file(s) tracked"
 
 # --- Register the plugin with OBS's build ------------------------------------
 
-$pluginsCMake = Join-Path $obsFull 'plugins\CMakeLists.txt'
-$addLine = 'add_subdirectory(obs-sl-browser)'
-$enableLine = 'target_enable(sl-browser-plugin)'
-$activeAddPattern = '^[ \t]*add_subdirectory[ \t]*\([ \t]*obs-sl-browser[ \t]*\)[ \t]*(?:#.*)?$'
-$activeEnablePattern = '^[ \t]*target_enable[ \t]*\([ \t]*sl-browser-plugin[ \t]*\)[ \t]*(?:#.*)?$'
-$coreModulesPattern = '^[ \t]*set_obs_core_modules[ \t]*\([ \t]*\)[ \t]*(?:#.*)?$'
-$originalCMake = [System.IO.File]::ReadAllText($pluginsCMake)
-$lineEnding = if ($originalCMake.Contains("`r`n")) { "`r`n" } else { "`n" }
-$cmakeLines = [System.Collections.Generic.List[string]]::new()
-
-# Move a registration left by an earlier run to the point where OBS 33 snapshots its module list.
-foreach ($line in ($originalCMake -split '\r?\n')) {
-    if ($line -match $activeAddPattern -or $line -match $activeEnablePattern) { continue }
-    $cmakeLines.Add($line)
-}
-
-$coreModulesIndex = -1
-for ($i = 0; $i -lt $cmakeLines.Count; $i++) {
-    if ($cmakeLines[$i] -match $coreModulesPattern) {
-        if ($coreModulesIndex -ge 0) { throw "Multiple set_obs_core_modules() calls in '$pluginsCMake'." }
-        $coreModulesIndex = $i
-    }
-}
-
-if ($coreModulesIndex -ge 0) {
-    $cmakeLines.Insert($coreModulesIndex, $addLine)
-    $cmakeLines.Insert($coreModulesIndex + 1, $enableLine)
-}
-else {
-    # OBS releases before the core module list only need the subdirectory.
-    $cmakeLines.Add($addLine)
-}
-
-$updatedCMake = $cmakeLines -join $lineEnding
-if ($updatedCMake -cne $originalCMake) {
-    [System.IO.File]::WriteAllText($pluginsCMake, $updatedCMake, [System.Text.UTF8Encoding]::new($false))
-    Info "registered in plugins/CMakeLists.txt"
+if (& (Join-Path $PSScriptRoot 'register_plugin.ps1') -ObsDir $obsFull) {
     # The module list is generated at configure time, so an existing cache must be refreshed.
     $Reconfigure = $true
-}
-else {
-    Info "already registered in plugins/CMakeLists.txt"
 }
 
 # --- Configure ---------------------------------------------------------------

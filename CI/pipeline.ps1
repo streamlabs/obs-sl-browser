@@ -72,7 +72,7 @@ cd ..\
 .\obs-sl-browser\ci\install_deps.cmd
 
 # Read the obs.ver file to get the branch name
-$branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
+$branchName = (Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw).Trim()
 
 # Clone obs-studio repository with the branch name
 git clone --recursive --branch $branchName https://github.com/obsproject/obs-studio.git
@@ -84,12 +84,8 @@ Rename-Item -Path ".\obs-studio" -NewName $revision
 cd $revision
 git submodule update --init --recursive
 
-# Add to top of CMakeLists.txt in obs-studio\plugins
-$cmakeListsPath = ".\plugins\CMakeLists.txt"
-$addSubdirectoryLine = "add_subdirectory(obs-sl-browser)"
-$cmakeListsContent = Get-Content -Path $cmakeListsPath
-$cmakeListsContent = $cmakeListsContent[0], $addSubdirectoryLine, $cmakeListsContent[1..($cmakeListsContent.Length - 1)]
-Set-Content -Path $cmakeListsPath -Value $cmakeListsContent
+# Register the plugin before OBS generates its core module list.
+& ..\obs-sl-browser\CI\register_plugin.ps1 -ObsDir . | Out-Null
 
 # Move obs-sl-browser folder into obs-studio\plugins
 Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Recurse
@@ -122,10 +118,14 @@ else {
 }
 
 # Build
-cmake --preset windows-x64
+$cfg = @(& .\plugins\obs-sl-browser\CI\windows_x64_configure_args.ps1 -ObsDir .)
+cmake @cfg
+if ($LASTEXITCODE -ne 0) { throw "configure failed ($LASTEXITCODE)" }
 cmake --build --preset windows-x64
+if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }
 
 # Verify these files all exist inside ".\plugins\obs-sl-browser" otherwise throw
+$currentDirFullPath = (Resolve-Path '..').Path
 $buildOutputDir = Join-Path $currentDirFullPath "$revision\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 
 $requiredFiles = @(
