@@ -111,13 +111,6 @@ target_link_options(sl-browser PRIVATE
 target_compile_options(sl-browser PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
 target_compile_definitions(sl-browser PRIVATE NOMINMAX)
 
-add_custom_command(
-  TARGET sl-browser POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy
-          ${CMAKE_CURRENT_SOURCE_DIR}/streamlabs-app-icon.png
-          $<TARGET_FILE_DIR:sl-browser>/streamlabs-app-icon.png
-)
-
 # OBS 33 keeps CEF and its runtime resources under core/obs-browser. Keep both
 # helper executables beside those files; older OBS versions use one plugin dir.
 if(OBS_PLUGIN_DESTINATION STREQUAL "core")
@@ -125,6 +118,19 @@ if(OBS_PLUGIN_DESTINATION STREQUAL "core")
 else()
   set(SL_BROWSER_EXECUTABLE_DESTINATION "${OBS_PLUGIN_DESTINATION}")
 endif()
+add_custom_command(
+  TARGET sl-browser POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${CMAKE_CURRENT_SOURCE_DIR}/streamlabs-app-icon.png"
+          "$<TARGET_FILE_DIR:sl-browser>/streamlabs-app-icon.png"
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+          "${OBS_OUTPUT_DIR}/$<CONFIG>/${SL_BROWSER_EXECUTABLE_DESTINATION}"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${CMAKE_CURRENT_SOURCE_DIR}/streamlabs-app-icon.png"
+          "${OBS_OUTPUT_DIR}/$<CONFIG>/${SL_BROWSER_EXECUTABLE_DESTINATION}/streamlabs-app-icon.png"
+)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/streamlabs-app-icon.png"
+        DESTINATION "${SL_BROWSER_EXECUTABLE_DESTINATION}" COMPONENT Runtime)
 set(OBS_EXECUTABLE_DESTINATION "${SL_BROWSER_EXECUTABLE_DESTINATION}")
 set_target_properties_obs(sl-browser PROPERTIES FOLDER plugins/sl-browser PREFIX "" OUTPUT_NAME sl-browser)
 

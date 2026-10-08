@@ -130,11 +130,8 @@ if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }
 $currentDirFullPath = (Resolve-Path '..').Path
 $buildOutputDir = Join-Path $currentDirFullPath "$revision\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 
-$requiredFiles = @(
-    (Join-Path $buildOutputDir "sl-browser.exe"),
-    (Join-Path $buildOutputDir "sl-browser-page.exe"),
-    (Join-Path $buildOutputDir "sl-browser-plugin.dll")
-)
+$runtimeFileNames = @('sl-browser.exe', 'sl-browser-page.exe', 'sl-browser-plugin.dll', 'streamlabs-app-icon.png')
+$requiredFiles = $runtimeFileNames | ForEach-Object { Join-Path $buildOutputDir $_ }
 
 foreach ($file in $requiredFiles) {
     if (-not (Test-Path $file)) {
@@ -179,4 +176,6 @@ if (Test-Path $artifactPath) {
     Remove-Item $artifactPath -Recurse -Force
 }
 New-Item -ItemType Directory -Path $artifactPath
-Copy-Item -Path "$currentDirFullPath\$revision\build_x64\plugins\obs-sl-browser\RelWithDebInfo\*" -Destination $artifactPath -Recurse -Force
+foreach ($name in $runtimeFileNames) {
+    Copy-Item -LiteralPath (Join-Path $buildOutputDir $name) -Destination $artifactPath
+}
