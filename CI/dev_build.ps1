@@ -16,9 +16,11 @@
       * configures once, then only rebuilds - re-running is incremental and fast
       * leaves the working copy clean: nothing here edits a tracked file
 
-    Targets the OBS 30+ build system (CMakePresets windows-x64 -> build_x64). Older OBS versions
-    use a different build command and are rejected before the script changes anything. OBS 31.1.0
-    is the floor for dual output; below it the plugin still builds, with dual output compiled out.
+    Targets the OBS 30+ build system (CMakePresets windows-x64 -> build_x64). When a newer OBS
+    preset names a CMake generator not available locally, uses Visual Studio 2022 if installed.
+    Older OBS versions use a different build command and are rejected before the script changes
+    anything. OBS 31.1.0 is the floor for dual output; below it the plugin still builds, with dual
+    output compiled out.
 
 .PARAMETER ObsDir
     Where the obsproject/obs-studio checkout lives. Cloned on first run, reused after.
@@ -127,14 +129,22 @@ function Assert-ObsCheckout($path) {
         throw "'$path' is not a supported OBS checkout: plugins\CMakeLists.txt is missing."
     }
 
-    Push-Location $path
-    try {
-        $presetOutput = (& cmake --list-presets 2>&1) -join "`n"
-        if ($LASTEXITCODE -ne 0 -or $presetOutput -notmatch '(?m)^\s*"windows-x64"') {
-            throw "'$path' is not a supported OBS checkout: the windows-x64 configure preset is missing."
-        }
+    $presetsFile = Join-Path $path 'CMakePresets.json'
+    if (-not (Test-Path -LiteralPath $presetsFile -PathType Leaf)) {
+        throw "'$path' is not a supported OBS checkout: CMakePresets.json is missing."
     }
-    finally { Pop-Location }
+
+    try {
+        $presets = Get-Content -LiteralPath $presetsFile -Raw | ConvertFrom-Json
+    }
+    catch {
+        throw "'$path' is not a supported OBS checkout: CMakePresets.json could not be read. $($_.Exception.Message)"
+    }
+    if (-not @($presets.configurePresets | Where-Object { $_.name -eq 'windows-x64' }).Count) {
+        throw "'$path' is not a supported OBS checkout: the windows-x64 configure preset is missing."
+    }
+
+    return $presets
 }
 
 # --- Locate the working copy -------------------------------------------------
@@ -196,11 +206,11 @@ if (-not (Test-Path (Join-Path $obsFull '.git'))) {
 
     git @cloneArgs
     if ($LASTEXITCODE -ne 0) { throw "git clone failed ($LASTEXITCODE)" }
-    Assert-ObsCheckout $obsFull
+    $obsPresets = Assert-ObsCheckout $obsFull
 }
 else {
     Step "Reusing OBS checkout"
-    Assert-ObsCheckout $obsFull
+    $obsPresets = Assert-ObsCheckout $obsFull
     Push-Location $obsFull
     try {
         $described = (git describe --tags --always 2>$null)
@@ -425,6 +435,19 @@ if (Test-Path -LiteralPath $cacheFile -PathType Leaf) {
 if ($Reconfigure -or -not (Test-Path $cacheFile)) {
     Step "Configuring"
 
+    # CMake gets its Windows host processor from this environment variable. Some shells omit it,
+    # leaving CMAKE_HOST_SYSTEM_PROCESSOR empty and breaking OBS's Qt host-tools check.
+    if (-not $env:PROCESSOR_ARCHITECTURE) {
+        $hostArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+        $env:PROCESSOR_ARCHITECTURE = switch ($hostArchitecture) {
+            'X64' { 'AMD64' }
+            'X86' { 'x86' }
+            'Arm64' { 'ARM64' }
+            default { throw "Unsupported Windows host architecture '$hostArchitecture'." }
+        }
+        Info "detected host architecture $env:PROCESSOR_ARCHITECTURE"
+    }
+
     # Presets pin different SDKs across OBS releases. Consistently select the newest installed SDK
     # instead of guessing which version the current checkout requests.
     $configureArgs = @(
@@ -435,6 +458,32 @@ if ($Reconfigure -or -not (Test-Path $cacheFile)) {
         "-DgRPC_DIR=$env:gRPC_DIR",
         "-Dutf8_range_DIR=$env:utf8_range_DIR"
     )
+
+    $presetGenerator = (@($obsPresets.configurePresets | Where-Object { $_.name -eq 'windows-x64' }))[0].generator
+    $cmakeHelp = (& cmake --help) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "cmake --help failed ($LASTEXITCODE)" }
+    $presetGeneratorAvailable = $presetGenerator -and
+        $cmakeHelp -match "(?m)^\s*\*?\s*$([regex]::Escape($presetGenerator))\s*="
+    $vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
+    if ($presetGenerator -match '^Visual Studio (\d+) ') {
+        $major = [int]$Matches[1]
+        $versionRange = '[{0}.0,{1}.0)' -f $major, ($major + 1)
+        $installed = if (Test-Path -LiteralPath $vswhere -PathType Leaf) {
+            & $vswhere -products '*' -version $versionRange -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        }
+        $presetGeneratorAvailable = $presetGeneratorAvailable -and [bool]$installed
+    }
+    if ($presetGenerator -and -not $presetGeneratorAvailable) {
+        $fallbackGenerator = 'Visual Studio 17 2022'
+        $vs2022 = if (Test-Path -LiteralPath $vswhere -PathType Leaf) {
+            & $vswhere -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        }
+        if (-not $vs2022 -or $cmakeHelp -notmatch "(?m)^\s*\*?\s*$([regex]::Escape($fallbackGenerator))\s*=") {
+            throw "The OBS preset uses '$presetGenerator', which is not available locally. Install a compatible CMake and Visual Studio, or install Visual Studio 2022 with C++ tools for the local fallback."
+        }
+        Info "using $fallbackGenerator instead of preset generator $presetGenerator"
+        $configureArgs += @('-G', $fallbackGenerator)
+    }
 
     $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10\Include'
     if (-not (Test-Path $sdkRoot)) { throw "Windows 10/11 SDK directory not found at $sdkRoot" }

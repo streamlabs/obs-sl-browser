@@ -166,11 +166,23 @@ void obs_module_post_load(void)
 			if (!absolute_path)
 				return;
 			blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load Module path: %s", absolute_path);
-			std::wstring process_path = std::filesystem::u8path(absolute_path).remove_filename().wstring() + L"/sl-browser.exe";
+			std::filesystem::path process_dir = std::filesystem::u8path(absolute_path).parent_path();
+			if (obs_module_t *browser_module = obs_get_module("obs-browser"))
+			{
+				if (const char *browser_path = obs_get_module_binary_path(browser_module))
+				{
+					const auto browser_dir = std::filesystem::u8path(browser_path).parent_path();
+					if (std::filesystem::exists(browser_dir / "sl-browser.exe"))
+						process_dir = browser_dir;
+				}
+			}
+			std::wstring process_path = (process_dir / "sl-browser.exe").wstring();
 			std::wstring startparams = L"sl-browser " + std::to_wstring(GetCurrentProcessId()) + L" " + std::to_wstring(myListenPort) + L" " + std::to_wstring(targetListenPort);
-			blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load process_path: %s", process_path.c_str());
-			blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load startparams: %s", startparams.c_str());
-			browserGood = CreateProcessW(process_path.c_str(), (LPWSTR)startparams.c_str(), NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &g_browserProcessInfo);
+			blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load process_path: %ls", process_path.c_str());
+			blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load startparams: %ls", startparams.c_str());
+			browserGood = CreateProcessW(process_path.c_str(), startparams.data(), NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &g_browserProcessInfo);
+			if (!browserGood)
+				blog(LOG_ERROR, "[SL_PLUGIN]: CreateProcessW failed with error %lu", GetLastError());
 		}
 		catch (...)
 		{

@@ -23,6 +23,7 @@
 #include "browser-version.h"
 #include "json11/json11.hpp"
 #include "cef-headers.hpp"
+#include <include/cef_version_info.h>
 #include "ConsoleToggle.h"
 
 #include <include/base/cef_callback.h>
@@ -202,7 +203,9 @@ void SlBrowser::browserInit()
 	prod_ver << revision << "." << version << "." << githubRevision;
 	CefString(&settings.user_agent_product) = prod_ver.str();
 
+#if CHROME_VERSION_MAJOR < 150
 	settings.persist_user_preferences = 1;
+#endif
 
 	char cache_path[MAX_PATH];
 	std::string cache_pathStdStr;
