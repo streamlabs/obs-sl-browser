@@ -3,6 +3,8 @@ param(
     [string]$revision
 )
 
+$ErrorActionPreference = 'Stop'
+
 Write-Output "Workspace is $github_workspace"
 Write-Output "Github revision is $revision"
 

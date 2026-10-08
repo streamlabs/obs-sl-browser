@@ -15,7 +15,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$pluginsCMake = Join-Path $ObsDir 'plugins\CMakeLists.txt'
+# Windows PowerShell 5.1 can leave .NET's process directory unchanged after Set-Location.
+# Resolve through PowerShell before passing the path to File.ReadAllText/WriteAllText.
+$obsFull = (Resolve-Path -LiteralPath $ObsDir).Path
+$pluginsCMake = Join-Path $obsFull 'plugins\CMakeLists.txt'
 if (-not (Test-Path -LiteralPath $pluginsCMake -PathType Leaf)) {
     throw "OBS plugins/CMakeLists.txt not found at '$pluginsCMake'."
 }
