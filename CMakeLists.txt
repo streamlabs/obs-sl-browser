@@ -89,7 +89,8 @@ target_sources(
           
 target_include_directories(sl-browser PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/deps")
 
-target_compile_features(sl-browser PRIVATE cxx_std_17)
+# OBS 33's CEF headers use C++20 concepts; all three targets include those headers.
+target_compile_features(sl-browser PRIVATE cxx_std_20)
 
 target_link_libraries(sl-browser PRIVATE CEF::Wrapper CEF::Library d3d11 dxgi)
 target_link_libraries(sl-browser PRIVATE Qt::Widgets Qt::Core Qt::Gui)
@@ -110,14 +111,27 @@ target_link_options(sl-browser PRIVATE
 target_compile_options(sl-browser PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
 target_compile_definitions(sl-browser PRIVATE NOMINMAX)
 
+# OBS 33 keeps CEF and its runtime resources under core/obs-browser. Keep both
+# helper executables beside those files; older OBS versions use one plugin dir.
+if(OBS_PLUGIN_DESTINATION STREQUAL "core")
+  set(SL_BROWSER_EXECUTABLE_DESTINATION "${OBS_PLUGIN_DESTINATION}/obs-browser")
+else()
+  set(SL_BROWSER_EXECUTABLE_DESTINATION "${OBS_PLUGIN_DESTINATION}")
+endif()
 add_custom_command(
   TARGET sl-browser POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy
-          ${CMAKE_CURRENT_SOURCE_DIR}/streamlabs-app-icon.png
-          $<TARGET_FILE_DIR:sl-browser>/streamlabs-app-icon.png
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${CMAKE_CURRENT_SOURCE_DIR}/streamlabs-app-icon.png"
+          "$<TARGET_FILE_DIR:sl-browser>/streamlabs-app-icon.png"
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+          "${OBS_OUTPUT_DIR}/$<CONFIG>/${SL_BROWSER_EXECUTABLE_DESTINATION}"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${CMAKE_CURRENT_SOURCE_DIR}/streamlabs-app-icon.png"
+          "${OBS_OUTPUT_DIR}/$<CONFIG>/${SL_BROWSER_EXECUTABLE_DESTINATION}/streamlabs-app-icon.png"
 )
-
-set(OBS_EXECUTABLE_DESTINATION "${OBS_PLUGIN_DESTINATION}")
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/streamlabs-app-icon.png"
+        DESTINATION "${SL_BROWSER_EXECUTABLE_DESTINATION}" COMPONENT Runtime)
+set(OBS_EXECUTABLE_DESTINATION "${SL_BROWSER_EXECUTABLE_DESTINATION}")
 set_target_properties_obs(sl-browser PROPERTIES FOLDER plugins/sl-browser PREFIX "" OUTPUT_NAME sl-browser)
 
 ## -- Plugin loaded by obs
@@ -156,7 +170,7 @@ target_include_directories(sl-browser-plugin PRIVATE "${CMAKE_CURRENT_SOURCE_DIR
 target_include_directories(sl-browser-plugin PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../obs-browser/panel")
 target_include_directories(sl-browser-plugin PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/UI")
 
-target_compile_features(sl-browser-plugin PRIVATE cxx_std_17)
+target_compile_features(sl-browser-plugin PRIVATE cxx_std_20)
 target_compile_definitions(sl-browser-plugin PRIVATE BROWSER_AVAILABLE)
 #target_compile_definitions(sl-browser-plugin PRIVATE SL_OBS_VERSION="")
 #target_compile_definitions(sl-browser-plugin PRIVATE GITHUB_REVISION="")
@@ -190,7 +204,7 @@ target_include_directories(sl-browser-page PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} $
                                                     
 target_sources(sl-browser-page PRIVATE sl-browser-page.manifest)
 
-target_compile_features(sl-browser-page PRIVATE cxx_std_17)
+target_compile_features(sl-browser-page PRIVATE cxx_std_20)
 
 if(TARGET CEF::Wrapper_Debug)
   target_link_libraries(sl-browser-page PRIVATE optimized CEF::Wrapper)
@@ -203,7 +217,7 @@ target_compile_definitions(sl-browser-page PRIVATE ENABLE_BROWSER_SHARED_TEXTURE
 target_compile_options(sl-browser-page PRIVATE $<IF:$<CONFIG:DEBUG>,/MTd,/MT>)
 target_link_options(sl-browser-page PRIVATE "LINKER:/IGNORE:4099" "LINKER:/SUBSYSTEM:WINDOWS")
 
-set(OBS_EXECUTABLE_DESTINATION "${OBS_PLUGIN_DESTINATION}")
+set(OBS_EXECUTABLE_DESTINATION "${SL_BROWSER_EXECUTABLE_DESTINATION}")
 set_target_properties_obs(sl-browser-page PROPERTIES FOLDER plugins/sl-browser PREFIX "" OUTPUT_NAME sl-browser-page)
 
 set_target_properties_obs(sl-browser-plugin PROPERTIES FOLDER plugins/sl-browser PREFIX "")

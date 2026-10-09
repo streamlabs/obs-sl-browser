@@ -32,11 +32,8 @@ try {
     # dash as a parameter and does not expand variables inside it - unquoted, cmake receives
     # the literal '$ver', which is DEFINED but not <MAJOR>.<MINOR>.<PATCH>, and
     # versionconfig.cmake aborts the configure.
-    $cfg = @(
-        '--preset', 'windows-x64',
-        '-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF',
-        "-DOBS_VERSION_OVERRIDE=$ver"
-    )
+    $cfg = @(& (Join-Path $PSScriptRoot '..\windows_x64_configure_args.ps1') -ObsDir .)
+    $cfg += @('-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF', "-DOBS_VERSION_OVERRIDE=$ver")
 
     cmake @cfg
     if ($LASTEXITCODE -ne 0) { throw "configure 1 failed" }
