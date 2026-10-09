@@ -77,8 +77,14 @@ cefValid:
    IfFileExists "$R0\core\obs-browser\sl-browser.exe" oldInstallInUse
    IfFileExists "$R0\core\obs-browser\sl-browser-page.exe" oldInstallInUse
    IfFileExists "$R0\core\obs-browser\streamlabs-app-icon.png" oldInstallInUse
+   ; A root-level Uninstall.exe may belong to OBS itself. Only remove the
+   ; generic name from an older installation in a plugins directory.
+   IfFileExists "$R0\bin\64bit\obs64.exe" skipLegacyUninstaller
    Delete "$R0\Uninstall.exe"
    IfFileExists "$R0\Uninstall.exe" oldInstallInUse
+skipLegacyUninstaller:
+   Delete "$R0\Uninstall-sl-browser-plugin.exe"
+   IfFileExists "$R0\Uninstall-sl-browser-plugin.exe" oldInstallInUse
    Goto doneDelete
 oldInstallInUse:
    MessageBox MB_OK|MB_ICONEXCLAMATION "Close OBS and the previous Streamlabs Plugin uninstaller, then retry."
@@ -111,7 +117,7 @@ onError:
 noError:
    ; Write the uninstaller
    ClearErrors
-   WriteUninstaller "$INSTDIR\Uninstall.exe"
+   WriteUninstaller "$INSTDIR\Uninstall-sl-browser-plugin.exe"
    IfErrors onError
 
    ; Write the installation path to the registry
@@ -119,8 +125,8 @@ noError:
    
    ; Write the installation path to the registry for uninstall purposes
    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "DisplayName" "Streamlabs Plugin Package"
-   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "UninstallString" "$INSTDIR\Uninstall.exe"
-   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "DisplayIcon" "$INSTDIR\Uninstall.exe"
+   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "UninstallString" "$INSTDIR\Uninstall-sl-browser-plugin.exe"
+   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "DisplayIcon" "$INSTDIR\Uninstall-sl-browser-plugin.exe"
    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "Publisher" "Streamlabs"
    WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "NoModify" 1
    WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg" "NoRepair" 1
@@ -166,8 +172,8 @@ file_not_exists:
 !endif
    
    ; Remove uninstaller itself
-   Delete "$INSTDIR\Uninstall.exe"
-   IfFileExists "$INSTDIR\Uninstall.exe" file_exists
+   Delete "$INSTDIR\Uninstall-sl-browser-plugin.exe"
+   IfFileExists "$INSTDIR\Uninstall-sl-browser-plugin.exe" file_exists
 
    ; Clean up the registry entry
 	DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\SLPluginPkg"

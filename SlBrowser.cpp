@@ -203,7 +203,7 @@ void SlBrowser::browserInit()
 	prod_ver << revision << "." << version << "." << githubRevision;
 	CefString(&settings.user_agent_product) = prod_ver.str();
 
-#if CHROME_VERSION_MAJOR < 150
+#if CHROME_VERSION_BUILD <= 6533
 	settings.persist_user_preferences = 1;
 #endif
 
