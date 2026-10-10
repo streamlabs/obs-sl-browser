@@ -74,7 +74,7 @@ jobs:
           path: clang-format.patch
 
   # OBS takes ~11 minutes to build and no pull request changes it, so this restores a
-  # published archive of an already-built OBS tree and compiles only the plugin. When nothing
+  # published archive of an already-built OBS tree and compiles the plugin. When nothing
   # is published under the current name it builds OBS itself and publishes it, so the next
   # run is fast. Both paths then graft the plugin into a tree that has never contained one.
   e2e:
@@ -166,9 +166,8 @@ jobs:
           utf8_range_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\utf8_range
         run: ./obs-sl-browser/CI/workflows/build_plugin.ps1 -PluginOnly
 
-      # Warns rather than fails: an OBS rebuild here is a performance problem, not a
-      # correctness one, but it would otherwise rot unnoticed behind a green run.
-      - name: Check nothing rebuilt OBS
+      # OBS 33 relinks obs.dll to register the plugin. Warn if any other libobs source rebuilt.
+      - name: Check OBS rebuild scope
         continue-on-error: true
         shell: bash
         run: bash obs-sl-browser/CI/workflows/assert_no_obs_rebuild.sh "${{ steps.stamp.outputs.obsdll }}"

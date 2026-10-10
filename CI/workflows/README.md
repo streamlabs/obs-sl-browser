@@ -19,7 +19,7 @@ run outside of Actions. A workflow step should stay a single line calling one of
 | `build_plugin.ps1` | Configure the grafted tree and build it, `-PluginOnly` against a prebuilt OBS. |
 | `toolchain_manifest.ps1` | Record what the archive was built against, for drift diagnosis. |
 | `install_rundir.ps1` | `cmake --install` into OBS's rundir so the suites can launch it. |
-| `assert_no_obs_rebuild.sh` | Warn if a restored archive stopped avoiding an OBS rebuild. |
+| `assert_no_obs_rebuild.sh` | Allow the OBS 33 core module relink and warn if other libobs sources rebuild. |
 | `obs_log_tail.ps1` | Tail the OBS log after a failed run. |
 | `check_format.sh` | clang-format report and fixup patch. |
 
@@ -35,13 +35,15 @@ way they work unchanged:
 ```
 
 For everyday plugin work you almost certainly want `CI/dev_build.ps1` instead, which keeps one
-OBS checkout and rebuilds only the plugin.
+OBS checkout and rebuilds only the plugin and its dependencies. `CI/local_build.ps1` forwards
+to the same script for compatibility.
 
 ## The prebuilt OBS archive
 
 `obs.ver` pins the OBS tag, and OBS takes ~11 minutes to build. Rather than rebuild it in every
 pull request, the e2e job restores a published archive of an already-built OBS tree and compiles
-only the three plugin targets.
+the three plugin targets. OBS 33 also recompiles its generated core module list and relinks
+`obs.dll` so the local OBS executable loads the plugin.
 
 The archive deliberately contains **no plugin artifacts** - OBS is built with the plugin absent
 from the tree entirely. That is what makes it safe: there is no stale plugin DLL to link,
