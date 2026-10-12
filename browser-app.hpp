@@ -11,10 +11,9 @@ typedef std::function<void(CefRefPtr<CefBrowser>)> BrowserFunc;
 
 class BrowserApp : public CefApp, public CefRenderProcessHandler, public CefBrowserProcessHandler, public CefV8Handler
 {
-
 	int m_callbackIdCounter = 0;
-	std::map<int, std::pair<CefRefPtr<CefV8Value>, CefRefPtr<CefV8Context>>> m_callbackMap;
 	std::recursive_mutex m_callbackMutex;
+	std::map<int, std::pair<CefRefPtr<CefV8Value>, CefRefPtr<CefV8Context>>> m_callbackMap;
 
 public:
 	inline BrowserApp() {}
