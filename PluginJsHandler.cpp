@@ -4036,7 +4036,8 @@ void PluginJsHandler::loadFonts()
 		{
 			if (itr.path().extension() == ".ttf")
 			{
-				const std::string &filepath = itr.path().generic_u8string();
+				const auto utf8Path = itr.path().generic_u8string();
+				const std::string filepath(utf8Path.begin(), utf8Path.end());
 
 				if (WindowsFunctions::InstallFont(filepath.c_str()))
 				{
