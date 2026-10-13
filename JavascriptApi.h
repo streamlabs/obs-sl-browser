@@ -235,14 +235,16 @@ public:
 			{"fs_downloadZip", JS_DOWNLOAD_ZIP},
 
 			// .(@function(arg1), @filename, @bool_hideWindow)
-			//	Runs an exe that exists in the streamlabs downloads folder.
+			//	Runs an exe that exists in the streamlabs downloads folder. The path must resolve inside
+			//	that folder - either relative to it, or the absolute path fs_downloadZip returned.
 			//		hideWindow (default false): the process is started with no visible window and no console.
-			//		Example arg1 = [{ "path": "..." },]
-			//	The returned output includes the PID that can be used to stop the process 
+			//		Example arg1 = { "success": true, "pid": 1234 }
+			//	The pid it returns is what sys_isProcessRunning and sys_stopProcess take.
 			{"fs_runSlExe", JS_RUN_STREAMLABS_EXE},
 			
 			// .(@function(arg1), @url, @filename)
-			//	Downloads file, returning a filepath to it
+			//	Downloads file into a folder of its own inside the streamlabs folder, returning the full path to it.
+			//		filename must be a plain file name - no directories, no drive, no '..'
 			//		Example arg1 = { "path": "..." }
 			{"fs_downloadFile", JS_DOWNLOAD_FILE},
 
