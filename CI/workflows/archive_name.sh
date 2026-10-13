@@ -10,7 +10,7 @@
 #
 set -euo pipefail
 
-ARCHIVE_VERSION=1
+ARCHIVE_VERSION=2
 BUILD_TYPE=RelWithDebInfo
 
 # The image label, not just the OS: a build made on a different image can carry a different

@@ -19,19 +19,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$listFile = Join-Path $ObsDir 'plugins\CMakeLists.txt'
-$lines = Get-Content $listFile
-
-if (-not ($lines -match 'add_subdirectory\(obs-sl-browser\)')) {
-    Set-Content $listFile -Value ($lines[0], 'add_subdirectory(obs-sl-browser)', $lines[1..($lines.Length - 1)])
-    Write-Host "registered in plugins/CMakeLists.txt"
-}
-else {
-    Write-Host "already registered in plugins/CMakeLists.txt"
-}
-
 $dest = Join-Path $ObsDir 'plugins\obs-sl-browser'
 if (Test-Path $dest) { throw "$dest already exists - refusing to overwrite it" }
 
+& (Join-Path $PluginDir 'CI\register_plugin.ps1') -ObsDir $ObsDir | Out-Null
 Copy-Item -Path $PluginDir -Destination $dest -Recurse
 Write-Host "grafted $PluginDir into $dest"
