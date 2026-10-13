@@ -23,7 +23,9 @@
 #include "browser-version.h"
 #include "json11/json11.hpp"
 #include "cef-headers.hpp"
+#if __has_include(<include/cef_version_info.h>)
 #include <include/cef_version_info.h>
+#endif
 #include "ConsoleToggle.h"
 
 #include <include/base/cef_callback.h>
