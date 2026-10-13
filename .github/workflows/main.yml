@@ -75,9 +75,21 @@ jobs:
     name: Package Installer
     runs-on: windows-2022
     needs: [sign_binaries]
+    outputs:
+      installer_file: ${{ steps.package_names.outputs.installer_file }}
+      zip_file: ${{ steps.package_names.outputs.zip_file }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Name package files
+        id: package_names
+        shell: pwsh
+        run: |
+          $installer = ./ci/package_file_name.ps1 -Version $env:SL_OBS_VERSION -Sha $env:GITHUB_SHA -Extension exe
+          $zip = ./ci/package_file_name.ps1 -Version $env:SL_OBS_VERSION -Sha $env:GITHUB_SHA -Extension zip
+          "installer_file=$installer" >> $env:GITHUB_OUTPUT
+          "zip_file=$zip" >> $env:GITHUB_OUTPUT
 
       - name: Install NSIS
         run: choco install nsis -y
@@ -90,7 +102,7 @@ jobs:
 
       - name: Clean files
         run: |
-          Get-ChildItem -Path archive -Recurse -File | Where-Object { -not @(".exe", ".dll", ".png") -contains $_.Extension } | Remove-Item -Force
+          Get-ChildItem -Path archive -Recurse -File | Where-Object { $_.Extension -notin @('.exe', '.dll', '.png') } | Remove-Item -Force
 
       - name: Upload Cleaned Archive
         uses: actions/upload-artifact@v4
@@ -100,13 +112,13 @@ jobs:
 
       - name: Make installer
         shell: powershell
-        run: ./ci/make_installer.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
+        run: ./ci/make_installer.ps1 "$env:SL_OBS_VERSION" "${{ github.sha }}"
 
       - name: Upload Unsigned Installer
         uses: actions/upload-artifact@v4
         with:
           name: unsigned_installer
-          path: slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+          path: ${{ steps.package_names.outputs.installer_file }}
 
   sign_installer:
     name: Sign Installer
@@ -122,13 +134,13 @@ jobs:
 
       - name: Sign installer
         run: |
-          logisign client --client logitech-cpg-sign-client --app streamlabs --files slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+          logisign client --client logitech-cpg-sign-client --app streamlabs --files "${{ needs.package.outputs.installer_file }}"
 
       - name: Upload Signed Installer
         uses: actions/upload-artifact@v4
         with:
           name: signed_installer
-          path: slplugin-${{ env.SL_OBS_VERSION }}-${{ github.sha }}-signed.exe
+          path: ${{ needs.package.outputs.installer_file }}
 
   finalize:
     name: Finalize Zip and Upload
@@ -155,7 +167,7 @@ jobs:
 
       - name: Make signed zip
         shell: powershell
-        run: ./ci/make_signed_zip.ps1 "${{ env.SL_OBS_VERSION }}" "${{ github.sha }}"
+        run: ./ci/make_signed_zip.ps1 "$env:SL_OBS_VERSION" "${{ github.sha }}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -165,7 +177,7 @@ jobs:
           aws-region: us-west-2
 
       - name: Upload zip to AWS Intermediary
-        run: aws s3 cp slplugin-${{env.SL_OBS_VERSION}}-${{ github.sha }}-signed.zip s3://${{env.RELEASE_BUCKET}} --acl public-read
+        run: aws s3 cp "${{ needs.package.outputs.zip_file }}" "s3://${{ env.RELEASE_BUCKET }}" --acl public-read
 
       - name: Upload installer to AWS Intermediary
-        run: aws s3 cp slplugin-${{env.SL_OBS_VERSION}}-${{ github.sha }}-signed.exe s3://${{env.RELEASE_BUCKET}} --acl public-read
+        run: aws s3 cp "${{ needs.package.outputs.installer_file }}" "s3://${{ env.RELEASE_BUCKET }}" --acl public-read
