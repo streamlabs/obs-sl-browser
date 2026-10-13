@@ -3,14 +3,16 @@ param(
     [string]$Sha
 )
 
-cd archive
+$ErrorActionPreference = 'Stop'
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$signedArchiveFileName = & (Join-Path $PSScriptRoot 'package_file_name.ps1') -Version $Version -Sha $Sha -Extension zip
 
-$signedArchiveFileName = "slplugin-$Version-$Sha-signed.zip"
+Push-Location (Join-Path $repoRoot 'archive')
+try {
+    7z a (Join-Path $repoRoot $signedArchiveFileName) .\*
 
-7z a "../$signedArchiveFileName" ./*
-
-if ($LASTEXITCODE -ne 0) {
-    throw "7z failed with exit code $LASTEXITCODE"
+    if ($LASTEXITCODE -ne 0) {
+        throw "7z failed with exit code $LASTEXITCODE"
+    }
 }
-
-cd ..
+finally { Pop-Location }
