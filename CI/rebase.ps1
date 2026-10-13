@@ -5,6 +5,9 @@ $jsonUrl = "https://s3.us-west-2.amazonaws.com/slobs-cdn.streamlabs.com/obsplugi
 $jsonContent = Invoke-RestMethod -Uri $jsonUrl
 $branchNames = $jsonContent.obsversions.PSObject.Properties.Value
 
+git config merge.ours.driver true
+Set-Content .git\info\attributes "obs.ver merge=ours"
+
 # Iterate through each branch
 foreach ($branchName in $branchNames) {
     Write-Host "Processing branch: $branchName"
