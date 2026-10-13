@@ -3,6 +3,7 @@
 
 #include <QDialog>
 #include <QCloseEvent>
+#include <QCoreApplication>
 #include <QVBoxLayout>
 #include <iostream>
 
@@ -17,10 +18,7 @@ SlBrowserWidget::SlBrowserWidget()
 
 	setFocusPolicy(Qt::ClickFocus);
 
-	wchar_t buffer[MAX_PATH];
-	DWORD size = GetCurrentDirectory(MAX_PATH, buffer);
-	std::wstring iconpath = std::wstring(buffer) + L"/../../obs-plugins/64bit/streamlabs-app-icon.png";
-	setWindowIcon(QIcon(QString::fromStdWString(iconpath)));
+	setWindowIcon(QIcon(QCoreApplication::applicationDirPath() + "/streamlabs-app-icon.png"));
 }
 
 void SlBrowserWidget::closeEvent(QCloseEvent *event) /*override*/
