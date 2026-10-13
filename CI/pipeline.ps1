@@ -3,6 +3,8 @@ param(
     [string]$revision
 )
 
+$ErrorActionPreference = 'Stop'
+
 Write-Output "Workspace is $github_workspace"
 Write-Output "Github revision is $revision"
 
@@ -72,7 +74,7 @@ cd ..\
 .\obs-sl-browser\ci\install_deps.cmd
 
 # Read the obs.ver file to get the branch name
-$branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
+$branchName = (Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw).Trim()
 
 # Clone obs-studio repository with the branch name
 git clone --recursive --branch $branchName https://github.com/obsproject/obs-studio.git
@@ -84,12 +86,8 @@ Rename-Item -Path ".\obs-studio" -NewName $revision
 cd $revision
 git submodule update --init --recursive
 
-# Add to top of CMakeLists.txt in obs-studio\plugins
-$cmakeListsPath = ".\plugins\CMakeLists.txt"
-$addSubdirectoryLine = "add_subdirectory(obs-sl-browser)"
-$cmakeListsContent = Get-Content -Path $cmakeListsPath
-$cmakeListsContent = $cmakeListsContent[0], $addSubdirectoryLine, $cmakeListsContent[1..($cmakeListsContent.Length - 1)]
-Set-Content -Path $cmakeListsPath -Value $cmakeListsContent
+# Register the plugin before OBS generates its core module list.
+& ..\obs-sl-browser\CI\register_plugin.ps1 -ObsDir . | Out-Null
 
 # Move obs-sl-browser folder into obs-studio\plugins
 Copy-Item -Path "..\obs-sl-browser" -Destination ".\plugins\obs-sl-browser" -Recurse
@@ -122,17 +120,18 @@ else {
 }
 
 # Build
-cmake --preset windows-x64
+$cfg = @(& .\plugins\obs-sl-browser\CI\windows_x64_configure_args.ps1 -ObsDir .)
+cmake @cfg
+if ($LASTEXITCODE -ne 0) { throw "configure failed ($LASTEXITCODE)" }
 cmake --build --preset windows-x64
+if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }
 
 # Verify these files all exist inside ".\plugins\obs-sl-browser" otherwise throw
+$currentDirFullPath = (Resolve-Path '..').Path
 $buildOutputDir = Join-Path $currentDirFullPath "$revision\build_x64\plugins\obs-sl-browser\RelWithDebInfo"
 
-$requiredFiles = @(
-    (Join-Path $buildOutputDir "sl-browser.exe"),
-    (Join-Path $buildOutputDir "sl-browser-page.exe"),
-    (Join-Path $buildOutputDir "sl-browser-plugin.dll")
-)
+$runtimeFileNames = @('sl-browser.exe', 'sl-browser-page.exe', 'sl-browser-plugin.dll', 'streamlabs-app-icon.png')
+$requiredFiles = $runtimeFileNames | ForEach-Object { Join-Path $buildOutputDir $_ }
 
 foreach ($file in $requiredFiles) {
     if (-not (Test-Path $file)) {
@@ -177,4 +176,6 @@ if (Test-Path $artifactPath) {
     Remove-Item $artifactPath -Recurse -Force
 }
 New-Item -ItemType Directory -Path $artifactPath
-Copy-Item -Path "$currentDirFullPath\$revision\build_x64\plugins\obs-sl-browser\RelWithDebInfo\*" -Destination $artifactPath -Recurse -Force
+foreach ($name in $runtimeFileNames) {
+    Copy-Item -LiteralPath (Join-Path $buildOutputDir $name) -Destination $artifactPath
+}
