@@ -74,7 +74,7 @@ cd ..\
 .\obs-sl-browser\ci\install_deps.cmd
 
 # Read the obs.ver file to get the branch name
-$branchName = Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw
+$branchName = (Get-Content -Path ".\obs-sl-browser\obs.ver" -Raw).Trim()
 
 # Clone obs-studio repository with the branch name
 git clone --recursive --branch $branchName https://github.com/obsproject/obs-studio.git
