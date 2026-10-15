@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -14,6 +15,7 @@
 #include <json11/json11.hpp>
 
 class QDockWidget;
+class QTimer;
 
 class PluginJsHandler
 {
@@ -152,6 +154,8 @@ private:
 	std::vector<std::pair<std::string, std::string>> m_queudRequests;
 	std::thread m_workerThread;
 	std::thread m_freezeCheckThread;
+	QTimer *m_uiHeartbeatTimer = nullptr;
+	std::atomic<long long> m_lastUiHeartbeatMs = 0;
 
 	std::map<uint32_t, HANDLE> m_childProcesses;
 	HANDLE m_childJob = nullptr;
