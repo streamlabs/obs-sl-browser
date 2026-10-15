@@ -26,7 +26,7 @@ jobs:
       OS_TAG: "win64"
     steps:
       - name: Setup cmake
-        uses: jwlawson/actions-setup-cmake@v1.14
+        uses: jwlawson/actions-setup-cmake@v2
         with:
           cmake-version: '3.28.x'
 
