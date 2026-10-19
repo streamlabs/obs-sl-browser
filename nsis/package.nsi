@@ -44,11 +44,38 @@ Var PluginTop
    ${EndIf}
 !macroend
 
+; Saved paths come from the registry: validate the plugin folder, its children
+; and the two ancestors above it (the OBS root itself is the user's choice).
+!macro RejectPluginChain prefix path
+   !insertmacro RejectReparsePoint "${path}"
+   !insertmacro RejectReparsePoint "${path}\data"
+   !insertmacro RejectReparsePoint "${path}\bin"
+   !insertmacro RejectReparsePoint "${path}\bin\64bit"
+   ${${prefix}GetParent} "${path}" $R8
+   !insertmacro RejectReparsePoint "$R8"
+   ${${prefix}GetParent} "$R8" $R9
+   ${If} $R9 != $INSTDIR
+      !insertmacro RejectReparsePoint "$R9"
+   ${EndIf}
+!macroend
+
+!macro IcaclsOrAbort args
+   nsExec::ExecToLog '"$SYSDIR\icacls.exe" ${args}'
+   Pop $0
+   ${If} $0 != 0
+      MessageBox MB_OK|MB_ICONSTOP "Failed to secure '$PluginDir' (icacls exit code $0)." ${SILENT_DEFAULT}
+      SetErrorLevel 3
+      Abort
+   ${EndIf}
+!macroend
+
 Function RejectPluginDirReparsePoints
    !insertmacro RejectReparsePoint "$PluginTop"
    !insertmacro RejectReparsePoint "$PluginPlugins"
    !insertmacro RejectReparsePoint "$PluginDir"
    !insertmacro RejectReparsePoint "$PluginDir\data"
+   !insertmacro RejectReparsePoint "$PluginDir\bin"
+   !insertmacro RejectReparsePoint "$PluginDir\bin\64bit"
 FunctionEnd
 !else
 !define SILENT_DEFAULT ""
@@ -145,8 +172,7 @@ doneDelete:
    ReadRegStr $R1 HKLM "Software\Streamlabs OBS Plugin" "PluginDir"
    ${If} $R1 != ""
    ${AndIf} $R1 != $PluginDir
-      !insertmacro RejectReparsePoint "$R1"
-      !insertmacro RejectReparsePoint "$R1\data"
+      !insertmacro RejectPluginChain "" "$R1"
       Delete "$R1\sl-browser-plugin.dll"
       Delete "$R1\data\manifest.json"
       RMDir "$R1\data"
@@ -166,26 +192,11 @@ doneDelete:
    Delete "$PluginDir\data\manifest.json"
    IfFileExists "$PluginDir\sl-browser-plugin.dll" oldInstallInUse
 
-   ; Only existing folders get the recursive ACL reset.
-   StrCpy $R2 ""
-   ${If} ${FileExists} "$PluginDir\*.*"
-      StrCpy $R2 "/T"
-   ${EndIf}
+   ; Reset first so explicit grants to other accounts on a reused folder cannot survive.
    CreateDirectory "$PluginDir"
-   nsExec::ExecToLog '"$SYSDIR\icacls.exe" "$PluginDir" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX $R2'
-   Pop $0
-   ${If} $0 != 0
-      MessageBox MB_OK|MB_ICONSTOP "Failed to secure '$PluginDir' (icacls exit code $0)." ${SILENT_DEFAULT}
-      SetErrorLevel 3
-      Abort
-   ${EndIf}
-   nsExec::ExecToLog '"$SYSDIR\icacls.exe" "$PluginDir" /setowner *S-1-5-32-544'
-   Pop $0
-   ${If} $0 != 0
-      MessageBox MB_OK|MB_ICONSTOP "Failed to secure '$PluginDir' (icacls exit code $0)." ${SILENT_DEFAULT}
-      SetErrorLevel 3
-      Abort
-   ${EndIf}
+   !insertmacro IcaclsOrAbort '"$PluginDir" /reset /T /L'
+   !insertmacro IcaclsOrAbort '"$PluginDir" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX /T /L'
+   !insertmacro IcaclsOrAbort '"$PluginDir" /setowner *S-1-5-32-544 /T /L'
    CreateDirectory "$PluginDir\data"
    Call RejectPluginDirReparsePoints
 !endif
@@ -252,8 +263,7 @@ Section "Uninstall"
    ${If} $PluginDir == ""
       StrCpy $PluginDir "$APPDATA\obs-studio\plugins\sl-browser-plugin"
    ${EndIf}
-   !insertmacro RejectReparsePoint "$PluginDir"
-   !insertmacro RejectReparsePoint "$PluginDir\data"
+   !insertmacro RejectPluginChain "un." "$PluginDir"
    Delete "$PluginDir\sl-browser-plugin.dll"
    Delete "$PluginDir\data\manifest.json"
    Delete "$INSTDIR\core\obs-browser\sl-browser.exe"
