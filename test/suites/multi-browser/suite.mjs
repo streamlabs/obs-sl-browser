@@ -121,7 +121,7 @@ export default {
 		const iconDir = { png: iconFile("icon.png") };
 
 		// The cookie profiles this suite makes are named slt-*; earlier runs' are removed before this OBS has opened any.
-		const appsRoot = join(appData, "StreamlabsOBS_CEF_Cache", "apps");
+		const appsRoot = join(appData, "StreamlabsOBS_CEF_Cache");
 		const removeTestProfiles = () => {
 			for (const d of existsSync(appsRoot) ? readdirSync(appsRoot) : []) {
 				if (d.startsWith("app-slt-") || d.startsWith("app-_2e_2e_")) rmSync(join(appsRoot, d), { recursive: true, force: true });
@@ -866,7 +866,7 @@ export default {
 				try { return await c.evaluate("document.cookie"); } catch (e) { throw new Error(`reading cookies at ${await c.evaluate("location.href")}: ${e.message}`); }
 			};
 			const setCookie = (c, name, value = "1") => c.evaluate(`document.cookie = ${JSON.stringify(`${name}=${value}; path=/; max-age=3600`)}`);
-			const profileDir = (dir) => join(process.env.APPDATA, "StreamlabsOBS_CEF_Cache", "apps", dir);
+			const profileDir = (dir) => join(process.env.APPDATA, "StreamlabsOBS_CEF_Cache", dir);
 
 			async function openTab(uid, key) {
 				const res = await createTab(uid, `T${uid}`, `&c=${uid}`, key === undefined ? [] : ["", "", false, key]);
@@ -964,7 +964,7 @@ export default {
 				await closeTab(190);
 				await openTab(191, evil);
 				await closeTab(191);
-				for (const where of [join(cacheRoot, `slt-escape-${stamp}`), join(process.env.APPDATA, `slt-escape-${stamp}`), join(cacheRoot, "apps", `slt-escape-${stamp}`)]) {
+				for (const where of [join(cacheRoot, `slt-escape-${stamp}`), join(process.env.APPDATA, `slt-escape-${stamp}`), join(cacheRoot, "apps", `slt-escape-${stamp}`), join(cacheRoot, "apps", escaped)]) {
 					if (existsSync(where)) return `a profile was created at ${where}`;
 				}
 

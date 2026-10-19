@@ -8,6 +8,8 @@
 #include <sstream>
 #include <thread>
 #include <mutex>
+#include <map>
+#include <vector>
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -187,15 +189,78 @@ std::string SlBrowser::tabContextDirName(const std::string &key)
 	return name;
 }
 
-// A tab with a context directory gets a profile on disk under the cache root, shared by every tab using it. Without one, or without a cache root, it gets a private in-memory profile
-CefRefPtr<CefRequestContext> SlBrowser::createTabRequestContext(const std::string &contextDir) const
+namespace
 {
+// On-disk profiles are made asynchronously, so a browser can only be attached once the context says it is initialized. Touched on the CEF UI thread only
+struct TabProfile
+{
+	CefRefPtr<CefRequestContext> context;
+	bool initialized = false;
+	std::vector<std::function<void(CefRefPtr<CefRequestContext>)>> waiters;
+};
+
+std::map<std::string, TabProfile> g_tabProfiles;
+
+void tabProfileInitialized(const std::string &contextDir, CefRefPtr<CefRequestContext> context)
+{
+	TabProfile &profile = g_tabProfiles[contextDir];
+	profile.context = context;
+	profile.initialized = true;
+
+	auto waiters = std::move(profile.waiters);
+	profile.waiters.clear();
+
+	for (auto &waiter : waiters)
+		waiter(context);
+}
+
+class TabProfileHandler : public CefRequestContextHandler
+{
+public:
+	explicit TabProfileHandler(const std::string &contextDir) : m_contextDir(contextDir) {}
+
+	void OnRequestContextInitialized(CefRefPtr<CefRequestContext> request_context) override { tabProfileInitialized(m_contextDir, request_context); }
+
+private:
+	std::string m_contextDir;
+
+	IMPLEMENT_REFCOUNTING(TabProfileHandler);
+};
+} // namespace
+
+// A tab with a context directory gets a profile on disk directly under the cache root (Chrome runtime treats a nested cache path as incognito), shared by every tab using it. Without one, or without a cache root, it gets a private in-memory profile
+void SlBrowser::withTabRequestContext(const std::string &contextDir, std::function<void(CefRefPtr<CefRequestContext>)> onReady) const
+{
+	if (contextDir.empty() || m_cefCachePath.empty())
+	{
+		onReady(CefRequestContext::CreateContext(CefRequestContextSettings(), nullptr));
+		return;
+	}
+
+	auto found = g_tabProfiles.find(contextDir);
+
+	if (found != g_tabProfiles.end())
+	{
+		if (found->second.initialized)
+			onReady(found->second.context);
+		else
+			found->second.waiters.push_back(std::move(onReady));
+
+		return;
+	}
+
+	g_tabProfiles[contextDir];
+
 	CefRequestContextSettings settings;
+	CefString(&settings.cache_path) = m_cefCachePath + "\\" + contextDir;
+	CefRequestContext::CreateContext(settings, new TabProfileHandler(contextDir));
 
-	if (!contextDir.empty() && !m_cefCachePath.empty())
-		CefString(&settings.cache_path) = m_cefCachePath + "\\apps\\" + contextDir;
+	TabProfile &profile = g_tabProfiles[contextDir];
 
-	return CefRequestContext::CreateContext(settings, nullptr);
+	if (profile.initialized)
+		onReady(profile.context);
+	else
+		profile.waiters.push_back(std::move(onReady));
 }
 
 // Empty on success, with the canonical path in resolved
@@ -317,10 +382,24 @@ std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url
 /*static*/
 void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop)
 {
-	CefWindowInfo window_info;
-	CefBrowserSettings browser_settings;
 	browserElements->client = new BrowserClient(false);
 	browserElements->client->SetIsMain(browserElements->uid == 0);
+
+	// Only main uses the global context; a tab sharing it would share cookies and login with main
+	if (browserElements->uid == 0)
+	{
+		attachCefBrowser(browserElements, url, startHidden, keepOnTop, CefRequestContext::GetGlobalContext());
+		return;
+	}
+
+	SlBrowser::instance().withTabRequestContext(browserElements->contextDir, [browserElements, url, startHidden, keepOnTop](CefRefPtr<CefRequestContext> request_context) { attachCefBrowser(browserElements, url, startHidden, keepOnTop, request_context); });
+}
+
+/*static*/
+void SlBrowser::attachCefBrowser(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop, CefRefPtr<CefRequestContext> request_context)
+{
+	CefWindowInfo window_info;
+	CefBrowserSettings browser_settings;
 
 	// Adjust for possible DPI
 	int realWidth = browserElements->widget->width();
@@ -331,9 +410,6 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 
 	// Now set the parent of the CEF browser to the QWidget
 	window_info.SetAsChild((HWND)browserElements->widget->winId(), CefRect(0, 0, realWidth, realHeight));
-
-	// Only main uses the global context; a tab sharing it would share cookies and login with main
-	CefRefPtr<CefRequestContext> request_context = browserElements->uid == 0 ? CefRequestContext::GetGlobalContext() : SlBrowser::instance().createTabRequestContext(browserElements->contextDir);
 
 	// Reaches the renderer's OnBrowserCreated, which runs the script in every main-frame document of the tab
 	CefRefPtr<CefDictionaryValue> extra_info;
@@ -539,6 +615,7 @@ void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> brow
 
 void SlBrowser::browserShutdown()
 {
+	g_tabProfiles.clear();
 	CefClearSchemeHandlerFactories();
 	CefShutdown();
 	m_app = nullptr;

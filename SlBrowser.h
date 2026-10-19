@@ -108,10 +108,11 @@ private:
 	std::string registerBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements);
 
 	static void createCefBrowser_internal(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
+	static void attachCefBrowser(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop, CefRefPtr<CefRequestContext> request_context);
 	static void cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements);
 
 	std::wstring getCacheDir() const;
-	CefRefPtr<CefRequestContext> createTabRequestContext(const std::string &contextDir) const;
+	void withTabRequestContext(const std::string &contextDir, std::function<void(CefRefPtr<CefRequestContext>)> onReady) const;
 
 	static void DebugInputThread();
 	static void CheckForObsThread();
