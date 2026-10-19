@@ -4,7 +4,7 @@
   "display_name": "Streamlabs",
   "version": "0",
   "os_arch": "windows-x64",
-  "description": "Streamlabs tools and app store for OBS Studio",
+  "description": "Streamlabs tools for OBS Studio",
   "urls": {
     "website": "https://streamlabs.com",
     "support": "https://support.streamlabs.com"
