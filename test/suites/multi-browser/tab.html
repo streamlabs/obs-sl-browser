@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>multi browser tab</title>
+<body style="background:#201030;color:#c9f;font:13px monospace;margin:8px">
+<h3 id="who"></h3>
+<div id="log"></div>
+<script src="/_harness/inpage.js"></script>
+<script>
+// Which tab this is comes from the url, because a tab has no other way to learn its uid.
+const params = new URLSearchParams(location.search);
+const UID = params.get('uid') || '?';
+
+document.getElementById('who').textContent = 'tab ' + UID;
+
+function report(event, data) {
+	// location.origin, not a hardcoded port: this page is served by the harness, whose
+	// port is ephemeral and different on every run.
+	return fetch(location.origin + '/report', {
+		method: 'POST',
+		headers: {'content-type': 'application/json'},
+		body: JSON.stringify({who: 'tab' + UID, event: event, data: data})
+	}).catch(function (e) { return null; });
+}
+
+function state() {
+	return {
+		uid: UID,
+		nav: params.get('nav'),
+		href: location.href,
+		innerWidth: window.innerWidth,
+		innerHeight: window.innerHeight,
+		dpr: window.devicePixelRatio,
+		hasSlabsGlobal: typeof window.slabsGlobal !== 'undefined',
+		slabsTabKeys: typeof window.slabsTab === 'object' ? Object.keys(window.slabsTab).sort() : null
+	};
+}
+
+report('LOADED', state());
+window.addEventListener('resize', function () { report('RESIZED', state()); });
+</script>

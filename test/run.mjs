@@ -186,7 +186,7 @@ async function runSuite(name) {
 			say(`attached to ${page.url}`);
 		}
 
-		const ctx = { cdp, observer: server, obs, dir: suite.dir, workDir, say };
+		const ctx = { cdp, observer: server, obs, dir: suite.dir, workDir, say, port: PORT };
 		const timeout = new Promise((_, rej) =>
 			setTimeout(() => rej(new Error(`suite exceeded its ${suite.timeoutMs / 1000}s budget`)), suite.timeoutMs));
 
