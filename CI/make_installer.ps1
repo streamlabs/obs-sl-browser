@@ -11,7 +11,10 @@ $obsVersion = (Get-Content -LiteralPath (Join-Path $repoRoot 'obs.ver') -Raw).Tr
 if ($obsVersion -notmatch '^(\d+)\.') { throw "Invalid OBS version '$obsVersion' in obs.ver." }
 $obsMajor = [int]$Matches[1]
 
-foreach ($name in @('sl-browser.exe', 'sl-browser-page.exe', 'sl-browser-plugin.dll', 'streamlabs-app-icon.png')) {
+$requiredFiles = @('sl-browser.exe', 'sl-browser-page.exe', 'sl-browser-plugin.dll', 'streamlabs-app-icon.png')
+if ($obsMajor -ge 33) { $requiredFiles += 'data\manifest.json' }
+
+foreach ($name in $requiredFiles) {
     if (-not (Test-Path -LiteralPath (Join-Path $packageDir $name) -PathType Leaf)) {
         throw "Package is missing '$name' in '$packageDir'."
     }

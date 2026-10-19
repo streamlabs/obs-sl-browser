@@ -1,0 +1,14 @@
+{
+  "id": "2c840539-7627-4ad1-8f79-aca895cff06d",
+  "name": "sl-browser-plugin",
+  "display_name": "Streamlabs",
+  "version": "0",
+  "os_arch": "windows-x64",
+  "description": "Streamlabs tools and app store for OBS Studio",
+  "urls": {
+    "website": "https://streamlabs.com",
+    "support": "https://support.streamlabs.com"
+  },
+  "has_icon": false,
+  "has_banner": false
+}

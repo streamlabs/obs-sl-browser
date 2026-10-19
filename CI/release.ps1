@@ -110,12 +110,18 @@ function CreateJsonFile($folder, $branchName) {
     $jsonContent.package = $zipFile.Name
     $jsonContent.installer = $branchInstallerUrls[$branchName]
     $jsonContent.revision = $revNumberOutgoing
+    # OBS 33+ packages install into two roots; older ones only have the legacy plugin folder and no root key.
+    $hasRoots = $branchName -match '^(\d+)\.' -and [int]$Matches[1] -ge 33
     $jsonContent.files = $filesInBranch | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
         $subPath = $_.FullName.Substring($_.FullName.IndexOf("$branchName\$branchName") + $branchName.Length * 2 + 2)
-        @{
+        $entry = @{
             file = $subPath.Replace('\', '/')
             hash = (Get-FileHash $_.FullName -Algorithm MD5).Hash
         }
+        if ($hasRoots) {
+            $entry.root = if ($entry.file -in @('sl-browser-plugin.dll', 'data/manifest.json')) { 'plugin' } else { 'obs' }
+        }
+        $entry
     }
 
     $jsonContent | ConvertTo-Json -Depth 10 | Out-File $jsonFilePath
