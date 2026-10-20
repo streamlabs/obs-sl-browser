@@ -69,7 +69,8 @@ public:
 	static std::string tabContextDirName(const std::string &key);
 	std::string resolveTabIconPath(const std::string &path, std::wstring &resolved) const;
 	std::string createTabWindow(const int32_t uid, const std::string &url, TabWindowOptions options);
-	std::string queueDestroyCefBrowser(const int32_t uuid);
+	// With expected, only that very tab is destroyed, not a newer one that reused the uid
+	std::string queueDestroyCefBrowser(const int32_t uuid, const std::shared_ptr<BrowserElements> &expected = nullptr);
 	void closeTabWindow(const int32_t uid);
 	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
 	void setMainLoadingInProgress(const bool b) { m_mainLoadingInProgress = b; }

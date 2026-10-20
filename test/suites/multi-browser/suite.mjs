@@ -801,6 +801,79 @@ export default {
 				created.delete(107);
 			});
 
+			// SL_PLUGIN_TEST_TAB_PROFILE_DELAY_MS holds back the profile of a key starting slt-delay- (8s here), and
+			// SL_PLUGIN_TEST_TAB_PROFILE_TIMEOUT_MS shortens the wait for it (4s here), see launchObs.
+			const PROFILE_DELAY_MS = 8000;
+			const stamp0 = Date.now();
+			const delayKey = (suffix) => `slt-delay-${stamp0}-${suffix}`;
+			const startCreate = (uid, title, key) => cdp.evaluate(`window.__pend = window.__pend || {}; window.__pend[${uid}] = {t: Date.now(), res: null};
+				__slt.call("tabs_createWindow", ${uid}, ${JSON.stringify(tabUrl(uid, "&delay=1"))}, ${JSON.stringify(title)}, "", "", false, ${JSON.stringify(key)})
+					.then((r) => { window.__pend[${uid}].res = r; window.__pend[${uid}].ms = Date.now() - window.__pend[${uid}].t; }); 1`);
+			const reply = (uid, timeoutMs) => until(async () => {
+				const p = await cdp.evaluate(`window.__pend[${uid}]`);
+				return p?.res ? p : null;
+			}, { timeoutMs, everyMs: 200 });
+			const noOrphan = async (uid, title) => {
+				if ((await pageUrls()).some((u) => u.includes(`tab.html?uid=${uid}`))) return "a browser for the tab exists";
+				if (windowTitles(workDir).includes(title)) return "the tab's window is still there";
+				if ((await queryAll()).some((t) => t.uid === uid)) return `tabs_queryAll still lists ${uid}`;
+				return "";
+			};
+
+			await r.step("a tab destroyed while its profile is initializing is answered with the closed error, tells main nothing, and makes no browser", async () => {
+				const title = "SLT-init-close-108";
+				const before = (await cdp.inbox()).length;
+				const calls = [["tabs_createWindow", 108, tabUrl(108, "&delay=1"), title, "", "", false, delayKey("a")], ["tabs_destroyWindow", 108]];
+				const [create, destroy] = await cdp.evaluate(`Promise.all(${JSON.stringify(calls)}.map((c) => __slt.call(...c)))`, { awaitPromise: true });
+				if (create.error !== CLOSED_BEFORE_CREATED) return `create: ${JSON.stringify(create)}`;
+				if (isError(destroy)) return `destroy: ${destroy.error}`;
+
+				await settle(PROFILE_DELAY_MS + 1000);
+				const orphan = await noOrphan(108, title);
+				if (orphan) return orphan;
+				if ((await cdp.inbox()).slice(before).some((m) => m[0] === TAB_CLOSED)) return "main was told a tab closed";
+			});
+
+			await r.step("the user closing a tab's window before its profile is ready gets the same answer and no tabClosed", async () => {
+				const title = "SLT-init-wmclose-109";
+				const before = (await cdp.inbox()).length;
+				await startCreate(109, title, delayKey("b"));
+				if (!(await until(async () => windowTitles(workDir).includes(title) || null, { timeoutMs: 10000, everyMs: 200 }))) return "the window never appeared";
+				if (!closeWindow(workDir, title)) return `no window titled "${title}" to close`;
+				const p = await reply(109, 10000);
+				if (!p) return "the create was never answered";
+				if (p.res.error !== CLOSED_BEFORE_CREATED) return `create: ${JSON.stringify(p.res)}`;
+
+				await settle(PROFILE_DELAY_MS + 1000);
+				const orphan = await noOrphan(109, title);
+				if (orphan) return orphan;
+				if ((await cdp.inbox()).slice(before).some((m) => m[0] === TAB_CLOSED)) return "main was told a tab closed";
+			});
+
+			await r.step("a tab whose profile never initializes is answered with an error in time, frees its uid, and leaves no browser", async () => {
+				const title = "SLT-init-timeout-112";
+				const key = delayKey("c");
+				const before = (await cdp.inbox()).length;
+				await startCreate(112, title, key);
+				const p = await reply(112, 15000);
+				if (!p) return "the create was never answered";
+				if (p.res.error !== "the tab's profile did not initialize in time") return `create: ${JSON.stringify(p.res)}`;
+				if (p.ms < 3000 || p.ms > 8000) return `the error took ${p.ms} ms, expected about 4000`;
+				if (!(await until(async () => (await noOrphan(112, title)) === "" || null, { timeoutMs: 5000, everyMs: 250 }))) return await noOrphan(112, title);
+
+				await settle(PROFILE_DELAY_MS + 1000);
+				if (await noOrphan(112, title)) return "the profile finishing later made a browser";
+				if ((await cdp.inbox()).slice(before).some((m) => m[0] === TAB_CLOSED)) return "main was told a tab closed";
+
+				// The profile is ready by now, so the same key attaches at once, on the uid that was freed.
+				const started = Date.now();
+				const again = await createTab(112, "T112 again", "&again=1", ["", "", false, key]);
+				if (isError(again)) return `a create with the same key failed: ${again.error}`;
+				if (Date.now() - started > 3000) return "a create with a ready profile still waited";
+				await cdp.call("tabs_destroyWindow", 112);
+				created.delete(112);
+			});
+
 			/* ------------------------------------------------------------- url allow-list --- */
 
 			// Everything but https on the CDN host. The harness's own origin is let through by

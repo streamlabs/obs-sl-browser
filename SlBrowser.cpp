@@ -203,6 +203,25 @@ void replyCreated(const std::shared_ptr<BrowserElements> &elements, const std::s
 	elements->onCreated = nullptr;
 }
 
+// Zero when unset
+int testEnvMs(const char *name)
+{
+	char buffer[32];
+	DWORD len = GetEnvironmentVariableA(name, buffer, sizeof(buffer));
+	return (len > 0 && len < sizeof(buffer)) ? atoi(buffer) : 0;
+}
+
+void onProfileTimeout(std::weak_ptr<BrowserElements> weak)
+{
+	auto elements = weak.lock();
+
+	if (!elements || elements->closed || elements->browser)
+		return;
+
+	replyCreated(elements, "the tab's profile did not initialize in time");
+	SlBrowser::instance().queueDestroyCefBrowser(elements->uid, elements);
+}
+
 // On-disk profiles are made asynchronously, so a browser can only be attached once the context says it is initialized. Touched on the CEF UI thread only
 struct TabProfile
 {
@@ -231,7 +250,15 @@ class TabProfileHandler : public CefRequestContextHandler
 public:
 	explicit TabProfileHandler(const std::string &contextDir) : m_contextDir(contextDir) {}
 
-	void OnRequestContextInitialized(CefRefPtr<CefRequestContext> request_context) override { tabProfileInitialized(m_contextDir, request_context); }
+	void OnRequestContextInitialized(CefRefPtr<CefRequestContext> request_context) override
+	{
+		static const int delayMs = testEnvMs(JavascriptApi::kTestTabProfileDelayEnvVar);
+
+		if (delayMs > 0 && m_contextDir.rfind(JavascriptApi::kTestTabProfileDelayDirPrefix, 0) == 0)
+			CefPostDelayedTask(TID_UI, base::BindOnce(&tabProfileInitialized, m_contextDir, request_context), delayMs);
+		else
+			tabProfileInitialized(m_contextDir, request_context);
+	}
 
 private:
 	std::string m_contextDir;
@@ -417,6 +444,13 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 		if (auto elements = weak.lock())
 			attachCefBrowser(elements, url, startHidden, keepOnTop, request_context);
 	});
+
+	static const int timeoutMs = []() {
+		const int fromEnv = testEnvMs(JavascriptApi::kTestTabProfileTimeoutEnvVar);
+		return fromEnv > 0 ? fromEnv : JavascriptApi::kTabProfileTimeoutMs;
+	}();
+
+	CefPostDelayedTask(TID_UI, base::BindOnce(&onProfileTimeout, weak), timeoutMs);
 }
 
 /*static*/
@@ -578,7 +612,7 @@ void SlBrowser::browserInit()
 	CefRegisterSchemeHandlerFactory("http", "absolute", new BrowserSchemeHandlerFactory());
 }
 
-std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid)
+std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid, const std::shared_ptr<BrowserElements> &expected)
 {
 	std::lock_guard<std::mutex> g(m_mutex);
 
@@ -588,6 +622,9 @@ std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid)
 	auto browserElements = m_browsers.find(uid);
 
 	if (browserElements == m_browsers.end())
+		return "uid not found";
+
+	if (expected && browserElements->second != expected)
 		return "uid not found";
 
 	std::shared_ptr<BrowserElements> ptr = browserElements->second;

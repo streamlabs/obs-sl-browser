@@ -135,6 +135,14 @@ public:
 	// Longest contextKey tabs_createWindow takes
 	static constexpr size_t kMaxTabContextKeyBytes = 64;
 
+	// How long a tab waits for its profile before tabs_createWindow answers with an error
+	static constexpr int kTabProfileTimeoutMs = 10000;
+
+	// Test only, read once by the browser process: the first replaces kTabProfileTimeoutMs, the second holds back by that many ms the profiles whose directory starts with kTestTabProfileDelayDirPrefix
+	static constexpr const char *kTestTabProfileTimeoutEnvVar = "SL_PLUGIN_TEST_TAB_PROFILE_TIMEOUT_MS";
+	static constexpr const char *kTestTabProfileDelayEnvVar = "SL_PLUGIN_TEST_TAB_PROFILE_DELAY_MS";
+	static constexpr const char *kTestTabProfileDelayDirPrefix = "app-slt-delay-";
+
 	// Control over the plugin/OBS side
 	static std::map<std::string, JSFuncs> &getPluginFunctionNames()
 	{
@@ -653,6 +661,7 @@ public:
 			//		initScriptStr is run in the tab's main frame at the start of every document load (including reloads and navigations), after slabsTab is defined and before the page's own scripts. Empty means none
 			//		hideOnCloseBOOL false (default): when the user closes the window it is destroyed and main is sent kTabClosedMessage. true: it is only hidden, and main is not told
 			//		A window destroyed before its browser was made is answered { "error": "the window was closed before it was created" }. An error reply never comes with kTabClosedMessage
+			//		A tab whose profile is not initialized within kTabProfileTimeoutMs is destroyed and answered { "error": "the tab's profile did not initialize in time" }
 			{"tabs_createWindow", JS_TABS_CREATE_WINDOW},
 
 			// .(@function(arg1), uidINT)
