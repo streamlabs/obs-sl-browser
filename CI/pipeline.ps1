@@ -179,3 +179,13 @@ New-Item -ItemType Directory -Path $artifactPath
 foreach ($name in $runtimeFileNames) {
     Copy-Item -LiteralPath (Join-Path $buildOutputDir $name) -Destination $artifactPath
 }
+
+# OBS 33+ loads the plugin from a folder that needs a manifest carrying the package revision.
+if ([int]($branchName -replace '^(\d+)\..*$', '$1') -ge 33) {
+    $manifest = Get-Content -LiteralPath (Join-Path $github_workspace 'data\manifest.json') -Raw | ConvertFrom-Json
+    $manifest.version = "$slRevision"
+    $manifestDir = Join-Path $artifactPath 'data'
+    New-Item -ItemType Directory -Path $manifestDir | Out-Null
+    $utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False
+    [System.IO.File]::WriteAllText((Join-Path $manifestDir 'manifest.json'), ($manifest | ConvertTo-Json -Depth 10), $utf8NoBomEncoding)
+}
