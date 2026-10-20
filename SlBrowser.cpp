@@ -3,6 +3,7 @@
 #include "JavascriptApi.h"
 #include "GrpcBrowser.h"
 #include "CrashHandler.h"
+#include "WindowsFunctions.h"
 
 #include <functional>
 #include <sstream>
@@ -440,7 +441,7 @@ void SlBrowser::attachCefBrowser(std::shared_ptr<BrowserElements> browserElement
 	{
 		browserElements->widget->showNormal();
 
-		if (keepOnTop)
+		if (keepOnTop && !WindowsFunctions::TestOffscreen())
 		{
 			std::thread(
 				[](std::shared_ptr<BrowserElements> b) {

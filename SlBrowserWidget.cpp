@@ -1,5 +1,6 @@
 #include "SlBrowserWidget.h"
 #include "SlBrowser.h"
+#include "WindowsFunctions.h"
 
 #include <QDialog>
 #include <QCloseEvent>
@@ -17,6 +18,13 @@ SlBrowserWidget::SlBrowserWidget()
 	setAttribute(Qt::WA_NativeWindow);
 
 	setFocusPolicy(Qt::ClickFocus);
+
+	if (WindowsFunctions::TestOffscreen())
+	{
+		setAttribute(Qt::WA_ShowWithoutActivating);
+		setWindowFlag(Qt::WindowDoesNotAcceptFocus);
+		move(-32000, -32000);
+	}
 
 	setWindowIcon(QIcon(QCoreApplication::applicationDirPath() + "/streamlabs-app-icon.png"));
 }
