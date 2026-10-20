@@ -41,6 +41,9 @@ struct BrowserElements
 	std::string contextDir;
 	std::function<void(const std::string &err)> onCreated;
 
+	// The user closed the tab, so main is told once it is gone
+	std::atomic<bool> notifyClosed = false;
+
 	static void queueCleanupQtObj(QWidget *widget)
 	{
 		if (widget != nullptr)

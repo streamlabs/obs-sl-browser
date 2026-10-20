@@ -586,32 +586,53 @@ std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid)
 
 void SlBrowser::closeTabWindow(const int32_t uid)
 {
-	if (!queueDestroyCefBrowser(uid).empty())
-		return;
+	if (auto elements = getBrowserElements(uid))
+		elements->notifyClosed = true;
 
-	if (m_mainBrowser == nullptr)
-		return;
-
-	CefPostTask(TID_UI, base::BindOnce(&BrowserClient::SendMsgToReceiver, m_mainBrowser->browser, std::string(JavascriptApi::kTabClosedMessage), uid));
+	queueDestroyCefBrowser(uid);
 }
+
+namespace
+{
+constexpr int kCloseFallbackMs = 2000;
+
+// The elements stay alive, and with them the widget, until the browser has finished closing
+using CloseHold = std::shared_ptr<std::shared_ptr<BrowserElements>>;
+
+void releaseCloseHold(CloseHold hold)
+{
+	hold->reset();
+}
+} // namespace
 
 /*static*/
 void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements)
 {
-	if (browserElements->browser)
+	// Only a tab that was told it exists is told it is gone
+	const bool notifyClosed = browserElements->notifyClosed && browserElements->ready;
+	CefRefPtr<CefBrowser> browser = std::move(browserElements->browser);
+	CefRefPtr<BrowserClient> client = std::move(browserElements->client);
+	browserElements->browser = nullptr;
+	browserElements->client = nullptr;
+
+	if (browser)
 	{
-		if (auto frame = browserElements->browser->GetMainFrame())
-			frame->LoadURL("about:blank");
+		// Its own root window, so closing it can never be taken for a close of the Qt widget
+		HWND hwnd = browser->GetHost()->GetWindowHandle();
+		::ShowWindow(hwnd, SW_HIDE);
+		::SetParent(hwnd, nullptr);
 
-		if (browserElements->client)
-			browserElements->client->RemoveBrowserFromCallback(browserElements->browser);
+		auto hold = std::make_shared<std::shared_ptr<BrowserElements>>(browserElements);
+		client->SetOnBeforeClose([hold]() { releaseCloseHold(hold); });
+		browser->GetHost()->CloseBrowser(true);
 
-		browserElements->browser->GetHost()->CloseBrowser(true);
-		browserElements->browser = nullptr;
+		CefPostDelayedTask(TID_UI, base::BindOnce(&releaseCloseHold, hold), kCloseFallbackMs);
 	}
 
-	if (browserElements->client)
-		browserElements->client = nullptr;
+	const auto &mainBrowser = SlBrowser::instance().m_mainBrowser;
+
+	if (notifyClosed && mainBrowser && mainBrowser->browser)
+		BrowserClient::SendMsgToReceiver(mainBrowser->browser, JavascriptApi::kTabClosedMessage, browserElements->uid);
 }
 
 void SlBrowser::browserShutdown()

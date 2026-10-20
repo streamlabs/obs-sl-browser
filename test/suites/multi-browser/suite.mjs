@@ -728,6 +728,55 @@ export default {
 				created.delete(103);
 			});
 
+			await r.step("closing a busy tab with an unload handler tells main once, frees its uid, and leaves main alone", async () => {
+				const title = "SLT-busy-close-105";
+				const res = await createTab(105, title);
+				if (isError(res)) return res.error;
+				const t = await attach(105);
+				await t.evaluate("window.onunload = () => {}; setTimeout(() => { const end = Date.now() + 3000; while (Date.now() < end); }, 0); 1");
+				const before = (await cdp.inbox()).length;
+
+				if (!closeWindow(workDir, title)) return `no window titled "${title}" to close`;
+				const told = await until(async () => (await cdp.inbox()).slice(before).some((m) => m[0] === TAB_CLOSED && m[1] === 105), { timeoutMs: 15000, everyMs: 250 });
+				if (!told) return "main was not told";
+				created.delete(105);
+				t.close();
+				tabCdp.delete(105);
+
+				const gone = await until(async () => !(await pageUrls()).some((u) => u.includes("tab.html?uid=105")), { timeoutMs: 15000 });
+				if (!gone) return "the CDP target is still listed";
+				await settle(SETTLE_MS);
+				const tellings = (await cdp.inbox()).slice(before).filter((m) => m[0] === TAB_CLOSED && m[1] === 105);
+				if (tellings.length !== 1) return `main was told ${tellings.length} times`;
+
+				// A close that reached the main window would hide it, or take it away.
+				if ((await cdp.call("tabs_getIsWindowHidden", 0)).result !== false) return "main was hidden by the tab's close";
+				if (!windowTitles(workDir).includes("Streamlabs")) return "the main window is gone";
+				const v = await cdp.call("sl_getVersionInfo");
+				if (v.__timeout || v.__missing) return "main stopped answering";
+
+				const again = await createTab(105, "T105 again", "&again=1");
+				if (isError(again)) return `could not reuse uid 105: ${again.error}`;
+				await cdp.call("tabs_destroyWindow", 105);
+				created.delete(105);
+			});
+
+			await r.step("20 rounds of create and user close under WM_CLOSE each tell main once", async () => {
+				for (let i = 1; i <= 20; i++) {
+					const title = `SLT-wm-churn-${i}`;
+					const res = await createTab(106, title, `&wm=${i}`);
+					if (isError(res)) return `round ${i}: ${res.error}`;
+					const before = (await cdp.inbox()).length;
+					if (!closeWindow(workDir, title)) return `round ${i}: no window titled "${title}" to close`;
+					const told = await until(async () => (await cdp.inbox()).slice(before).some((m) => m[0] === TAB_CLOSED && m[1] === 106), { timeoutMs: 15000, everyMs: 100 });
+					created.delete(106);
+					if (!told) return `round ${i}: main was not told`;
+				}
+				const v = await cdp.call("sl_getVersionInfo");
+				if (v.__timeout || v.__missing) return "main stopped answering";
+				if ((await cdp.call("tabs_getIsWindowHidden", 0)).result !== false) return "main was hidden";
+			});
+
 			/* ------------------------------------------------------------- url allow-list --- */
 
 			// Everything but https on the CDN host. The harness's own origin is let through by

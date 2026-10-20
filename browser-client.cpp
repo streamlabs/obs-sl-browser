@@ -73,10 +73,6 @@ bool BrowserClient::OnBeforeBrowse(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> fr
 
 	const std::string url = request->GetURL();
 
-	// A tab is blanked this way before it is closed
-	if (url == "about:blank")
-		return false;
-
 	return !SlBrowser::isApprovedTabUrl(url);
 }
 
@@ -393,6 +389,17 @@ void BrowserClient::GetViewRect(CefRefPtr<CefBrowser>, CefRect &rect)
 	}
 
 	rect.Set(0, 0, 1920, 1080);
+}
+
+void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser)
+{
+	RemoveBrowserFromCallback(browser);
+
+	auto onBeforeClose = std::move(m_onBeforeClose);
+	m_onBeforeClose = nullptr;
+
+	if (onBeforeClose)
+		onBeforeClose();
 }
 
 bool BrowserClient::OnTooltip(CefRefPtr<CefBrowser>, CefString &text)

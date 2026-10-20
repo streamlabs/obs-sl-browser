@@ -2,6 +2,7 @@
 
 #include "cef-headers.hpp"
 
+#include <functional>
 #include <map>
 #include <mutex>
 
@@ -15,6 +16,9 @@ public:
 
 	// Must be set before the browser is created
 	void SetIsMain(const bool b) { m_isMain = b; }
+
+	// Runs once on the CEF UI thread, when the browser is gone. Set on that thread too
+	void SetOnBeforeClose(std::function<void()> fn) { m_onBeforeClose = std::move(fn); }
 
 	/* CefClient */
 	CefRefPtr<CefLoadHandler> GetLoadHandler() override;
@@ -37,6 +41,7 @@ public:
 			   const CefString &target_url, const CefString &target_frame_name, cef_window_open_disposition_t target_disposition, bool user_gesture, const CefPopupFeatures &popupFeatures, CefWindowInfo &windowInfo,
 			   CefRefPtr<CefClient> &client, CefBrowserSettings &settings, CefRefPtr<CefDictionaryValue> &extra_info, bool *no_javascript_access) override;
 
+	void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
 	bool OnTooltip(CefRefPtr<CefBrowser> browser, CefString &text) override;
 	bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message) override;
 
@@ -97,6 +102,7 @@ private:
 
 	bool m_reroute_audio = true;
 	bool m_isMain = false;
+	std::function<void()> m_onBeforeClose;
 	std::recursive_mutex m_recursiveMutex;
 	std::map<int32_t, CefRefPtr<CefBrowser>> m_callbackDictionary;
 
