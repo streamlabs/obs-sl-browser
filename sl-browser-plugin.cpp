@@ -25,7 +25,6 @@
 PROCESS_INFORMATION g_browserProcessInfo;
 
 OBS_DECLARE_MODULE()
-OBS_MODULE_USE_DEFAULT_LOCALE("sl-browser-plugin", "en-US")
 MODULE_EXPORT const char *obs_module_description(void)
 {
 	return "Streamlabs";
