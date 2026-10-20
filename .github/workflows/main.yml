@@ -102,7 +102,7 @@ jobs:
 
       - name: Clean files
         run: |
-          Get-ChildItem -Path archive -Recurse -File | Where-Object { $_.Extension -notin @('.exe', '.dll', '.png') } | Remove-Item -Force
+          Get-ChildItem -Path archive -Recurse -File | Where-Object { $_.Extension -notin @('.exe', '.dll', '.png') -and $_.Name -ne 'manifest.json' } | Remove-Item -Force
 
       - name: Upload Cleaned Archive
         uses: actions/upload-artifact@v4
