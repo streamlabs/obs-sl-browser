@@ -652,6 +652,7 @@ public:
 			//		url must be https on one of kTabAllowedOrigins (everything else, such as http, file:, data:, javascript: and http://absolute/, is an error), and the tab's main frame can only navigate to those origins. Subframes are not restricted
 			//		initScriptStr is run in the tab's main frame at the start of every document load (including reloads and navigations), after slabsTab is defined and before the page's own scripts. Empty means none
 			//		hideOnCloseBOOL false (default): when the user closes the window it is destroyed and main is sent kTabClosedMessage. true: it is only hidden, and main is not told
+			//		A window destroyed before its browser was made is answered { "error": "the window was closed before it was created" }. An error reply never comes with kTabClosedMessage
 			{"tabs_createWindow", JS_TABS_CREATE_WINDOW},
 
 			// .(@function(arg1), uidINT)

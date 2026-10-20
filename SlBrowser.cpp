@@ -192,6 +192,17 @@ std::string SlBrowser::tabContextDirName(const std::string &key)
 
 namespace
 {
+constexpr const char *kClosedBeforeCreated = "the window was closed before it was created";
+
+// Answers tabs_createWindow, once. CEF UI thread only
+void replyCreated(const std::shared_ptr<BrowserElements> &elements, const std::string &err)
+{
+	if (auto onCreated = std::move(elements->onCreated))
+		onCreated(err);
+
+	elements->onCreated = nullptr;
+}
+
 // On-disk profiles are made asynchronously, so a browser can only be attached once the context says it is initialized. Touched on the CEF UI thread only
 struct TabProfile
 {
@@ -383,6 +394,12 @@ std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url
 /*static*/
 void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop)
 {
+	if (browserElements->closed)
+	{
+		replyCreated(browserElements, kClosedBeforeCreated);
+		return;
+	}
+
 	browserElements->client = new BrowserClient(false);
 	browserElements->client->SetIsMain(browserElements->uid == 0);
 
@@ -393,12 +410,24 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 		return;
 	}
 
-	SlBrowser::instance().withTabRequestContext(browserElements->contextDir, [browserElements, url, startHidden, keepOnTop](CefRefPtr<CefRequestContext> request_context) { attachCefBrowser(browserElements, url, startHidden, keepOnTop, request_context); });
+	// Only the registry owns a tab that is still waiting, so one destroyed meanwhile is simply gone
+	std::weak_ptr<BrowserElements> weak = browserElements;
+
+	SlBrowser::instance().withTabRequestContext(browserElements->contextDir, [weak, url, startHidden, keepOnTop](CefRefPtr<CefRequestContext> request_context) {
+		if (auto elements = weak.lock())
+			attachCefBrowser(elements, url, startHidden, keepOnTop, request_context);
+	});
 }
 
 /*static*/
 void SlBrowser::attachCefBrowser(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop, CefRefPtr<CefRequestContext> request_context)
 {
+	if (browserElements->closed)
+	{
+		replyCreated(browserElements, kClosedBeforeCreated);
+		return;
+	}
+
 	CefWindowInfo window_info;
 	CefBrowserSettings browser_settings;
 
@@ -425,10 +454,7 @@ void SlBrowser::attachCefBrowser(std::shared_ptr<BrowserElements> browserElement
 
 	if (!browserElements->browser)
 	{
-		if (browserElements->onCreated)
-			browserElements->onCreated("failed to create the browser");
-
-		browserElements->onCreated = nullptr;
+		replyCreated(browserElements, "failed to create the browser");
 		SlBrowser::instance().queueDestroyCefBrowser(browserElements->uid);
 		return;
 	}
@@ -461,10 +487,7 @@ void SlBrowser::attachCefBrowser(std::shared_ptr<BrowserElements> browserElement
 	browserElements->hidden = browserElements->widget->isHidden();
 	browserElements->ready = true;
 
-	if (browserElements->onCreated)
-		browserElements->onCreated("");
-
-	browserElements->onCreated = nullptr;
+	replyCreated(browserElements, "");
 }
 
 void SlBrowser::browserInit()
@@ -568,6 +591,7 @@ std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid)
 		return "uid not found";
 
 	std::shared_ptr<BrowserElements> ptr = browserElements->second;
+	ptr->closed = true;
 
 	// The widget is released with the elements, after the CEF browser is closed
 	QMetaObject::invokeMethod(
@@ -608,6 +632,8 @@ void releaseCloseHold(CloseHold hold)
 /*static*/
 void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements)
 {
+	replyCreated(browserElements, kClosedBeforeCreated);
+
 	// Only a tab that was told it exists is told it is gone
 	const bool notifyClosed = browserElements->notifyClosed && browserElements->ready;
 	CefRefPtr<CefBrowser> browser = std::move(browserElements->browser);

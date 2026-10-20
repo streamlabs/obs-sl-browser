@@ -49,6 +49,9 @@ const TAB_KEYS = ["pluginVersion", "tab_registerMsgReceiver", "tab_sendStringToM
 // What the main receiver is given when the user closes a tab window, see kTabClosedMessage.
 const TAB_CLOSED = '{"event":"tabClosed"}';
 
+// What tabs_createWindow answers when the tab was destroyed before its browser was made.
+const CLOSED_BEFORE_CREATED = "the window was closed before it was created";
+
 // Quotes, a backslash, a newline and non-ASCII: anything that re-encodes the string fails.
 const TRICKY = "quote \" apostrophe ' backslash \\ newline \n tab \t unicode ✓";
 
@@ -775,6 +778,27 @@ export default {
 				const v = await cdp.call("sl_getVersionInfo");
 				if (v.__timeout || v.__missing) return "main stopped answering";
 				if ((await cdp.call("tabs_getIsWindowHidden", 0)).result !== false) return "main was hidden";
+			});
+
+			await r.step("a destroy right behind a create leaves no browser or window behind, and tells main nothing", async () => {
+				const title = "SLT-early-close-107";
+				const before = (await cdp.inbox()).length;
+				const calls = [["tabs_createWindow", 107, tabUrl(107, "&early=1"), title], ["tabs_destroyWindow", 107]];
+				const [create, destroy] = await cdp.evaluate(`Promise.all(${JSON.stringify(calls)}.map((c) => __slt.call(...c)))`, { awaitPromise: true });
+				if (create.__timeout) return "the create was never answered";
+				if (isError(create) && create.error !== CLOSED_BEFORE_CREATED) return `create: ${JSON.stringify(create)}`;
+				if (isError(destroy)) return `destroy: ${destroy.error}`;
+
+				await settle(SETTLE_MS);
+				if ((await pageUrls()).some((u) => u.includes("tab.html?uid=107"))) return "a browser for the destroyed tab exists";
+				if (windowTitles(workDir).includes(title)) return "the window is still there";
+				if ((await queryAll()).some((t) => t.uid === 107)) return "tabs_queryAll still lists 107";
+				if ((await cdp.inbox()).slice(before).some((m) => m[0] === TAB_CLOSED)) return "main was told a tab closed";
+
+				const again = await createTab(107, "T107 again", "&again=1");
+				if (isError(again)) return `could not reuse uid 107: ${again.error}`;
+				await cdp.call("tabs_destroyWindow", 107);
+				created.delete(107);
 			});
 
 			/* ------------------------------------------------------------- url allow-list --- */

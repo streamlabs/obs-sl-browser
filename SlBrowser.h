@@ -41,6 +41,9 @@ struct BrowserElements
 	std::string contextDir;
 	std::function<void(const std::string &err)> onCreated;
 
+	// Set when the tab is destroyed, so a browser still waiting for its profile is never made
+	std::atomic<bool> closed = false;
+
 	// The user closed the tab, so main is told once it is gone
 	std::atomic<bool> notifyClosed = false;
 
