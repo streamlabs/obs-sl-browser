@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <ctime>
 
 #include <QTimer>
 #include <QPointer>
@@ -185,10 +186,60 @@ struct ProfileMigrationLock
 	}
 };
 
-bool needsProfileMigration(const std::filesystem::path &root)
+bool needsProfileMigration(const std::filesystem::path &root, std::string *reason = nullptr)
 {
 	std::error_code ec;
-	return !std::filesystem::exists(root / "Default", ec) && std::filesystem::exists(root / "LocalPrefs.json", ec);
+	if (std::filesystem::exists(root / "Default", ec))
+	{
+		if (reason)
+			*reason = "Default profile already exists";
+		return false;
+	}
+
+	if (!std::filesystem::exists(root / "LocalPrefs.json", ec))
+	{
+		if (reason)
+			*reason = "no LocalPrefs.json, nothing to migrate";
+		return false;
+	}
+
+	return true;
+}
+
+std::string describeError(const std::error_code &ec)
+{
+	return "error " + std::to_string(ec.value()) + ": " + ec.message();
+}
+
+constexpr size_t kMigrationLogMaxBytes = 64 * 1024;
+
+void appendMigrationLog(const std::filesystem::path &root, const std::vector<std::string> &lines)
+{
+	std::string content;
+	{
+		std::ifstream in(root / "profile-migration.log", std::ios::binary);
+		if (in)
+			content.assign(std::istreambuf_iterator<char>(in), {});
+	}
+
+	std::time_t now = std::time(nullptr);
+	std::tm tm{};
+	localtime_s(&tm, &now);
+	char stamp[32]{};
+	std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", &tm);
+
+	for (const auto &line : lines)
+		content += std::string(stamp) + " " + line + "\n";
+
+	if (content.size() > kMigrationLogMaxBytes)
+	{
+		size_t cut = content.size() - kMigrationLogMaxBytes / 2;
+		size_t nl = content.find('\n', cut);
+		content.erase(0, nl == std::string::npos ? cut : nl + 1);
+	}
+
+	std::ofstream out(root / "profile-migration.log", std::ios::binary | std::ios::trunc);
+	out << content;
 }
 } // namespace
 
@@ -197,19 +248,40 @@ static void migrateToChromeProfileLayout(const std::filesystem::path &root, std:
 {
 	namespace fs = std::filesystem;
 
-	if (!needsProfileMigration(root))
+	std::vector<std::string> persistent;
+	auto record = [&](const std::string &line, bool persist) {
+		log.push_back(line);
+		if (persist)
+			persistent.push_back(line);
+	};
+	const std::string fallback = " - CEF will start with a fresh profile; the old data is still in " + root.string() + " and can be recovered manually";
+	auto fail = [&](const std::string &step, const fs::path &path, const std::error_code &ec) {
+		record("Profile migration failed at " + step + " (" + path.string() + "), " + describeError(ec) + fallback, true);
+		appendMigrationLog(root, persistent);
+	};
+
+	std::string reason;
+	if (!needsProfileMigration(root, &reason))
+	{
+		record("Profile migration not needed: " + reason, false);
 		return;
+	}
 
 	ProfileMigrationLock lock;
 	if (!lock.acquired)
 	{
-		log.push_back("Profile migration skipped, could not acquire lock");
+		if (lock.handle)
+			record("Profile migration skipped: lock not acquired within 30s" + fallback, true);
+		else
+			record("Profile migration skipped: could not create lock, error " + std::to_string(GetLastError()) + fallback, true);
+
+		appendMigrationLog(root, persistent);
 		return;
 	}
 
-	if (!needsProfileMigration(root))
+	if (!needsProfileMigration(root, &reason))
 	{
-		log.push_back("Profile migration skipped, already migrated");
+		record("Profile migration not needed: " + reason + " (migrated by another instance)", false);
 		return;
 	}
 
@@ -231,7 +303,7 @@ static void migrateToChromeProfileLayout(const std::filesystem::path &root, std:
 		{
 			std::error_code cleanupEc;
 			fs::remove(stateStaging, cleanupEc);
-			log.push_back("Profile migration failed copying Local State (" + ec.message() + "), originals left untouched");
+			fail("Local State", root / "LocalPrefs.json", ec);
 			return;
 		}
 
@@ -241,30 +313,39 @@ static void migrateToChromeProfileLayout(const std::filesystem::path &root, std:
 	fs::remove_all(profileStaging, ec);
 	fs::create_directories(profileStaging, ec);
 
+	std::string failedStep = "creating Default staging directory";
+	fs::path failedPath = profileStaging;
 	for (const char *name : {"Local Storage", "Session Storage", "Network"})
 	{
 		if (ec)
 			break;
 
+		failedStep = name;
+		failedPath = root / name;
 		if (fs::exists(root / name, ec))
 			fs::copy(root / name, profileStaging / name, fs::copy_options::recursive, ec);
 	}
 
 	if (!ec && !MoveFileExW(profileStaging.c_str(), profile.c_str(), 0) && GetLastError() != ERROR_ALREADY_EXISTS)
+	{
 		ec = std::error_code(GetLastError(), std::system_category());
+		failedStep = "moving Default into place";
+		failedPath = profile;
+	}
 
 	if (ec)
 	{
 		std::error_code cleanupEc;
 		fs::remove_all(profileStaging, cleanupEc);
-		log.push_back("Profile migration failed (" + ec.message() + "), originals left untouched");
+		fail(failedStep, failedPath, ec);
 		return;
 	}
 
 	// A lost race leaves our staging dir behind; the winner's Default is already in place.
 	std::error_code cleanupEc;
 	fs::remove_all(profileStaging, cleanupEc);
-	log.push_back("Profile migration copied the old cache layout into Default");
+	record("Profile migration succeeded: copied Local State, Local Storage, Session Storage and Network into Default", true);
+	appendMigrationLog(root, persistent);
 }
 #endif
 
