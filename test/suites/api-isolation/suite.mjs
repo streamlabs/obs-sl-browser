@@ -29,7 +29,7 @@ export default {
 
 		await r.step("the main frame has the full api", async () => {
 			const v = await cdp.call("sl_getVersionInfo");
-			if (v.__missing || v.__timeout) return `sl_getVersionInfo failed: ${JSON.stringify(v)}`;
+			if (v.__missing || v.__timeout || v.error) return `sl_getVersionInfo failed: ${JSON.stringify(v)}`;
 			const names = await cdp.evaluate("__slt.names()");
 			if (!Array.isArray(names) || names.length < 50) return `only ${names?.length} names exposed`;
 		});
@@ -52,7 +52,7 @@ export default {
 
 		await r.step("the main frame still has the api next to the frames", async () => {
 			const v = await cdp.call("sl_getVersionInfo");
-			if (v.__missing || v.__timeout) return `sl_getVersionInfo failed: ${JSON.stringify(v)}`;
+			if (v.__missing || v.__timeout || v.error) return `sl_getVersionInfo failed: ${JSON.stringify(v)}`;
 		});
 
 		await r.step("after navigating to another origin slabsGlobal is absent", async () => {
@@ -69,7 +69,7 @@ export default {
 			await until(async () => (await cdp.evaluate("location.href").catch(() => null)) === page, { timeoutMs: 20000 });
 			await cdp.prepare({ expectUrl: page });
 			const v = await cdp.call("sl_getVersionInfo");
-			if (v.__missing || v.__timeout) return `sl_getVersionInfo failed: ${JSON.stringify(v)}`;
+			if (v.__missing || v.__timeout || v.error) return `sl_getVersionInfo failed: ${JSON.stringify(v)}`;
 		});
 
 		return r.list;
