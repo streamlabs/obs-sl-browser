@@ -395,6 +395,12 @@ void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser)
 {
 	RemoveBrowserFromCallback(browser);
 
+	// A tab whose page closed its own window is still registered: it goes too, as when the user closes it
+	const int32_t uid = m_isMain ? -1 : SlBrowser::instance().getUuidFromCefId(browser->GetIdentifier());
+
+	if (uid > 0)
+		SlBrowser::instance().closeTabWindow(uid);
+
 	auto onBeforeClose = std::move(m_onBeforeClose);
 	m_onBeforeClose = nullptr;
 

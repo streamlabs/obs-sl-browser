@@ -1205,6 +1205,50 @@ export default {
 				created.delete(151);
 			});
 
+			await r.step("window.close() in main's page neither hides nor closes main, and its api keeps working", async () => {
+				if ((await cdp.call("tabs_getIsWindowHidden", 0)).result !== false) return "main was hidden before the test";
+				await cdp.evaluate("window.close(); 1");
+				await settle(SETTLE_MS);
+
+				if ((await cdp.call("tabs_getIsWindowHidden", 0)).result !== false) return "main was hidden by window.close()";
+				if (!windowTitles(workDir).includes("Streamlabs")) return "the main window is gone";
+				const s = await cdp.evaluate("({g: typeof window.slabsGlobal, href: location.href})");
+				if (s.g !== "object") return `slabsGlobal is ${s.g} after window.close()`;
+				const v = await cdp.call("sl_getVersionInfo");
+				if (v.__timeout || v.__missing || isError(v)) return `sl_getVersionInfo answered ${JSON.stringify(v)}`;
+				const res = await createTab(152, "T152");
+				if (isError(res)) return `a tab could not be made after window.close(): ${res.error}`;
+				await cdp.call("tabs_destroyWindow", 152);
+				created.delete(152);
+			});
+
+			await r.step("window.close() in a tab's page closes it like the user would: tabClosed once, window and uid gone", async () => {
+				const title = "SLT-script-close-153";
+				const res = await createTab(153, title);
+				if (isError(res)) return res.error;
+				const t = await attach(153);
+				const before = (await cdp.inbox()).length;
+				await t.evaluate("setTimeout(() => window.close(), 0); 1");
+
+				const told = await until(async () => (await cdp.inbox()).slice(before).some((m) => m[0] === TAB_CLOSED && m[1] === 153), { timeoutMs: 15000, everyMs: 250 });
+				if (!told) return "main was not told";
+				created.delete(153);
+				t.close();
+				tabCdp.delete(153);
+				await settle(SETTLE_MS);
+				if ((await cdp.inbox()).slice(before).filter((m) => m[0] === TAB_CLOSED && m[1] === 153).length !== 1) return "main was not told exactly once";
+				const orphan = await (async () => {
+					if ((await pageUrls()).some((u) => u.includes("tab.html?uid=153"))) return "the tab's browser is still there";
+					if (windowTitles(workDir).includes(title)) return "the tab's window is still there";
+					return "";
+				})();
+				if (orphan) return orphan;
+				const again = await createTab(153, "T153 again", "&again=1");
+				if (isError(again)) return `could not reuse uid 153: ${again.error}`;
+				await cdp.call("tabs_destroyWindow", 153);
+				created.delete(153);
+			});
+
 			/* ------------------------------------------------------ main's own browser api --- */
 
 			await r.step("browser_resizeBrowser still resizes the main window, within its bounds", async () => {

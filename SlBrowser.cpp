@@ -680,9 +680,12 @@ void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> brow
 	if (browser)
 	{
 		// Its own root window, so closing it can never be taken for a close of the Qt widget
-		HWND hwnd = browser->GetHost()->GetWindowHandle();
-		::ShowWindow(hwnd, SW_HIDE);
-		::SetParent(hwnd, nullptr);
+		// Null when the page already closed it itself
+		if (HWND hwnd = browser->GetHost()->GetWindowHandle())
+		{
+			::ShowWindow(hwnd, SW_HIDE);
+			::SetParent(hwnd, nullptr);
+		}
 
 		auto hold = std::make_shared<std::shared_ptr<BrowserElements>>(browserElements);
 		client->SetOnBeforeClose([hold]() { releaseCloseHold(hold); });

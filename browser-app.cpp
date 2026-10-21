@@ -113,6 +113,14 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 
 			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
 		}
+
+		// A page that closes its own window leaves main half closed. Hiding it goes through browser_setHiddenState
+		if (frame->IsMain())
+		{
+			CefRefPtr<CefV8Value> retval;
+			CefRefPtr<CefV8Exception> exception;
+			context->Eval("window.close = function close() {};", frame->GetURL(), 0, retval, exception);
+		}
 	}
 	else if (role == Role::Tab && frame->IsMain())
 	{
