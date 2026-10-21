@@ -21,6 +21,7 @@
 #include <utility>
 #include <codecvt>
 #include <filesystem>
+#include <memory>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -45,6 +46,8 @@
 
 // Qt
 #include <QMainWindow>
+#include <QTimer>
+#include <QThread>
 #include <QDockWidget>
 #include <QCheckBox>
 #include <QMessageBox>
@@ -187,10 +190,22 @@ QDockWidget* PluginJsHandler::findDock(const std::string &objectName)
 	return nullptr;
 }
 
+static long long nowMs()
+{
+	return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 void PluginJsHandler::start()
 {
 	m_running = true;
 	m_workerThread = std::thread(&PluginJsHandler::workerThread, this);
+
+	// Runs on the UI thread, so a stale timestamp means the UI is not pumping events.
+	m_lastUiHeartbeatMs = nowMs();
+	m_uiHeartbeatTimer = new QTimer();
+	QObject::connect(m_uiHeartbeatTimer, &QTimer::timeout, m_uiHeartbeatTimer, [this]() { m_lastUiHeartbeatMs = nowMs(); });
+	m_uiHeartbeatTimer->start(1000);
+
 	m_freezeCheckThread = std::thread(&PluginJsHandler::freezeCheckThread, this);
 }
 
@@ -203,6 +218,17 @@ void PluginJsHandler::stop()
 
 	if (m_freezeCheckThread.joinable())
 		m_freezeCheckThread.join();
+
+	// Deleting the timer leaves no queued callback that could run after the module unloads.
+	if (m_uiHeartbeatTimer)
+	{
+		if (m_uiHeartbeatTimer->thread() == QThread::currentThread())
+			delete m_uiHeartbeatTimer;
+		else
+			m_uiHeartbeatTimer->deleteLater();
+
+		m_uiHeartbeatTimer = nullptr;
+	}
 }
 
 void PluginJsHandler::pushApiRequest(const std::string &funcName, const std::string &params)
@@ -249,41 +275,26 @@ void PluginJsHandler::freezeCheckThread()
 {
 	while (m_running)
 	{
-		std::atomic<bool> threadActive = true;
-
-		std::thread([&] {
-			QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
-			QMetaObject::invokeMethod(mainWindow, [mainWindow]() { printf("0"); }, Qt::BlockingQueuedConnection);
-			threadActive = false;
-		}).detach();
-
-		auto timeStart = std::chrono::steady_clock::now();
-
-		while (threadActive)
+		if (nowMs() - m_lastUiHeartbeatMs > 30000)
 		{
-			auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - timeStart).count();
+			blog(LOG_ERROR, "PluginJsHandler::freezeCheckThread - UI seems frozen.");
+			int result = MessageBoxA(0, "The UI is not responding.\nForce OBS to close? A crash report will be written.", "Frozen", MB_YESNO | MB_ICONERROR);
 
-			if (elapsedTime > 30000)
+			if (result == IDYES)
 			{
-				blog(LOG_ERROR, "PluginJsHandler::freezeCheckThread - UI seems frozen.");
-				int result = MessageBoxA(0, "The UI is not responding.\nWould you like to try and close the program?", "Frozen", MB_YESNO | MB_ICONERROR);
-
-				if (result == IDYES)
-				{
-					// Try to invoke crash handler (works often enough to get reports we need)
-					*((unsigned int *)0) = 0xDEAD;
-					abort();
-				}
-
-				return;
+				// Try to invoke crash handler (works often enough to get reports we need)
+				*((unsigned int *)0) = 0xDEAD;
+				abort();
 			}
 
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			// Keep monitoring, but don't ask again until this freeze is over.
+			while (m_running && nowMs() - m_lastUiHeartbeatMs > 30000)
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+			continue;
 		}
 
-		// Check every 10 seconds
-		for (int i = 0; i < 10000 && m_running; ++i)
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
 }
 
@@ -4281,7 +4292,8 @@ void PluginJsHandler::loadFonts()
 		{
 			if (itr.path().extension() == ".ttf")
 			{
-				const std::string &filepath = itr.path().generic_u8string();
+				const auto utf8Path = itr.path().generic_u8string();
+				const std::string filepath(utf8Path.begin(), utf8Path.end());
 
 				if (WindowsFunctions::InstallFont(filepath.c_str()))
 				{

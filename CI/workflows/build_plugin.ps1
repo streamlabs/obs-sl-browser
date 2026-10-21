@@ -3,9 +3,9 @@
     Configures the grafted OBS tree and builds it. For the e2e job.
 
 .PARAMETER PluginOnly
-    Build only the three plugin targets. Correct when the tree came from a prebuilt archive,
-    where OBS is already built - it takes seconds instead of minutes. Without it the whole of
-    OBS is built, which is what happens when the archive was missing.
+    Build the three plugin targets and their dependencies. OBS 33 also regenerates its core
+    module list and relinks obs.dll. Without this switch the whole of OBS is built, which is
+    what happens when the archive was missing.
 #>
 [CmdletBinding()]
 param(
@@ -22,11 +22,13 @@ if ($ver -notmatch '^\d+\.\d+\.\d+') { throw "obs.ver gave no usable version: '$
 
 Push-Location $ObsDir
 try {
+    $cfg = @(& (Join-Path $PSScriptRoot '..\windows_x64_configure_args.ps1') -ObsDir .)
+    $cfg += @('-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF', "-DOBS_VERSION_OVERRIDE=$ver")
     # Passed on the command line rather than patched into CMakePresets.json so that a restored
     # tree and a from-scratch tree configure identically. The override is quoted because
     # PowerShell does not expand variables inside an unquoted token that starts with a dash -
     # unquoted, cmake gets the literal '$ver' and versionconfig.cmake aborts.
-    cmake --preset windows-x64 -DCMAKE_COMPILE_WARNING_AS_ERROR=OFF "-DOBS_VERSION_OVERRIDE=$ver"
+    cmake @cfg
     if ($LASTEXITCODE -ne 0) { throw "configure failed" }
 
     if ($PluginOnly) {
