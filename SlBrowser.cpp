@@ -9,6 +9,7 @@
 #include <mutex>
 #include <filesystem>
 #include <fstream>
+#include <vector>
 
 #include <QTimer>
 #include <QPointer>
@@ -29,6 +30,7 @@
 #include "ConsoleToggle.h"
 
 #include <include/base/cef_callback.h>
+#include <include/base/cef_logging.h>
 #include <include/wrapper/cef_closure_task.h>
 
 #include <dxgi.h>
@@ -154,6 +156,118 @@ void SlBrowser::CreateCefBrowser(int arg)
 	}
 }
 
+#if CHROME_VERSION_BUILD > 6533
+namespace
+{
+struct ProfileMigrationLock
+{
+	HANDLE handle = CreateMutexW(nullptr, FALSE, L"Local\\StreamlabsOBS_CEF_Cache_ProfileMigration");
+	bool acquired = false;
+
+	ProfileMigrationLock()
+	{
+		if (!handle)
+			return;
+
+		DWORD wait = WaitForSingleObject(handle, 30000);
+		acquired = wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED;
+	}
+
+	~ProfileMigrationLock()
+	{
+		if (!handle)
+			return;
+
+		if (acquired)
+			ReleaseMutex(handle);
+
+		CloseHandle(handle);
+	}
+};
+
+bool needsProfileMigration(const std::filesystem::path &root)
+{
+	std::error_code ec;
+	return !std::filesystem::exists(root / "Default", ec) && std::filesystem::exists(root / "LocalPrefs.json", ec);
+}
+} // namespace
+
+// Chrome-runtime CEF only reads the "Default" profile; copy the pre-Chrome root layout into it.
+static void migrateToChromeProfileLayout(const std::filesystem::path &root, std::vector<std::string> &log)
+{
+	namespace fs = std::filesystem;
+
+	if (!needsProfileMigration(root))
+		return;
+
+	ProfileMigrationLock lock;
+	if (!lock.acquired)
+	{
+		log.push_back("Profile migration skipped, could not acquire lock");
+		return;
+	}
+
+	if (!needsProfileMigration(root))
+	{
+		log.push_back("Profile migration skipped, already migrated");
+		return;
+	}
+
+	const std::string suffix = ".migrating-" + std::to_string(GetCurrentProcessId());
+	const fs::path state = root / "Local State";
+	const fs::path stateStaging = root / ("Local State" + suffix);
+	const fs::path profile = root / "Default";
+	const fs::path profileStaging = root / ("Default" + suffix);
+	std::error_code ec;
+
+	// Local State holds the key that decrypts the cookies, so it goes first.
+	if (!fs::exists(state, ec))
+	{
+		fs::copy_file(root / "LocalPrefs.json", stateStaging, fs::copy_options::overwrite_existing, ec);
+		if (!ec && !MoveFileExW(stateStaging.c_str(), state.c_str(), 0) && GetLastError() != ERROR_ALREADY_EXISTS)
+			ec = std::error_code(GetLastError(), std::system_category());
+
+		if (ec)
+		{
+			std::error_code cleanupEc;
+			fs::remove(stateStaging, cleanupEc);
+			log.push_back("Profile migration failed copying Local State (" + ec.message() + "), originals left untouched");
+			return;
+		}
+
+		fs::remove(stateStaging, ec);
+	}
+
+	fs::remove_all(profileStaging, ec);
+	fs::create_directories(profileStaging, ec);
+
+	for (const char *name : {"Local Storage", "Session Storage", "Network"})
+	{
+		if (ec)
+			break;
+
+		if (fs::exists(root / name, ec))
+			fs::copy(root / name, profileStaging / name, fs::copy_options::recursive, ec);
+	}
+
+	if (!ec && !MoveFileExW(profileStaging.c_str(), profile.c_str(), 0) && GetLastError() != ERROR_ALREADY_EXISTS)
+		ec = std::error_code(GetLastError(), std::system_category());
+
+	if (ec)
+	{
+		std::error_code cleanupEc;
+		fs::remove_all(profileStaging, cleanupEc);
+		log.push_back("Profile migration failed (" + ec.message() + "), originals left untouched");
+		return;
+	}
+
+	// A lost race leaves our staging dir behind; the winner's Default is already in place.
+	std::error_code cleanupEc;
+	fs::remove_all(profileStaging, cleanupEc);
+	log.push_back("Profile migration copied the old cache layout into Default");
+}
+#endif
+
 void SlBrowser::browserInit()
 {
 	std::string version;
@@ -216,6 +330,9 @@ void SlBrowser::browserInit()
 	{
 		cache_pathStdStr = std::string(cache_path) + "\\StreamlabsOBS_CEF_Cache";
 		CefString(&settings.cache_path) = cache_pathStdStr;
+#if CHROME_VERSION_BUILD > 6533
+		CefString(&settings.root_cache_path) = cache_pathStdStr;
+#endif
 	}
 
 	CefString(&settings.browser_subprocess_path) = path.c_str();
@@ -234,7 +351,18 @@ void SlBrowser::browserInit()
 	m_app = new BrowserApp();
 
 	CefExecuteProcess(args, m_app, nullptr);
+
+	std::vector<std::string> migrationLog;
+#if CHROME_VERSION_BUILD > 6533
+	if (!cache_pathStdStr.empty())
+		migrateToChromeProfileLayout(cache_pathStdStr, migrationLog);
+#endif
+
 	CefInitialize(args, settings, m_app, nullptr);
+
+	// CEF logging is only live after CefInitialize
+	for (const auto &line : migrationLog)
+		LOG(INFO) << line;
 
 	// Register http://absolute/ scheme handler for older CEF builds which do not support file:// URLs
 	CefRegisterSchemeHandlerFactory("http", "absolute", new BrowserSchemeHandlerFactory());
