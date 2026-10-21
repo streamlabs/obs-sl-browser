@@ -860,7 +860,9 @@ void SlDualController::restoreFromCollectionFile()
 			if (!entry.is_regular_file() || entry.path().extension() != L".json")
 				continue;
 
-			obs_data_t *root = obs_data_create_from_json_file(entry.path().u8string().c_str());
+			const auto utf8Path = entry.path().u8string();
+			const std::string filepath(utf8Path.begin(), utf8Path.end());
+			obs_data_t *root = obs_data_create_from_json_file(filepath.c_str());
 
 			if (!root)
 				continue;
