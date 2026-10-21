@@ -248,8 +248,10 @@
   test("stream settings round-trip", function (ctx) {
     return call("dualoutput_getStreamSettings").then(function (before) {
       ctx.settingsBefore = checkOk(before, "getStreamSettings");
-      return call("dualoutput_setStreamSettings",
-        "rtmp://127.0.0.1/slt", "slt-key", true, "slt-user", "slt-pass", "obs_x264", 3210, 96, 1, true);
+      return call("dualoutput_setStreamSettings", JSON.stringify({
+        server: "rtmp://127.0.0.1/slt", key: "slt-key", use_auth: true, username: "slt-user", password: "slt-pass",
+        encoder_id: "obs_x264", video_bitrate: 3210, audio_bitrate: 96, audio_track: 1, auto_start: true
+      }));
     }).then(function (r) {
       checkOk(r, "setStreamSettings");
       return call("dualoutput_getStreamSettings");
@@ -272,8 +274,7 @@
   test("a partial update keeps the values it omits", function () {
     // Only the video bitrate is supplied. Everything else is left out entirely - an empty string
     // is now a request to clear, which is the next test.
-    return call("dualoutput_setStreamSettings",
-      undefined, undefined, undefined, undefined, undefined, undefined, 4200).then(function (r) {
+    return call("dualoutput_setStreamSettings", JSON.stringify({ video_bitrate: 4200 })).then(function (r) {
       checkOk(r, "partial setStreamSettings");
       return call("dualoutput_getStreamSettings");
     }).then(function (got) {
@@ -293,21 +294,58 @@
   /* The other half of presence-means-intent, and the reason it exists: with an empty string
      indistinguishable from an omitted argument there was no way to remove a stored stream key. */
   test("an empty string clears a stored value", function () {
-    return call("dualoutput_setStreamSettings", undefined, "").then(function (r) {
+    return call("dualoutput_setStreamSettings", JSON.stringify({ key: "" })).then(function (r) {
       checkOk(r, "setStreamSettings clearing the key");
       return call("dualoutput_getStreamSettings");
     }).then(function (got) {
       checkOk(got, "getStreamSettings after clearing");
       check(got.key === "", "key was not cleared, got: " + JSON.stringify(got.key));
       check(got.server === "rtmp://127.0.0.1/slt", "clearing the key also disturbed the server");
-      return call("dualoutput_setStreamSettings", undefined, "slt-key");
+      return call("dualoutput_setStreamSettings", JSON.stringify({ key: "slt-key" }));
     }).then(function (r) {
       checkOk(r, "restoring the key");
     });
   });
 
+  test("an explicit null keeps the stored value", function () {
+    return call("dualoutput_setStreamSettings", JSON.stringify({ key: null, server: null, video_bitrate: null }))
+      .then(function (r) {
+        checkOk(r, "setStreamSettings with nulls");
+        return call("dualoutput_getStreamSettings");
+      }).then(function (got) {
+        checkOk(got, "getStreamSettings after nulls");
+        check(got.key === "slt-key", "null cleared the key, got: " + JSON.stringify(got.key));
+        check(got.server === "rtmp://127.0.0.1/slt", "null changed the server, got: " + got.server);
+        check(got.video_bitrate === 4200, "null changed the bitrate, got: " + got.video_bitrate);
+      });
+  });
+
+  /* Each of these is refused before anything is applied, so the stored settings must be exactly what
+     the earlier tests left - including the valid key sent alongside the bad one. */
+  function rejects(name, args, expected) {
+    test("a bad settings argument is refused: " + name, function (ctx) {
+      return call("dualoutput_getStreamSettings").then(function (before) {
+        ctx.before = checkOk(before, "getStreamSettings before");
+        return call.apply(null, ["dualoutput_setStreamSettings"].concat(args));
+      }).then(function (r) {
+        check(typeof r.error === "string" && r.error.indexOf(expected) !== -1,
+          "expected an error containing '" + expected + "', got: " + JSON.stringify(r));
+        return call("dualoutput_getStreamSettings");
+      }).then(function (after) {
+        checkOk(after, "getStreamSettings after a refused update");
+        check(JSON.stringify(after) === JSON.stringify(ctx.before), "a refused update changed the stored settings");
+      });
+    });
+  }
+
+  rejects("an object instead of a string", [{ video_bitrate: 5000 }], "must be a JSON string");
+  rejects("malformed json", ['{"key": "x"'], "is not valid JSON");
+  rejects("a json array", ['[{"key": "x"}]'], "must be a JSON object");
+  rejects("an unknown key", [JSON.stringify({ key: "other", videoBitrate: 5000 })], "Unknown stream setting: videoBitrate");
+  rejects("a wrongly typed value", [JSON.stringify({ key: "other", video_bitrate: "3000" })], "video_bitrate must be a number");
+
   test("a bitrate of zero is refused, not ignored", function () {
-    return call("dualoutput_setStreamSettings", undefined, undefined, undefined, undefined, undefined, undefined, 0)
+    return call("dualoutput_setStreamSettings", JSON.stringify({ video_bitrate: 0 }))
       .then(function (r) {
         check(!!r.error, "expected an error for video_bitrate 0, got: " + JSON.stringify(r));
         return call("dualoutput_getStreamSettings");
@@ -318,8 +356,7 @@
   });
 
   test("an out of range audio track is refused, not clamped", function () {
-    return call("dualoutput_setStreamSettings", undefined, undefined, undefined, undefined, undefined, undefined,
-                undefined, undefined, 99)
+    return call("dualoutput_setStreamSettings", JSON.stringify({ audio_track: 99 }))
       .then(function (r) {
         check(!!r.error, "expected an error for audio track 99, got: " + JSON.stringify(r));
         return call("dualoutput_getStreamSettings");
@@ -385,7 +422,7 @@
       // Nothing is listening there. startStream returns once the output is accepted, not once it
       // connects, and "starting" is already not "idle" - which is all the guard looks at.
       // Server and key only - everything else keeps whatever the earlier tests left.
-      return call("dualoutput_setStreamSettings", "rtmp://127.0.0.1:1/none", "k");
+      return call("dualoutput_setStreamSettings", JSON.stringify({ server: "rtmp://127.0.0.1:1/none", key: "k" }));
     }).then(function (r) {
       checkOk(r, "setStreamSettings for the live check");
       return call("dualoutput_startStream");
@@ -482,17 +519,14 @@
       return ctx.modeBefore ? restore("output mode", call("dualoutput_setOutputMode", ctx.modeBefore)) : null;
     }).then(function () {
       if (!ctx.settingsBefore) return null;
-      var b = ctx.settingsBefore;
+      var b = JSON.parse(JSON.stringify(ctx.settingsBefore));
       // Exact, including fields that started empty: "" clears, so the originals go back whatever
       // they were. Bitrates and the track are only sent if they were valid, since 0 is now refused
       // and would abort the whole restore.
-      return restore("stream settings", call("dualoutput_setStreamSettings",
-        b.server || "", b.key || "", !!b.use_auth,
-        b.username || "", b.password || "", b.encoder_id || "",
-        b.video_bitrate > 0 ? b.video_bitrate : undefined,
-        b.audio_bitrate > 0 ? b.audio_bitrate : undefined,
-        b.audio_track > 0 ? b.audio_track : undefined,
-        !!b.auto_start));
+      ["video_bitrate", "audio_bitrate", "audio_track"].forEach(function (k) {
+        if (!(b[k] > 0)) delete b[k];
+      });
+      return restore("stream settings", call("dualoutput_setStreamSettings", JSON.stringify(b)));
     }).then(function () { return { removed: removed, problems: problems }; });
   }
 

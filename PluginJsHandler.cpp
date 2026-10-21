@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <cwctype>
 #include <vector>
+#include <set>
 
 // Obs
 #include <obs.hpp>
@@ -4491,20 +4492,79 @@ void PluginJsHandler::JS_DUALOUTPUT_SET_OUTPUT_MODE(const json11::Json &params, 
 
 void PluginJsHandler::JS_DUALOUTPUT_SET_STREAM_SETTINGS(const json11::Json &params, std::string &out_jsonReturn)
 {
-	// Presence is the whole contract here: a field that was passed is applied, a field that was not
-	//	is left alone. Nothing is inferred from the value, so "" clears a stored string instead of
-	//	being indistinguishable from an argument nobody supplied - which had left the api with no way
-	//	to remove a stream key at all - and 0 is a rejected bitrate rather than a silent no-op.
-	const auto &p_server = params["param2"];
-	const auto &p_key = params["param3"];
-	const auto &p_use_auth = params["param4"];
-	const auto &p_username = params["param5"];
-	const auto &p_password = params["param6"];
-	const auto &p_encoder = params["param7"];
-	const auto &p_video_bitrate = params["param8"];
-	const auto &p_audio_bitrate = params["param9"];
-	const auto &p_audio_track = params["param10"];
-	const auto &p_auto_start = params["param11"];
+	// Presence is the whole contract here: a key that was passed (and is not null) is applied, a key
+	//	that was not is left alone. Nothing is inferred from the value, so "" clears a stored string
+	//	instead of being indistinguishable from a key nobody supplied - which had left the api with no
+	//	way to remove a stream key at all - and 0 is a rejected bitrate rather than a silent no-op.
+	if (!params["param2"].is_string())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "param2 (settings) must be a JSON string"}})).dump();
+		return;
+	}
+
+	std::string err;
+	const Json settings = Json::parse(params["param2"].string_value(), err);
+
+	if (!err.empty())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "param2 (settings) is not valid JSON: " + err}})).dump();
+		return;
+	}
+
+	if (!settings.is_object())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "param2 (settings) must be a JSON object"}})).dump();
+		return;
+	}
+
+	static const std::set<std::string> stringKeys = {"server", "key", "username", "password", "encoder_id"};
+	static const std::set<std::string> boolKeys = {"use_auth", "auto_start"};
+	static const std::set<std::string> numberKeys = {"video_bitrate", "audio_bitrate", "audio_track"};
+
+	for (const auto &[name, value] : settings.object_items())
+	{
+		const bool isString = stringKeys.count(name) > 0;
+		const bool isBool = boolKeys.count(name) > 0;
+		const bool isNumber = numberKeys.count(name) > 0;
+
+		if (!isString && !isBool && !isNumber)
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Unknown stream setting: " + name}})).dump();
+			return;
+		}
+
+		if (value.is_null())
+			continue;
+
+		if (isString && !value.is_string())
+		{
+			out_jsonReturn = Json(Json::object({{"error", name + " must be a string"}})).dump();
+			return;
+		}
+
+		if (isBool && !value.is_bool())
+		{
+			out_jsonReturn = Json(Json::object({{"error", name + " must be a boolean"}})).dump();
+			return;
+		}
+
+		if (isNumber && !value.is_number())
+		{
+			out_jsonReturn = Json(Json::object({{"error", name + " must be a number"}})).dump();
+			return;
+		}
+	}
+
+	const auto &p_server = settings["server"];
+	const auto &p_key = settings["key"];
+	const auto &p_use_auth = settings["use_auth"];
+	const auto &p_username = settings["username"];
+	const auto &p_password = settings["password"];
+	const auto &p_encoder = settings["encoder_id"];
+	const auto &p_video_bitrate = settings["video_bitrate"];
+	const auto &p_audio_bitrate = settings["audio_bitrate"];
+	const auto &p_audio_track = settings["audio_track"];
+	const auto &p_auto_start = settings["auto_start"];
 
 	if (p_video_bitrate.is_number() && p_video_bitrate.int_value() <= 0)
 	{

@@ -629,18 +629,20 @@ public:
 			//		take effect and would let both outputs send at once. Stop the main stream first.
 			{"dualoutput_setOutputMode", JS_DUALOUTPUT_SET_OUTPUT_MODE},
 
-			// .(@function(arg1), @server, @key, @bool_use_auth, @username, @password, @encoderId, @int_videoBitrate, @int_audioBitrate, @int_audioTrack, @bool_autoStart)
+			// .(@function(arg1), @settings_jsonStr)
+			//	'settings' is a JSON object string with any of the keys dualoutput_getStreamSettings returns:
+			//		server, key, use_auth, username, password, encoder_id, video_bitrate, audio_bitrate, audio_track, auto_start.
 			//	'server' is any RTMP url, so a platform ingest or the Streamlabs multistream endpoint both work.
-			//	'encoderId' is an obs encoder id ("obs_x264", "jim_nvenc", ...); it falls back to obs_x264 if unavailable.
-			//	'audioTrack' is 1-based and selects which of the main audio mixes to encode - there is no separate vertical audio.
+			//	'encoder_id' is an obs encoder id ("obs_x264", "jim_nvenc", ...); it falls back to obs_x264 if unavailable.
+			//	'audio_track' is 1-based and selects which of the main audio mixes to encode - there is no separate vertical audio.
 			//		Out of range is an error rather than a clamp, so the reported track is always the one encoded.
-			//	Every argument is optional and presence is what counts: pass one and it is applied, leave it out
-			//		(undefined) and the stored value is kept, so a partial update is safe. Nothing is inferred from
-			//		the value itself - "" clears a stored string, and a bitrate of 0 is an error rather than ignored.
-			//		'encoderId' is the exception, having no meaningful empty value; "" leaves it alone.
-			//	'autoStart' starts and stops this output with the main OBS stream.
+			//	Every key is optional: omitted or null keeps the stored value, so a partial update is safe.
+			//		"" clears a stored string, and a bitrate of 0 is an error rather than ignored.
+			//		'encoder_id' is the exception, having no meaningful empty value; "" leaves it alone.
+			//	Unknown keys and wrong value types are errors, and nothing is applied when any key is rejected.
+			//	'auto_start' starts and stops this output with the main OBS stream.
 			//	Note: these settings live in the scene collection, so that each collection can stream
-			//		somewhere different - which means 'key' and 'authPassword' are written into the
+			//		somewhere different - which means 'key' and 'password' are written into the
 			//		collection json in clear text. Exporting or sharing a scene collection therefore
 			//		discloses them. OBS's own stream key lives in the profile and is not affected.
 			{"dualoutput_setStreamSettings", JS_DUALOUTPUT_SET_STREAM_SETTINGS},
