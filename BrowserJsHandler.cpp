@@ -432,6 +432,15 @@ bool BrowserClient::JS_TAB_SEND_STRING_TO_MAIN(CefRefPtr<CefBrowser> &browser, i
 		return true;
 	}
 
+	// A tab that is already being destroyed is not main, which is what a uid of 0 would pass it off as
+	const int32_t senderUid = SlBrowser::instance().getUuidFromCefId(browser->GetIdentifier());
+
+	if (senderUid < 0)
+	{
+		jsonOutput = Json(Json::object({{"error", "tab is closing"}})).dump();
+		return true;
+	}
+
 	std::shared_ptr<BrowserElements> ptr = SlBrowser::instance().getBrowserElements(0);
 
 	if (ptr == nullptr || ptr->browser == nullptr)
@@ -446,7 +455,7 @@ bool BrowserClient::JS_TAB_SEND_STRING_TO_MAIN(CefRefPtr<CefBrowser> &browser, i
 		return true;
 	}
 
-	SendMsgToReceiver(ptr->browser, argsWithoutFunc[0]->GetString(), SlBrowser::instance().getUuidFromCefId(browser->GetIdentifier()));
+	SendMsgToReceiver(ptr->browser, argsWithoutFunc[0]->GetString(), senderUid);
 	return true;
 }
 

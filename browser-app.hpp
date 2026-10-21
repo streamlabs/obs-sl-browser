@@ -15,8 +15,26 @@ class BrowserApp : public CefApp, public CefRenderProcessHandler, public CefBrow
 	std::recursive_mutex m_callbackMutex;
 	std::map<int, std::pair<CefRefPtr<CefV8Value>, CefRefPtr<CefV8Context>>> m_callbackMap;
 
-	std::mutex m_initScriptMutex;
-	std::map<int, std::string> m_initScripts;
+	// Told by the browser process when it creates the browser, so a browser it did not describe binds nothing
+	enum class Role
+	{
+		None,
+		Main,
+		Tab,
+	};
+
+	Role roleOf(CefRefPtr<CefBrowser> browser);
+
+	// A browser can be created again in this process before its previous incarnation is destroyed, as a navigation does, so it is only forgotten when the last one is gone
+	struct BrowserInfo
+	{
+		int instances = 0;
+		Role role = Role::None;
+		std::string initScript;
+	};
+
+	std::mutex m_browserInfoMutex;
+	std::map<int, BrowserInfo> m_browserInfos;
 
 public:
 	inline BrowserApp() {}

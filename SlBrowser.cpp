@@ -95,6 +95,7 @@ void SlBrowser::run(int argc, char *argv[])
 	//
 
 	m_mainBrowser = std::make_shared<BrowserElements>();
+	m_mainBrowser->isMain = true;
 	m_mainBrowser->widget = new SlBrowserWidget;
 	m_mainBrowser->widget->setWindowTitle("Streamlabs");
 	m_mainBrowser->widget->setMinimumSize(320, 240);
@@ -428,10 +429,10 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 	}
 
 	browserElements->client = new BrowserClient(false);
-	browserElements->client->SetIsMain(browserElements->uid == 0);
+	browserElements->client->SetIsMain(browserElements->isMain);
 
 	// Only main uses the global context; a tab sharing it would share cookies and login with main
-	if (browserElements->uid == 0)
+	if (browserElements->isMain)
 	{
 		attachCefBrowser(browserElements, url, startHidden, keepOnTop, CefRequestContext::GetGlobalContext());
 		return;
@@ -475,14 +476,12 @@ void SlBrowser::attachCefBrowser(std::shared_ptr<BrowserElements> browserElement
 	// Now set the parent of the CEF browser to the QWidget
 	window_info.SetAsChild((HWND)browserElements->widget->winId(), CefRect(0, 0, realWidth, realHeight));
 
-	// Reaches the renderer's OnBrowserCreated, which runs the script in every main-frame document of the tab
-	CefRefPtr<CefDictionaryValue> extra_info;
+	// Reaches the renderer's OnBrowserCreated: the role decides what it binds, and the script runs in every main-frame document of the tab
+	CefRefPtr<CefDictionaryValue> extra_info = CefDictionaryValue::Create();
+	extra_info->SetString("role", browserElements->isMain ? "main" : "tab");
 
 	if (!browserElements->initScript.empty())
-	{
-		extra_info = CefDictionaryValue::Create();
 		extra_info->SetString("initScript", browserElements->initScript);
-	}
 
 	browserElements->browser = CefBrowserHost::CreateBrowserSync(window_info, browserElements->client.get(), url, browser_settings, extra_info, request_context);
 
@@ -773,7 +772,7 @@ int32_t SlBrowser::getUuidFromCefId(const int32_t cefId)
 			return itr.first;
 	}
 
-	return 0;
+	return -1;
 }
 
 int32_t SlBrowser::getBrowserCefId(const int32_t uid)

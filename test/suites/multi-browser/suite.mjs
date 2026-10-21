@@ -1148,6 +1148,63 @@ export default {
 				if (!Array.isArray(scenes)) return `obs_enum_scenes answered ${JSON.stringify(scenes)}`;
 			});
 
+			/* ------------------------------------------------------------------ roles --- */
+
+			await r.step("a tab sending to main while it is destroyed is never reported as main (sender uid 0)", async () => {
+				const res = await createTab(150, "T150");
+				if (isError(res)) return res.error;
+				const t = await attach(150);
+				const before = (await cdp.inbox()).length;
+				await t.evaluate("window.__n = 0; setInterval(() => slabsTab.tab_sendStringToMain('spam-' + (++window.__n)), 2); 1");
+
+				const flowing = await until(async () => (await cdp.inbox()).slice(before).some((m) => String(m[0]).startsWith("spam-")), { timeoutMs: 10000, everyMs: 100 });
+				if (!flowing) return "the tab's messages never reached main";
+				if (isError(await cdp.call("tabs_destroyWindow", 150))) return "destroy errored";
+				created.delete(150);
+				t.close();
+				tabCdp.delete(150);
+				await settle(SETTLE_MS);
+
+				const spam = (await cdp.inbox()).slice(before).filter((m) => String(m[0]).startsWith("spam-"));
+				const wrong = spam.filter((m) => m[1] !== 150);
+				if (wrong.length) return `${wrong.length} of ${spam.length} messages carried uid ${wrong[0][1]}, first ${JSON.stringify(wrong[0])}`;
+			});
+
+			await r.step("main keeps slabsGlobal, and never gets slabsTab, across a cross-origin navigation and back", async () => {
+				const home = await cdp.evaluate("location.href");
+				const away = `${observer.origin.replace("127.0.0.1", "localhost")}/page.html`;
+				const onPage = (href) => until(async () => {
+					try {
+						const s = await cdp.evaluate("({href: location.href, ready: document.readyState, g: typeof window.slabsGlobal, t: typeof window.slabsTab, slt: typeof window.__slt})");
+						return s.href === href && s.ready === "complete" && s.slt === "object" ? s : null;
+					} catch { return null; }
+				}, { timeoutMs: 20000, everyMs: 250 });
+
+				for (const [name, href] of [["the other origin", away], ["the original page", home]]) {
+					await cdp.evaluate(`location.href = ${JSON.stringify(href)}`).catch(() => {});
+					const s = await onPage(href);
+					if (!s) return `${name} never loaded`;
+					if (s.g !== "object") return `slabsGlobal is ${s.g} on ${name}`;
+					if (s.t !== "undefined") return `slabsTab is ${s.t} on ${name}`;
+					const names = await cdp.evaluate("__slt.names()");
+					const missing = TABS_NAMES.filter((n) => !names.includes(n));
+					if (missing.length) return `on ${name}, missing on slabsGlobal: ${missing.join(", ")}`;
+					const v = await cdp.call("sl_getVersionInfo");
+					if (v.__timeout || v.__missing || isError(v)) return `on ${name}, sl_getVersionInfo answered ${JSON.stringify(v)}`;
+				}
+
+				await cdp.listen("slabsGlobal", "tabs_registerMsgReceiver");
+				const res = await createTab(151, "T151");
+				if (isError(res)) return `a tab could not be made from the returned main: ${res.error}`;
+				const t = await attach(151);
+				if ((await t.evaluate("typeof window.slabsGlobal")) !== "undefined") return "a tab made after the navigation has slabsGlobal";
+				if (JSON.stringify(await t.evaluate("Object.keys(window.slabsTab).sort()")) !== JSON.stringify(TAB_KEYS)) return "a tab made after the navigation has the wrong slabsTab";
+				t.close();
+				tabCdp.delete(151);
+				await cdp.call("tabs_destroyWindow", 151);
+				created.delete(151);
+			});
+
 			/* ------------------------------------------------------ main's own browser api --- */
 
 			await r.step("browser_resizeBrowser still resizes the main window, within its bounds", async () => {

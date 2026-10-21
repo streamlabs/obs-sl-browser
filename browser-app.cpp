@@ -9,11 +9,6 @@
 
 using namespace json11;
 
-static bool isMainBrowser(CefRefPtr<CefBrowser> browser)
-{
-	return browser->GetIdentifier() == 1;
-}
-
 CefRefPtr<CefRenderProcessHandler> BrowserApp::GetRenderProcessHandler()
 {
 	return this;
@@ -58,24 +53,50 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 	command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:9123");
 }
 
+BrowserApp::Role BrowserApp::roleOf(CefRefPtr<CefBrowser> browser)
+{
+	std::lock_guard<std::mutex> grd(m_browserInfoMutex);
+	auto itr = m_browserInfos.find(browser->GetIdentifier());
+	return itr != m_browserInfos.end() ? itr->second.role : Role::None;
+}
+
 void BrowserApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionaryValue> extra_info)
 {
-	if (!extra_info || !extra_info->HasKey("initScript"))
+	std::lock_guard<std::mutex> grd(m_browserInfoMutex);
+	BrowserInfo &info = m_browserInfos[browser->GetIdentifier()];
+	++info.instances;
+
+	if (!extra_info)
 		return;
 
-	std::lock_guard<std::mutex> grd(m_initScriptMutex);
-	m_initScripts[browser->GetIdentifier()] = extra_info->GetString("initScript");
+	if (extra_info->HasKey("role"))
+	{
+		const std::string role = extra_info->GetString("role");
+
+		if (role == "main")
+			info.role = Role::Main;
+		else if (role == "tab")
+			info.role = Role::Tab;
+	}
+
+	if (extra_info->HasKey("initScript"))
+		info.initScript = extra_info->GetString("initScript");
 }
 
 void BrowserApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
 {
-	std::lock_guard<std::mutex> grd(m_initScriptMutex);
-	m_initScripts.erase(browser->GetIdentifier());
+	std::lock_guard<std::mutex> grd(m_browserInfoMutex);
+	auto itr = m_browserInfos.find(browser->GetIdentifier());
+
+	if (itr != m_browserInfos.end() && --itr->second.instances <= 0)
+		m_browserInfos.erase(itr);
 }
 
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
-	if (isMainBrowser(browser))
+	const Role role = roleOf(browser);
+
+	if (role == Role::Main)
 	{
 		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
 		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
@@ -93,7 +114,7 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
 		}
 	}
-	else if (frame->IsMain())
+	else if (role == Role::Tab && frame->IsMain())
 	{
 		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
 		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
@@ -106,11 +127,11 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 		std::string initScript;
 
 		{
-			std::lock_guard<std::mutex> grd(m_initScriptMutex);
-			auto itr = m_initScripts.find(browser->GetIdentifier());
+			std::lock_guard<std::mutex> grd(m_browserInfoMutex);
+			auto itr = m_browserInfos.find(browser->GetIdentifier());
 
-			if (itr != m_initScripts.end())
-				initScript = itr->second;
+			if (itr != m_browserInfos.end())
+				initScript = itr->second.initScript;
 		}
 
 		// Eval, not ExecuteJavaScript: it runs now, before any script of the page
@@ -166,7 +187,8 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 
 	// Allowed functions depend on the calling browser, not on shared renderer state
 	const std::string funcName = name.ToString();
-	const bool allowedForBrowser = isMainBrowser(browser) ? (JavascriptApi::isPluginFunctionName(funcName) || JavascriptApi::isBrowserFunctionName(funcName)) : JavascriptApi::isBrowserTabFunctionName(funcName);
+	const Role role = roleOf(browser);
+	const bool allowedForBrowser = role == Role::Main ? (JavascriptApi::isPluginFunctionName(funcName) || JavascriptApi::isBrowserFunctionName(funcName)) : (role == Role::Tab && JavascriptApi::isBrowserTabFunctionName(funcName));
 	const bool allowed = allowedForBrowser && (current->GetFrame()->IsMain() || !JavascriptApi::isMainFrameOnlyFunctionName(funcName));
 
 	if (allowed)

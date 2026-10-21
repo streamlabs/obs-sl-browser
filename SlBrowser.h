@@ -14,6 +14,9 @@ struct TabWindowOptions
 {
 	std::string title;
 	std::wstring iconPath;
+	// Set before the browser is made, and only for the main window
+	bool isMain = false;
+
 	std::string initScript;
 	bool hideOnClose = false;
 	std::string contextDir;
@@ -35,6 +38,9 @@ struct BrowserElements
 
 	// Mirrors widget->isHidden() so it can be read from any thread
 	std::atomic<bool> hidden = true;
+
+	// Set before the browser is made, and only for the main window
+	bool isMain = false;
 
 	std::string initScript;
 	bool hideOnClose = false;
