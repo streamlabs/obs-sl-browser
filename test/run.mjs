@@ -229,7 +229,11 @@ async function runSuite(name) {
 	} finally {
 		cdp?.close();
 		try { server?.dump(join(workDir, "events.json")); } catch { /* nothing worth failing over */ }
-		await server?.close();
+		if (server) {
+			// A client holding a connection open would keep close() pending forever.
+			await Promise.race([server.close(), sleep(5000)]);
+			server.closeAllConnections();
+		}
 		if (!keepOpen && obs) {
 			obs.stop();
 			// Wait for the port to actually free before the next suite's guard looks at it:

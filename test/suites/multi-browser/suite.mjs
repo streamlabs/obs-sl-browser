@@ -554,7 +554,7 @@ export default {
 				const junction = join(iconDirPath, "link");
 				mkdirSync(workDir, { recursive: true });
 				writeFileSync(join(workDir, "outside.png"), PNG);
-				execFileSync("cmd.exe", ["/c", "mklink", "/J", junction, workDir], { stdio: "ignore" });
+				execFileSync("cmd.exe", ["/c", "mklink", "/J", junction, workDir], { stdio: "ignore", timeout: 15000 });
 
 				const bad = {
 					"a png in the work dir": join(workDir, "icon.png"),

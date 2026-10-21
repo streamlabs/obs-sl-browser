@@ -119,10 +119,10 @@ export async function launchObs({ exe, pageUrl, collection, port, timeoutMs = 12
 			const pid = this.pid;
 			this.pid = null;
 			// No /F on the first pass: that sends WM_CLOSE so OBS saves and exits properly.
-			try { execFileSync("taskkill", ["/PID", String(pid), "/T"], { stdio: "ignore" }); } catch { /* gone */ }
+			try { execFileSync("taskkill", ["/PID", String(pid), "/T"], { stdio: "ignore", timeout: 15000 }); } catch { /* gone */ }
 			for (let i = 0; i < 30 && alive(pid); i++) sleepSync(200);
 			if (alive(pid)) {
-				try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" }); } catch { /* gone */ }
+				try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", timeout: 15000 }); } catch { /* gone */ }
 			}
 		},
 	};

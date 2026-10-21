@@ -100,6 +100,7 @@ export function results() {
 		},
 		/** Wraps a step that may throw, so one broken assertion does not abandon the rest. */
 		async step(name, fn) {
+			console.error(`  ${new Date().toISOString().slice(11, 19)} step: ${name}`);
 			try {
 				const why = await fn();
 				return typeof why === "string" ? this.fail(name, why) : this.pass(name);
