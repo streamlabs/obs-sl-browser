@@ -193,6 +193,7 @@ jobs:
           path: |
             test-results.xml
             obs-sl-browser/test/.work/
+            !obs-sl-browser/test/.work/home/
             obs-studio/build_x64/rundir/RelWithDebInfo/config/obs-studio/logs/
             obs-studio/build_x64/rundir/RelWithDebInfo/config/obs-studio/crashes/
           if-no-files-found: warn
