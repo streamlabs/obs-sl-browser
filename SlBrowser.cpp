@@ -432,8 +432,19 @@ void SlBrowser::browserInit()
 		CrashHandler::instance().addLogfilePath(logPathFile);
 	}
 
-	// Set the remote debugging port
-	settings.remote_debugging_port = 9123;
+	if (int port = BrowserApp::getRemoteDebuggingPort())
+	{
+		settings.remote_debugging_port = port;
+		std::cout << "Remote debugging enabled on port " << port << std::endl;
+	}
+	else
+	{
+		char value[32];
+		if (GetEnvironmentVariableA("SL_PLUGIN_REMOTE_DEBUGGING_PORT", value, sizeof(value)) > 0)
+			std::cout << "Warning: SL_PLUGIN_REMOTE_DEBUGGING_PORT must be a port from 1024 to 65535; remote debugging disabled" << std::endl;
+		else
+			std::cout << "Remote debugging disabled" << std::endl;
+	}
 
 	m_app = new BrowserApp(getApiOrigin());
 

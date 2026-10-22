@@ -66,10 +66,14 @@ that merely look like the suite's, because the real Streamlabs writes there too.
 
 ### One OBS at a time
 
-Only one process can hold the CEF DevTools port (9123, hardcoded in `SlBrowser.cpp`, which is
-why there is no flag for it). If something is already on it the harness refuses to start a
-second OBS, because it would have no way to tell which one it had attached to. Close it, or
-use `--no-launch` to run against it.
+The plugin only opens the CEF DevTools port when `SL_PLUGIN_REMOTE_DEBUGGING_PORT` is set. The
+harness picks a free port for each launched OBS and sets it; `--devtools-port <n>` pins one.
+Only one process can hold a port, so if something is already on it the harness refuses to start
+a second OBS, because it would have no way to tell which one it had attached to.
+
+`--no-launch` attaches to an OBS that is already running, so it needs to know that OBS's port:
+pass `--devtools-port <n>`, or it assumes 9123 (start that OBS with
+`SL_PLUGIN_REMOTE_DEBUGGING_PORT=9123`).
 
 That is also why `--keep-open` applies to the last suite of a run: an OBS left open by an
 earlier suite would block every later one.
