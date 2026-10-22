@@ -121,7 +121,8 @@ process.on("SIGTERM", shutdown(143));
 // The suites create and delete profile dirs under %APPDATA%, and the plugin resolves that folder
 // through USERPROFILE, so OBS and the suites get a scratch profile instead of the real one.
 const REAL_APPDATA = process.env.APPDATA;
-const SCRATCH_HOME = join(WORK, "home");
+// Outside .work: Windows creates unreadable folders here, which break the CI artifact upload
+const SCRATCH_HOME = join(HERE, ".home");
 const SCRATCH_APPDATA = join(SCRATCH_HOME, "AppData", "Roaming");
 if (!has("--no-launch")) {
 	// The previous run's CEF processes can still be exiting, and hold files in it

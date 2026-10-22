@@ -51,7 +51,7 @@ Your everyday OBS is untouched: nothing writes to `%APPDATA%\obs-studio`, and no
 `portable_mode.txt` marker is left behind, so launching that rundir yourself still behaves
 normally.
 
-`USERPROFILE`, `APPDATA` and `LOCALAPPDATA` of the OBS process tree point at `test/.work/home`,
+`USERPROFILE`, `APPDATA` and `LOCALAPPDATA` of the OBS process tree point at `test/.home`,
 so everything below that says `%APPDATA%` lands there, not in your real profile. The run stops
 if OBS does not create its CEF cache under that directory.
 
