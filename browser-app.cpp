@@ -9,6 +9,24 @@
 
 using namespace json11;
 
+/*static*/
+int BrowserApp::getRemoteDebuggingPort()
+{
+	char buffer[32];
+	DWORD len = GetEnvironmentVariableA("SL_PLUGIN_REMOTE_DEBUGGING_PORT", buffer, sizeof(buffer));
+
+	if (len == 0 || len >= sizeof(buffer))
+		return 0;
+
+	char *end = nullptr;
+	long port = strtol(buffer, &end, 10);
+
+	if (*end != '\0' || port < 1024 || port > 65535)
+		return 0;
+
+	return static_cast<int>(port);
+}
+
 CefRefPtr<CefRenderProcessHandler> BrowserApp::GetRenderProcessHandler()
 {
 	return this;
@@ -50,7 +68,10 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 	}
 
 	command_line->AppendSwitchWithValue("autoplay-policy", "no-user-gesture-required");
-	command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:9123");
+
+	// Read from the environment here because this also runs in the helper processes, which inherit it.
+	if (int port = getRemoteDebuggingPort())
+		command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:" + std::to_string(port));
 }
 
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefRefPtr<CefV8Context> context)
