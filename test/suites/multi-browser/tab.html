@@ -10,6 +10,9 @@
 const params = new URLSearchParams(location.search);
 const UID = params.get('uid') || '?';
 
+// What tabs_createWindow's initScript left behind by the time this page's own script starts.
+const INIT_AT_START = typeof window.__slInit === 'undefined' ? null : window.__slInit;
+
 document.getElementById('who').textContent = 'tab ' + UID;
 
 function report(event, data) {
@@ -31,7 +34,10 @@ function state() {
 		innerHeight: window.innerHeight,
 		dpr: window.devicePixelRatio,
 		hasSlabsGlobal: typeof window.slabsGlobal !== 'undefined',
-		slabsTabKeys: typeof window.slabsTab === 'object' ? Object.keys(window.slabsTab).sort() : null
+		slabsTabKeys: typeof window.slabsTab === 'object' ? Object.keys(window.slabsTab).sort() : null,
+		initAtStart: INIT_AT_START,
+		init: typeof window.__slInit === 'undefined' ? null : window.__slInit,
+		initSawSlabsTab: typeof window.__slInitTab === 'undefined' ? null : window.__slInitTab
 	};
 }
 

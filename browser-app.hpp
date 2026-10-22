@@ -15,6 +15,27 @@ class BrowserApp : public CefApp, public CefRenderProcessHandler, public CefBrow
 	std::recursive_mutex m_callbackMutex;
 	std::map<int, std::pair<CefRefPtr<CefV8Value>, CefRefPtr<CefV8Context>>> m_callbackMap;
 
+	// Told by the browser process when it creates the browser, so a browser it did not describe binds nothing
+	enum class Role
+	{
+		None,
+		Main,
+		Tab,
+	};
+
+	Role roleOf(CefRefPtr<CefBrowser> browser);
+
+	// A browser can be created again in this process before its previous incarnation is destroyed, as a navigation does, so it is only forgotten when the last one is gone
+	struct BrowserInfo
+	{
+		int instances = 0;
+		Role role = Role::None;
+		std::string initScript;
+	};
+
+	std::mutex m_browserInfoMutex;
+	std::map<int, BrowserInfo> m_browserInfos;
+
 public:
 	inline BrowserApp() {}
 
@@ -23,6 +44,8 @@ public:
 	virtual void OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_line) override;
 	virtual void OnRegisterCustomSchemes(CefRawPtr<CefSchemeRegistrar> registrar) override;
 	virtual void OnBeforeCommandLineProcessing(const CefString &process_type, CefRefPtr<CefCommandLine> command_line) override;
+	virtual void OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionaryValue> extra_info) override;
+	virtual void OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) override;
 	virtual void OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) override;
 	virtual bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message) override;
 	virtual bool Execute(const CefString &name, CefRefPtr<CefV8Value> object, const CefV8ValueList &arguments, CefRefPtr<CefV8Value> &retval, CefString &exception) override;

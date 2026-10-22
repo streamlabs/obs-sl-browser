@@ -5,7 +5,25 @@
 #include "SlBrowserWidget.h"
 
 #include <QWidget>
+#include <atomic>
+#include <functional>
 #include <map>
+
+// What a tab window is made with, beyond its uid and url
+struct TabWindowOptions
+{
+	std::string title;
+	std::wstring iconPath;
+	// Set before the browser is made, and only for the main window
+	bool isMain = false;
+
+	std::string initScript;
+	bool hideOnClose = false;
+	std::string contextDir;
+
+	// Called on the CEF UI thread once the browser exists, or has failed to
+	std::function<void(const std::string &err)> onCreated;
+};
 
 struct BrowserElements
 {
@@ -14,6 +32,26 @@ struct BrowserElements
 	SlBrowserWidget *widget = nullptr;
 	CefRefPtr<CefBrowser> browser = nullptr;
 	CefRefPtr<BrowserClient> client = nullptr;
+
+	// Set once widget and browser both exist. The widget is made on the Qt thread and the browser on the CEF UI thread, so neither can be trusted before this
+	std::atomic<bool> ready = false;
+
+	// Mirrors widget->isHidden() so it can be read from any thread
+	std::atomic<bool> hidden = true;
+
+	// Set before the browser is made, and only for the main window
+	bool isMain = false;
+
+	std::string initScript;
+	bool hideOnClose = false;
+	std::string contextDir;
+	std::function<void(const std::string &err)> onCreated;
+
+	// Set when the tab is destroyed, so a browser still waiting for its profile is never made
+	std::atomic<bool> closed = false;
+
+	// The user closed the tab, so main is told once it is gone
+	std::atomic<bool> notifyClosed = false;
 
 	static void queueCleanupQtObj(QWidget *widget)
 	{
@@ -33,8 +71,12 @@ public:
 public:
 	void run(int argc, char *argv[]);
 	static std::string getDefaultUrl();
-	std::string createTabWindow(const int32_t uid, const std::string &url, const std::string &title, const std::string &iconPath);
-	std::string queueDestroyCefBrowser(const int32_t uuid);
+	static bool isApprovedTabUrl(const std::string &url);
+	static std::string tabContextDirName(const std::string &key);
+	std::string resolveTabIconPath(const std::string &path, std::wstring &resolved) const;
+	std::string createTabWindow(const int32_t uid, const std::string &url, TabWindowOptions options);
+	// With expected, only that very tab is destroyed, not a newer one that reused the uid
+	std::string queueDestroyCefBrowser(const int32_t uuid, const std::shared_ptr<BrowserElements> &expected = nullptr);
 	void closeTabWindow(const int32_t uid);
 	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
 	void setMainLoadingInProgress(const bool b) { m_mainLoadingInProgress = b; }
@@ -79,9 +121,11 @@ private:
 	std::string registerBrowser(const int32_t uuid, std::shared_ptr<BrowserElements> browserElements);
 
 	static void createCefBrowser_internal(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
+	static void attachCefBrowser(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop, CefRefPtr<CefRequestContext> request_context);
 	static void cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements);
 
 	std::wstring getCacheDir() const;
+	void withTabRequestContext(const std::string &contextDir, std::function<void(CefRefPtr<CefRequestContext>)> onReady) const;
 
 	static void DebugInputThread();
 	static void CheckForObsThread();
@@ -89,6 +133,7 @@ private:
 	bool m_mainPageSuccess = false;
 	bool m_mainLoadingInProgress = false;
 	bool m_cefCreated = false;
+	std::string m_cefCachePath;
 
 	std::mutex m_mutex;
 	std::string m_lastError;

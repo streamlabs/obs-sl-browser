@@ -79,11 +79,12 @@ export async function devtoolsUp(port) {
  *                         this the next start stops on the safe-mode modal and looks hung
  *   --multi               don't argue with an OBS the developer already has open
  *   --disable-updater     no network on the critical path
+ *   --minimize-to-tray    keeps the OBS window off the desktop; SL_PLUGIN_TEST_OFFSCREEN does the same for ours
  */
 export async function launchObs({ exe, pageUrl, collection, port, timeoutMs = 120000, say = () => {}, onSpawn = () => {} }) {
 	assertObsExe(exe);
 
-	const args = ["--portable", "--disable-shutdown-check", "--multi", "--disable-updater"];
+	const args = ["--portable", "--disable-shutdown-check", "--multi", "--disable-updater", "--minimize-to-tray"];
 	if (collection) args.push("--collection", collection);
 
 	say(`starting ${exe}`);
@@ -96,7 +97,8 @@ export async function launchObs({ exe, pageUrl, collection, port, timeoutMs = 12
 	try {
 		child = spawn(exe, args, {
 			cwd: dirname(exe), // OBS resolves data\, obs-plugins\ and its portable config relative to cwd
-			env: { ...process.env, SL_PLUGIN_DEFAULT_URL: pageUrl },
+			// Tab windows may only load approved origins, so the harness's own is approved for the run
+			env: { ...process.env, SL_PLUGIN_DEFAULT_URL: pageUrl, SL_PLUGIN_TEST_OFFSCREEN: "1", SL_PLUGIN_TEST_TAB_ORIGIN: new URL(pageUrl).origin, SL_PLUGIN_TEST_TAB_PROFILE_DELAY_MS: "8000", SL_PLUGIN_TEST_TAB_PROFILE_TIMEOUT_MS: "4000" },
 			detached: true,
 			stdio: "ignore",
 		});
@@ -117,10 +119,10 @@ export async function launchObs({ exe, pageUrl, collection, port, timeoutMs = 12
 			const pid = this.pid;
 			this.pid = null;
 			// No /F on the first pass: that sends WM_CLOSE so OBS saves and exits properly.
-			try { execFileSync("taskkill", ["/PID", String(pid), "/T"], { stdio: "ignore" }); } catch { /* gone */ }
+			try { execFileSync("taskkill", ["/PID", String(pid), "/T"], { stdio: "ignore", timeout: 15000 }); } catch { /* gone */ }
 			for (let i = 0; i < 30 && alive(pid); i++) sleepSync(200);
 			if (alive(pid)) {
-				try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" }); } catch { /* gone */ }
+				try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", timeout: 15000 }); } catch { /* gone */ }
 			}
 		},
 	};

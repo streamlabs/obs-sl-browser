@@ -65,6 +65,17 @@ CefRefPtr<CefResourceRequestHandler> BrowserClient::GetResourceRequestHandler(Ce
 	return nullptr;
 }
 
+bool BrowserClient::OnBeforeBrowse(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool, bool)
+{
+	// Only a tab's own page is held to the approved origins; its subframes and main's pages are not
+	if (m_isMain || !frame->IsMain())
+		return false;
+
+	const std::string url = request->GetURL();
+
+	return !SlBrowser::isApprovedTabUrl(url);
+}
+
 CefResourceRequestHandler::ReturnValue BrowserClient::OnBeforeResourceLoad(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, CefRefPtr<CefCallback>)
 {
 	return RV_CONTINUE;
@@ -234,7 +245,7 @@ void BrowserClient::SendMsgToReceiver(CefRefPtr<CefBrowser> target, const std::s
 	SendBrowserProcessMessage(target, PID_RENDERER, processMsg);
 }
 
-bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
+bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
 {
 	const std::string &name = message->GetName();
 	CefRefPtr<CefListValue> input_args = message->GetArgumentList();
@@ -243,6 +254,24 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		return false;
 
 	int funcid = input_args->GetInt(0);
+
+	// The renderer only binds what its role allows, but a compromised one can send any name
+	const bool allowedForRole = m_isMain ? (JavascriptApi::isPluginFunctionName(name) || JavascriptApi::isBrowserFunctionName(name)) : JavascriptApi::isBrowserTabFunctionName(name);
+
+	if (!allowedForRole || (JavascriptApi::isMainFrameOnlyFunctionName(name) && !frame->IsMain()))
+	{
+		if (funcid != 0)
+		{
+			CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
+			CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
+			execute_args->SetInt(0, funcid);
+			execute_args->SetString(1, Json(Json::object({{"error", "not permitted"}})).dump());
+
+			SendBrowserProcessMessage(browser, PID_RENDERER, msg);
+		}
+
+		return true;
+	}
 
 	if (JavascriptApi::isBrowserFunctionName(name) || JavascriptApi::isBrowserTabFunctionName(name))
 	{
@@ -360,6 +389,23 @@ void BrowserClient::GetViewRect(CefRefPtr<CefBrowser>, CefRect &rect)
 	}
 
 	rect.Set(0, 0, 1920, 1080);
+}
+
+void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser)
+{
+	RemoveBrowserFromCallback(browser);
+
+	// A tab whose page closed its own window is still registered: it goes too, as when the user closes it
+	const int32_t uid = m_isMain ? -1 : SlBrowser::instance().getUuidFromCefId(browser->GetIdentifier());
+
+	if (uid > 0)
+		SlBrowser::instance().closeTabWindow(uid);
+
+	auto onBeforeClose = std::move(m_onBeforeClose);
+	m_onBeforeClose = nullptr;
+
+	if (onBeforeClose)
+		onBeforeClose();
 }
 
 bool BrowserClient::OnTooltip(CefRefPtr<CefBrowser>, CefString &text)
