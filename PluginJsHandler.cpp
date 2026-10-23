@@ -21,6 +21,7 @@
 #include <climits>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <codecvt>
 #include <filesystem>
 #include <memory>
@@ -4156,9 +4157,9 @@ void PluginJsHandler::JS_OBS_SOURCE_UPDATE(const json11::Json &params, std::stri
 				error = "An object named " + patch["name"].string_value() + " already exists";
 			else if (!patch["muted"].is_null() && !patch["muted"].is_bool())
 				error = "Invalid muted";
-			else if (!patch["volume"].is_null() && (!patch["volume"].is_number() || patch["volume"].number_value() < 0))
+			else if (!patch["volume"].is_null() && (!patch["volume"].is_number() || !std::isfinite(patch["volume"].number_value()) || patch["volume"].number_value() < 0 || patch["volume"].number_value() > (std::numeric_limits<float>::max)()))
 				error = "Invalid volume";
-			else if (!patch["monitoringType"].is_null() && (!patch["monitoringType"].is_number() || patch["monitoringType"].int_value() < 0 || patch["monitoringType"].int_value() > 2))
+			else if (!patch["monitoringType"].is_null() && (!patch["monitoringType"].is_number() || (patch["monitoringType"].number_value() != 0 && patch["monitoringType"].number_value() != 1 && patch["monitoringType"].number_value() != 2)))
 				error = "Invalid monitoringType";
 
 			if (!error.empty())
