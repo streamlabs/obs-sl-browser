@@ -189,6 +189,7 @@ async function runSuite(name) {
 				rundir: rundirOf(exe),
 				collection: suite.collection ? join(suite.dir, suite.collection) : null,
 				replace: { BASE_URL: server.origin },
+				basic: suite.profile?.(workDir),
 				force: has("--force"),
 			});
 			obs = await launchObs({

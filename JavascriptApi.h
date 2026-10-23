@@ -124,6 +124,16 @@ public:
 		JS_OBS_SCENE_GET_ITEMS,
 		JS_OBS_SCENEITEM_REMOVE,
 		JS_OBS_SCENEITEM_UPDATE,
+		JS_OBS_GET_OUTPUT_STATE,
+		JS_OBS_REPLAY_BUFFER_START,
+		JS_OBS_REPLAY_BUFFER_STOP,
+		JS_OBS_REPLAY_BUFFER_SAVE,
+		JS_OBS_HOTKEY_REGISTER_APP,
+		JS_OBS_HOTKEY_UNREGISTER_APP,
+		JS_QT_GET_THEME,
+		JS_OBS_SOURCE_UPDATE,
+		JS_OBS_SOURCE_GET_INFO,
+		JS_OBS_GET_AVAILABLE_SOURCE_TYPES,
 	};
 
 public:
@@ -251,6 +261,11 @@ public:
 			//		Example arg1 = { "value": "." }
 			{"qt_getCookieValue", JS_QT_GET_COOKIE_VALUE},
 
+			// .(@function(arg1))
+			//	Whether the main window is dark, read from its palette, and the id of the theme obs is set to ("" when it was never chosen)
+			//		Example arg1 = { "isDark": true, "id": "com.obsproject.Yami.Dark" }
+			//	A change is the themeChanged event of events_registerReceiver
+			{"qt_getTheme", JS_QT_GET_THEME},
 
 			/***
 			* Windows
@@ -434,6 +449,56 @@ public:
 			//		Example patch = { "visible": true, "locked": false, "transform": { "position": { "x": 0.0, "y": 0.0 }, "scale": { "x": 1.0, "y": 1.0 }, "rotation": 0.0, "crop": { "left": 0, "top": 0, "right": 0, "bottom": 0 } } }
 			//		Every key is optional, as is every key of transform. The flat keys 'pos', 'scale', 'rot' and 'crop' are read when 'transform' is absent
 			{"obs_sceneitem_update", JS_OBS_SCENEITEM_UPDATE},
+
+			// .(@function(arg1), @sourceName, @patch_jsonStr)
+			//	Applies the keys present in the patch. Everything is checked first, so an error means nothing was changed
+			//		Example patch = { "name": ".", "muted": false, "volume": 1.0, "monitoringType": 0 }
+			//		volume is obs's multiplier, not a deflection. monitoringType 0 turns monitoring off, 1 or 2 turn it on. obs no longer tells monitor-only from monitor-and-output, so it reads back as 0 or 2
+			//		A name already in use is an error. A rename is the sourceRenamed event, with no sourceCreated or sourceRemoved
+			//		Example arg1 = {} or { "error": "." }
+			{"obs_source_update", JS_OBS_SOURCE_UPDATE},
+
+			// .(@function(arg1), @sourceName)
+			//		Example arg1 = { "uuid": ".", "flags": { "audio": true, "video": false, "async": false }, "width": 0, "height": 0, "muted": false, "volume": 1.0, "monitoringType": 0 }
+			{"obs_source_get_info", JS_OBS_SOURCE_GET_INFO},
+
+			// .(@function(arg1))
+			//	The kinds of input that obs_source_create takes
+			//		Example arg1 = [ { "id": "color_source_v3", "name": "Color Source" }, ... ]
+			{"obs_get_available_source_types", JS_OBS_GET_AVAILABLE_SOURCE_TYPES},
+
+			// .(@function(arg1))
+			//	The state of the outputs, as of the last change obs reported. Before the first one an output is "started" or "stopped" with a "time" of ""
+			//		Example arg1 = { "streaming": { "state": ".", "time": ".", "reconnecting": false }, "recording": { "state": ".", "time": ".", "paused": false }, "replayBuffer": { "state": ".", "time": "." }, "virtualcam": { "active": false } }
+			{"obs_get_output_state", JS_OBS_GET_OUTPUT_STATE},
+
+			// .(@function(arg1))
+			//	Starts the replay buffer. The result is an outputStateChanged event for "replayBuffer"
+			//		Example arg1 = {} or { "error": "." }. An error when it is running, or is not enabled in the output settings
+			{"obs_replay_buffer_start", JS_OBS_REPLAY_BUFFER_START},
+
+			// .(@function(arg1))
+			//		Example arg1 = {} or { "error": "." }. An error when it is not running
+			{"obs_replay_buffer_stop", JS_OBS_REPLAY_BUFFER_STOP},
+
+			// .(@function(arg1))
+			//	Saves what the running replay buffer holds. The result is a replayBufferSaved event
+			//		Example arg1 = {} or { "error": "." }. An error when it is not running
+			{"obs_replay_buffer_save", JS_OBS_REPLAY_BUFFER_SAVE},
+
+			// .(@function(arg1), @appKey, @name, @description, @bindings_jsonStr)
+			//	Makes an obs hotkey, listed under Settings > Hotkeys as description, that the user can rebind there. Pressing it is the hotkey event of events_registerReceiver
+			//		Example bindings = [{ "key": "OBS_KEY_A", "shift": false, "control": false, "alt": false, "command": false }]
+			//		Bindings are the defaults, [] for none. A key obs does not know is an error and nothing is made
+			//		The same appKey and name again replaces the earlier one. A rebind made in Settings is not kept across obs restarts, so register on every start
+			//		Example arg1 = { "id": 1 } or { "error": "." }
+			{"obs_hotkey_registerApp", JS_OBS_HOTKEY_REGISTER_APP},
+
+			// .(@function(arg1), @appKey, @name)
+			//	Removes that hotkey of the app. Without a name, removes all of the app's hotkeys, which an app should do when it is reloaded or closed
+			//		Hotkeys are not removed when the app's window is destroyed. The page that registered them has to
+			//		Example arg1 = { "removed": 1 }, 0 when there was none
+			{"obs_hotkey_unregisterApp", JS_OBS_HOTKEY_UNREGISTER_APP},
 
 			// .(@function(arg1))
 			//	OBS_SOURCE_TYPE_INPUT = 0
@@ -750,6 +815,13 @@ public:
 			//			sceneItemUpdated { "event", "scene", "sceneUuid", "itemId", "source", "sourceUuid", "reason": "visible" | "locked" | "transform" }
 			//				transform is at most 10 per second per item, the last change always reported, and carries "pos", "scale" and "rot" as of that change
 			//			sceneCollectionChanged { "event", "name" }
+			//		The events below are not held back while obs loads or a scene collection switches
+			//			outputStateChanged { "event", "output": "streaming" | "recording" | "replayBuffer" | "virtualcam", "state", "time" }
+			//				state is "starting" | "started" | "stopping" | "stopped", and a recording also "paused". time is ISO 8601 UTC
+			//				Desktop's live / ending / offline, recording / wrote, and running / offline are these, mapped by the page
+			//			replayBufferSaved { "event", "path" }
+			//			themeChanged { "event", "isDark", "id" }, as qt_getTheme
+			//			hotkey { "event", "appKey", "name", "pressed" }, for a key made with obs_hotkey_registerApp. One with pressed true, one with pressed false
 			{"events_registerReceiver", JS_EVENTS_REGISTER_RECEIVER},
 		};
 

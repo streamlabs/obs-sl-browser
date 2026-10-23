@@ -33,10 +33,11 @@ const ini = (sections) =>
  * @param {object} [replace]   {NAME: value} substituted for {{NAME}} in the collection, which
  *                             is how a browser source in it reaches the harness server without
  *                             the collection having to hardcode a port
+ * @param {object} [basic]    ini sections added to the profile's basic.ini, such as a replay buffer to start with
  * @param {boolean} [force]    overwrite a config tree the harness does not own
  * @returns {{configDir: string, logsDir: string, collectionName: string, collectionFile: string}}
  */
-export function seedProfile({ rundir, collection, replace = {}, force = false }) {
+export function seedProfile({ rundir, collection, replace = {}, basic = {}, force = false }) {
 	const configDir = join(rundir, "config", "obs-studio");
 
 	if (existsSync(configDir) && !existsSync(join(configDir, MARKER)) && !force) {
@@ -110,6 +111,7 @@ export function seedProfile({ rundir, collection, replace = {}, force = false })
 	writeFileSync(join(profile, "basic.ini"), ini({
 		General: { Name: PROFILE },
 		Video: { BaseCX: 1280, BaseCY: 720, OutputCX: 1280, OutputCY: 720, FPSCommon: 30 },
+		...basic,
 	}), "utf8");
 
 	return { configDir, logsDir, collectionName, collectionFile };

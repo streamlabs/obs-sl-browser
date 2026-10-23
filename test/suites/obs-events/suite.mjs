@@ -15,6 +15,9 @@
  * call is a sourceCreated plus a sceneItemAdded.
  */
 
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+
 import { results, until } from "../../harness/suite.mjs";
 
 // Longer than the 250 ms source update and 100 ms transform windows, so a held-back trailing event has arrived
@@ -26,9 +29,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default {
 	name: "obs-events",
-	description: "obs source, scene and scene item events reach events_registerReceiver, each exactly once",
+	description: "obs source, scene, scene item, output, hotkey and theme events reach events_registerReceiver, each exactly once",
 	collection: "collection.json",
 	timeoutMs: 240000,
+
+	// A replay buffer to start, which the profile has to have been set up with
+	profile: (workDir) => ({
+		Output: { Mode: "Simple" },
+		SimpleOutput: { RecRB: "true", RecRBTime: 10, RecRBSize: 512, RecQuality: "Stream", FilePath: workDir.replaceAll("\\", "/") },
+	}),
 
 	async run({ cdp, observer, say }) {
 		const r = results();
@@ -276,7 +285,271 @@ export default {
 			if (e.name !== "EvScene2" || !e.uuid) return `payload ${JSON.stringify(e)}`;
 		});
 
-		r.skip("obs_source_update rename: one sourceRenamed, no created or removed", "obs_source_update is not in this build");
+		await r.step("obs_source_update rename: one sourceRenamed, no created or removed", async () => {
+			await cdp.call("obs_source_create", "color_source_v3", "EvRename", COLOR, "{}");
+			await sleep(SETTLE_MS);
+
+			const before = (await sources()).find((s) => s.name === "EvRename");
+			let reply;
+			const why = await happens(async () => (reply = await cdp.call("obs_source_update", "EvRename", JSON.stringify({ name: "EvRenamed" }))), { sourceRenamed: 1 });
+
+			if (reply?.error) return reply.error;
+			if (why) return why;
+
+			const e = (await events())[0];
+
+			if (e.prevName !== "EvRename" || e.newName !== "EvRenamed" || e.uuid !== before?.uuid || e.id !== "color_source_v3") return `payload ${JSON.stringify(e)}`;
+			if (!(await sources()).some((s) => s.name === "EvRenamed" && s.uuid === before.uuid)) return "the renamed source is not listed under its new name";
+		});
+
+		await r.step("obs_source_update refuses a taken name, and applies nothing when any key is bad", async () => {
+			const bad = [
+				["a name in use", await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ name: "EvColor1", muted: true }))],
+				["an unknown source", await cdp.call("obs_source_update", "NoSuchSource", JSON.stringify({ muted: true }))],
+				["a patch that is not json", await cdp.call("obs_source_update", "EvRenamed", "{")],
+				["a negative volume", await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ muted: true, volume: -1 }))],
+				["a monitoringType of 3", await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ muted: true, monitoringType: 3 }))],
+				["an empty name", await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ name: "" }))],
+			].filter(([, reply]) => typeof reply.error !== "string");
+
+			if (bad.length) return `no error for ${bad.map(([what, reply]) => `${what} (${JSON.stringify(reply)})`).join(", ")}`;
+
+			const info = await cdp.call("obs_source_get_info", "EvRenamed");
+
+			if (info.muted !== false) return `muted was applied: ${JSON.stringify(info)}`;
+		});
+
+		await r.step("obs_source_update and obs_source_get_info: muted, volume and monitoring type", async () => {
+			const why = await happens(
+				async () => {
+					const reply = await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ muted: true, volume: 0.5, monitoringType: 1 }));
+					if (reply.error) throw new Error(reply.error);
+				},
+				{},
+			);
+
+			if (why) return why;
+
+			const info = await cdp.call("obs_source_get_info", "EvRenamed");
+			const entry = (await sources()).find((s) => s.name === "EvRenamed");
+
+			if (info.error) return info.error;
+			if (info.uuid !== entry.uuid) return `uuid ${info.uuid}, listed ${entry.uuid}`;
+			if (info.muted !== true || info.volume !== 0.5 || info.monitoringType !== 2) return JSON.stringify(info);
+			if (info.flags?.video !== true || info.flags?.audio !== false || info.flags?.async !== false) return `flags ${JSON.stringify(info.flags)}`;
+			if (info.width !== 100 || info.height !== 100) return `size ${info.width}x${info.height}`;
+			if (typeof (await cdp.call("obs_source_get_info", "NoSuchSource")).error !== "string") return "no error for an unknown source";
+		});
+
+		await r.step("the renamed source is removed: one sourceRemoved under the new name", async () => {
+			// The source was in the current scene, which obs prunes of its item on its next draw
+			const why = await happens(() => cdp.call("obs_source_destroy", "EvRenamed"), { sourceRemoved: 1, sceneItemRemoved: 1 });
+			if (why) return why;
+
+			const removed = (await events()).find((e) => e.event === "sourceRemoved");
+
+			if (removed.name !== "EvRenamed") return `payload ${JSON.stringify(removed)}`;
+		});
+
+		await r.step("obs_get_available_source_types lists what obs_source_create takes", async () => {
+			const types = await cdp.call("obs_get_available_source_types");
+
+			if (!Array.isArray(types) || types.length === 0) return JSON.stringify(types).slice(0, 200);
+
+			const color = types.find((t) => t.id === "color_source_v3");
+
+			if (!color || typeof color.name !== "string" || !color.name) return `no color_source_v3 with a name in ${JSON.stringify(types).slice(0, 300)}`;
+			if (types.some((t) => typeof t.id !== "string" || typeof t.name !== "string")) return "an entry without an id and name";
+		});
+
+		await r.step("qt_getTheme reports whether the window is dark, and the theme id", async () => {
+			const theme = await cdp.call("qt_getTheme");
+
+			if (typeof theme.isDark !== "boolean" || typeof theme.id !== "string") return JSON.stringify(theme);
+
+			say(`theme ${JSON.stringify(theme)}`);
+		});
+
+		await r.step("obs_get_output_state: everything is stopped and idle", async () => {
+			const state = await cdp.call("obs_get_output_state");
+			const want = [
+				[state.streaming?.state, "stopped"],
+				[state.streaming?.reconnecting, false],
+				[state.recording?.state, "stopped"],
+				[state.recording?.paused, false],
+				[state.replayBuffer?.state, "stopped"],
+				[state.virtualcam?.active, false],
+			].filter(([got, expected]) => got !== expected);
+
+			if (want.length) return `${JSON.stringify(want)} in ${JSON.stringify(state)}`;
+			if (typeof state.streaming.time !== "string" || typeof state.recording.time !== "string" || typeof state.replayBuffer.time !== "string") return "a time is not a string";
+		});
+
+		let replayPath;
+
+		await r.step("replay buffer: start is starting then started, and the getter agrees", async () => {
+			let reply;
+			const why = await happens(async () => (reply = await cdp.call("obs_replay_buffer_start")), { outputStateChanged: 2 });
+
+			if (reply?.error) return reply.error;
+			if (why) return why;
+
+			const evs = await events();
+
+			if (evs.some((e) => e.output !== "replayBuffer")) return `other output ${JSON.stringify(evs)}`;
+			if (evs.map((e) => e.state).join() !== "starting,started") return `states ${evs.map((e) => e.state).join()}`;
+			if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(evs[1].time)) return `time ${evs[1].time}`;
+
+			const state = await cdp.call("obs_get_output_state");
+
+			if (state.replayBuffer.state !== "started" || state.replayBuffer.time !== evs[1].time) return JSON.stringify(state.replayBuffer);
+			if (typeof (await cdp.call("obs_replay_buffer_start")).error !== "string") return "no error for starting twice";
+		});
+
+		await r.step("replay buffer: save is one replayBufferSaved with the file that was written", async () => {
+			await sleep(3000);
+
+			await clear();
+
+			const reply = await cdp.call("obs_replay_buffer_save");
+
+			if (reply.error) return reply.error;
+
+			// The file is muxed first, which takes longer than the settle window
+			if (!(await until(async () => (await events()).some((e) => e.event === "replayBufferSaved"), { timeoutMs: 20000, everyMs: 250 }))) return "no replayBufferSaved in 20 s";
+
+			await sleep(SETTLE_MS);
+
+			const why = exactly(await events(), { replayBufferSaved: 1 });
+			if (why) return why;
+
+			replayPath = (await events())[0].path;
+
+			if (typeof replayPath !== "string" || !replayPath) return `path ${replayPath}`;
+			if (!existsSync(replayPath)) return `${replayPath} does not exist`;
+		});
+
+		await r.step("replay buffer: stop is stopping then stopped, and a second stop is an error", async () => {
+			let reply;
+			const why = await happens(async () => (reply = await cdp.call("obs_replay_buffer_stop")), { outputStateChanged: 2 });
+
+			if (reply?.error) return reply.error;
+			if (why) return why;
+
+			const evs = await events();
+
+			if (evs.map((e) => `${e.output}:${e.state}`).join() !== "replayBuffer:stopping,replayBuffer:stopped") return JSON.stringify(evs);
+			if ((await cdp.call("obs_get_output_state")).replayBuffer.state !== "stopped") return "the getter still says running";
+			if (typeof (await cdp.call("obs_replay_buffer_stop")).error !== "string") return "no error for stopping twice";
+			if (typeof (await cdp.call("obs_replay_buffer_save")).error !== "string") return "no error for saving a stopped buffer";
+		});
+
+		// A real key press, because that is what the user does: obs reads the keyboard itself and
+		// routes the hotkey onto the UI thread, which is the path the callback runs on.
+		const press = (vk) => {
+			const script = `Add-Type -Namespace K -Name U -MemberDefinition '[DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);'; [K.U]::keybd_event(${vk}, 0, 0, [UIntPtr]::Zero); Start-Sleep -Milliseconds 250; [K.U]::keybd_event(${vk}, 0, 2, [UIntPtr]::Zero)`;
+			const run = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" });
+			return run.status === 0 ? undefined : `key press failed: ${run.stderr}`;
+		};
+
+		const F24 = 0x87;
+		const F23 = 0x86;
+		const binding = (key) => JSON.stringify([{ key }]);
+
+		await r.step("hotkeys: a registered key is one hotkey down and one up, with the app and name", async () => {
+			const reply = await cdp.call("obs_hotkey_registerApp", "evapp", "toggle", "Ev toggle", binding("OBS_KEY_F24"));
+
+			if (typeof reply.id !== "number") return JSON.stringify(reply);
+
+			let pressed;
+			const why = await happens(async () => (pressed = press(F24)), { hotkey: 2 });
+
+			if (pressed) return pressed;
+			if (why) return why;
+
+			const evs = await events();
+
+			if (evs.map((e) => e.pressed).join() !== "true,false") return `pressed ${evs.map((e) => e.pressed).join()}`;
+			if (evs.some((e) => e.appKey !== "evapp" || e.name !== "toggle")) return JSON.stringify(evs);
+		});
+
+		await r.step("hotkeys: registering the same app and name again replaces it", async () => {
+			const reply = await cdp.call("obs_hotkey_registerApp", "evapp", "toggle", "Ev toggle", binding("OBS_KEY_F24"));
+
+			if (typeof reply.id !== "number") return JSON.stringify(reply);
+
+			let pressed;
+			const why = await happens(async () => (pressed = press(F24)), { hotkey: 2 });
+
+			return pressed || why;
+		});
+
+		await r.step("hotkeys: a bad binding is an error and registers nothing", async () => {
+			const bad = [
+				["an unknown key", await cdp.call("obs_hotkey_registerApp", "evapp", "bad", "Ev bad", binding("OBS_KEY_NOT_A_KEY"))],
+				["no key", await cdp.call("obs_hotkey_registerApp", "evapp", "bad", "Ev bad", JSON.stringify([{ shift: true }]))],
+				["bindings that are not an array", await cdp.call("obs_hotkey_registerApp", "evapp", "bad", "Ev bad", "{}")],
+				["bindings that are not json", await cdp.call("obs_hotkey_registerApp", "evapp", "bad", "Ev bad", "[")],
+				["no name", await cdp.call("obs_hotkey_registerApp", "evapp", "", "Ev bad", "[]")],
+			].filter(([, reply]) => typeof reply.error !== "string");
+
+			if (bad.length) return `no error for ${bad.map(([what, reply]) => `${what} (${JSON.stringify(reply)})`).join(", ")}`;
+
+			const removed = await cdp.call("obs_hotkey_unregisterApp", "evapp", "bad");
+
+			if (removed.removed !== 0) return `"bad" was registered: ${JSON.stringify(removed)}`;
+		});
+
+		await r.step("hotkeys: unregistering one name stops it, and says how many it removed", async () => {
+			const removed = await cdp.call("obs_hotkey_unregisterApp", "evapp", "toggle");
+
+			if (removed.removed !== 1) return JSON.stringify(removed);
+
+			let pressed;
+			const why = await happens(async () => (pressed = press(F24)), {});
+
+			if (pressed || why) return pressed || why;
+			if ((await cdp.call("obs_hotkey_unregisterApp", "evapp", "toggle")).removed !== 0) return "the second unregister removed something";
+		});
+
+		await r.step("hotkeys: unregistering an app without a name removes all of its hotkeys and no other app's", async () => {
+			const made = [
+				await cdp.call("obs_hotkey_registerApp", "evapp", "one", "Ev one", binding("OBS_KEY_F24")),
+				await cdp.call("obs_hotkey_registerApp", "evapp", "two", "Ev two", binding("OBS_KEY_F24")),
+				await cdp.call("obs_hotkey_registerApp", "otherapp", "other", "Other", binding("OBS_KEY_F23")),
+			];
+
+			if (made.some((m) => typeof m.id !== "number")) return JSON.stringify(made);
+			if (new Set(made.map((m) => m.id)).size !== 3) return `ids are not distinct ${JSON.stringify(made)}`;
+
+			let pressed;
+			const both = await happens(async () => (pressed = press(F24)), { hotkey: 4 });
+
+			if (pressed || both) return pressed || both || "";
+
+			if ((await events()).filter((e) => e.name === "one").length !== 2 || (await events()).filter((e) => e.name === "two").length !== 2) return `events ${JSON.stringify(await events())}`;
+
+			const removed = await cdp.call("obs_hotkey_unregisterApp", "evapp");
+
+			if (removed.removed !== 2) return JSON.stringify(removed);
+
+			const none = await happens(async () => (pressed = press(F24)), {});
+
+			if (pressed || none) return pressed || none || "";
+
+			const other = await happens(async () => (pressed = press(F23)), { hotkey: 2 });
+
+			if (pressed || other) return pressed || other || "";
+			if ((await events()).some((e) => e.appKey !== "otherapp")) return JSON.stringify(await events());
+		});
+
+		await r.step("hotkeys: unregistering twice removes nothing the second time, and an empty appKey is an error", async () => {
+			const reply = await cdp.call("obs_hotkey_unregisterApp", "otherapp");
+
+			if (reply.removed !== 1) return `otherapp ${JSON.stringify(reply)}`;
+			if ((await cdp.call("obs_hotkey_unregisterApp", "otherapp")).removed !== 0) return "removed twice";
+			if (typeof (await cdp.call("obs_hotkey_unregisterApp", "")).error !== "string") return "no error for an empty appKey";
+		});
 
 		await r.step("obs_source_set_settings_json: one sourceUpdated", async () => {
 			const why = await happens(() => cdp.call("obs_source_set_settings_json", "EvColor1", JSON.stringify({ width: 120 })), { sourceUpdated: 1 });

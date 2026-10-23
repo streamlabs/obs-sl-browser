@@ -3,7 +3,13 @@
 
 #include <obs.hpp>
 
+#include <util/config-file.h>
+
+#include <QMainWindow>
+#include <QPalette>
+
 #include <chrono>
+#include <ctime>
 #include <vector>
 
 using namespace json11;
@@ -54,6 +60,47 @@ Kind classify(obs_source_t *source)
 	default:
 		return Kind::Ignore;
 	}
+}
+
+struct OutputTransition
+{
+	obs_frontend_event event;
+	const char *output;
+	const char *state;
+};
+
+constexpr OutputTransition kOutputTransitions[] = {
+	{OBS_FRONTEND_EVENT_STREAMING_STARTING, "streaming", "starting"},
+	{OBS_FRONTEND_EVENT_STREAMING_STARTED, "streaming", "started"},
+	{OBS_FRONTEND_EVENT_STREAMING_STOPPING, "streaming", "stopping"},
+	{OBS_FRONTEND_EVENT_STREAMING_STOPPED, "streaming", "stopped"},
+	{OBS_FRONTEND_EVENT_RECORDING_STARTING, "recording", "starting"},
+	{OBS_FRONTEND_EVENT_RECORDING_STARTED, "recording", "started"},
+	{OBS_FRONTEND_EVENT_RECORDING_PAUSED, "recording", "paused"},
+	{OBS_FRONTEND_EVENT_RECORDING_UNPAUSED, "recording", "started"},
+	{OBS_FRONTEND_EVENT_RECORDING_STOPPING, "recording", "stopping"},
+	{OBS_FRONTEND_EVENT_RECORDING_STOPPED, "recording", "stopped"},
+	{OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTING, "replayBuffer", "starting"},
+	{OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED, "replayBuffer", "started"},
+	{OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPING, "replayBuffer", "stopping"},
+	{OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED, "replayBuffer", "stopped"},
+	{OBS_FRONTEND_EVENT_VIRTUALCAM_STARTED, "virtualcam", "started"},
+	{OBS_FRONTEND_EVENT_VIRTUALCAM_STOPPED, "virtualcam", "stopped"},
+};
+
+// ISO 8601 UTC, the form of the status times Streamlabs Desktop reports
+std::string isoTimeNow()
+{
+	const auto now = std::chrono::system_clock::now();
+	const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
+	const std::time_t seconds = std::chrono::system_clock::to_time_t(now);
+
+	std::tm utc{};
+	gmtime_s(&utc, &seconds);
+
+	char buf[32];
+	std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday, utc.tm_hour, utc.tm_min, utc.tm_sec, static_cast<int>(ms));
+	return buf;
 }
 
 obs_source_t *sourceFrom(calldata_t *params)
@@ -126,6 +173,8 @@ void ObsEvents::stop()
 	if (!m_running.exchange(false))
 		return;
 
+	unregisterAllAppHotkeys();
+
 	signal_handler_t *global = obs_get_signal_handler();
 	signal_handler_disconnect(global, "source_create", onSourceCreate, this);
 	signal_handler_disconnect(global, "source_remove", onSourceRemove, this);
@@ -142,6 +191,7 @@ void ObsEvents::stop()
 	m_queue.clear();
 	m_coalesced.clear();
 	m_transforms.clear();
+	m_outputStates.clear();
 }
 
 void ObsEvents::senderThread()
@@ -305,6 +355,177 @@ void ObsEvents::dropSceneTransforms(const std::string &sceneUuid)
 		++last;
 
 	m_transforms.erase(first, last);
+}
+
+void ObsEvents::setOutputState(const char *output, const char *state)
+{
+	const std::string time = isoTimeNow();
+
+	{
+		std::lock_guard<std::mutex> grd(m_mtx);
+		m_outputStates[output] = {state, time};
+	}
+
+	push(Json(Json::object({{"event", "outputStateChanged"}, {"output", output}, {"state", state}, {"time", time}})).dump());
+}
+
+// OBS emits *_STARTING before a start that can fail without any *_STOPPED
+void ObsEvents::settleFailedStart(const char *output, bool active)
+{
+	{
+		std::lock_guard<std::mutex> grd(m_mtx);
+		auto itr = m_outputStates.find(output);
+
+		if (active || itr == m_outputStates.end() || itr->second.state != "starting")
+			return;
+	}
+
+	setOutputState(output, "stopped");
+}
+
+Json ObsEvents::outputState()
+{
+	// Before the first transition seen, an output is as active as obs says
+	auto describe = [this](const char *output, bool active) {
+		std::lock_guard<std::mutex> grd(m_mtx);
+		auto itr = m_outputStates.find(output);
+
+		if (itr == m_outputStates.end())
+			return Json::object({{"state", active ? "started" : "stopped"}, {"time", ""}});
+
+		return Json::object({{"state", itr->second.state}, {"time", itr->second.time}});
+	};
+
+	Json::object streaming = describe("streaming", obs_frontend_streaming_active());
+	OBSOutputAutoRelease streamingOutput = obs_frontend_get_streaming_output();
+	streaming["reconnecting"] = streamingOutput && obs_output_reconnecting(streamingOutput);
+
+	Json::object recording = describe("recording", obs_frontend_recording_active());
+	recording["paused"] = obs_frontend_recording_paused();
+
+	return Json::object({
+		{"streaming", streaming},
+		{"recording", recording},
+		{"replayBuffer", describe("replayBuffer", obs_frontend_replay_buffer_active())},
+		{"virtualcam", Json::object({{"active", obs_frontend_virtualcam_active()}})},
+	});
+}
+
+Json ObsEvents::theme()
+{
+	auto *mainWindow = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+	const char *id = config_get_string(obs_frontend_get_user_config(), "Appearance", "Theme");
+
+	return Json::object({{"isDark", mainWindow->palette().color(QPalette::Window).lightness() < 128}, {"id", str(id)}});
+}
+
+/*static*/
+void ObsEvents::onAppHotkey(void *data, obs_hotkey_id, obs_hotkey_t *, bool pressed)
+{
+	ObsEvents &self = instance();
+	auto *hotkey = static_cast<AppHotkey *>(data);
+
+	if (!self.m_running)
+		return;
+
+	self.push(Json(Json::object({{"event", "hotkey"}, {"appKey", hotkey->appKey}, {"name", hotkey->name}, {"pressed", pressed}})).dump());
+}
+
+std::string ObsEvents::registerAppHotkey(const std::string &appKey, const std::string &name, const std::string &description, const Json &bindings)
+{
+	auto error = [](const std::string &message) { return Json(Json::object({{"error", message}})).dump(); };
+
+	if (!m_running)
+		return error("Events are not running");
+
+	if (appKey.empty() || name.empty())
+		return error("Invalid params");
+
+	if (!bindings.is_array())
+		return error("Invalid bindings");
+
+	// Nothing is registered unless every binding is good
+	OBSDataArrayAutoRelease array = obs_data_array_create();
+
+	for (const Json &binding : bindings.array_items())
+	{
+		if (!binding.is_object() || !binding["key"].is_string())
+			return error("Invalid binding");
+
+		const std::string &key = binding["key"].string_value();
+
+		if (obs_key_from_name(key.c_str()) == OBS_KEY_NONE)
+			return error("Unknown key " + key);
+
+		OBSDataAutoRelease item = obs_data_create();
+		obs_data_set_string(item, "key", key.c_str());
+		obs_data_set_bool(item, "shift", binding["shift"].bool_value());
+		obs_data_set_bool(item, "control", binding["control"].bool_value());
+		obs_data_set_bool(item, "alt", binding["alt"].bool_value());
+		obs_data_set_bool(item, "command", binding["command"].bool_value());
+		obs_data_array_push_back(array, item);
+	}
+
+	unregisterAppHotkeys(appKey, &name);
+
+	auto hotkey = std::make_unique<AppHotkey>();
+	hotkey->appKey = appKey;
+	hotkey->name = name;
+	hotkey->id = obs_hotkey_register_frontend(("SlbApp." + appKey + "." + name).c_str(), (description.empty() ? name : description).c_str(), onAppHotkey, hotkey.get());
+
+	if (hotkey->id == OBS_INVALID_HOTKEY_ID)
+		return error("obs refused the hotkey");
+
+	obs_hotkey_load(hotkey->id, array);
+
+	const int id = static_cast<int>(hotkey->id);
+
+	std::lock_guard<std::mutex> grd(m_hotkeyMtx);
+	m_appHotkeys[appKey][name] = std::move(hotkey);
+
+	return Json(Json::object({{"id", id}})).dump();
+}
+
+std::string ObsEvents::unregisterAppHotkeys(const std::string &appKey, const std::string *name)
+{
+	int removed = 0;
+
+	std::lock_guard<std::mutex> grd(m_hotkeyMtx);
+	auto app = m_appHotkeys.find(appKey);
+
+	if (app != m_appHotkeys.end())
+	{
+		auto &hotkeys = app->second;
+
+		for (auto itr = hotkeys.begin(); itr != hotkeys.end();)
+		{
+			if (name && itr->first != *name)
+			{
+				++itr;
+				continue;
+			}
+
+			obs_hotkey_unregister(itr->second->id);
+			itr = hotkeys.erase(itr);
+			++removed;
+		}
+
+		if (hotkeys.empty())
+			m_appHotkeys.erase(app);
+	}
+
+	return Json(Json::object({{"removed", removed}})).dump();
+}
+
+void ObsEvents::unregisterAllAppHotkeys()
+{
+	std::lock_guard<std::mutex> grd(m_hotkeyMtx);
+
+	for (auto &app : m_appHotkeys)
+		for (auto &hotkey : app.second)
+			obs_hotkey_unregister(hotkey.second->id);
+
+	m_appHotkeys.clear();
 }
 
 void ObsEvents::connectScenes()
@@ -541,8 +762,31 @@ void ObsEvents::onFrontendEvent(enum obs_frontend_event event, void *)
 	if (!self.m_running)
 		return;
 
+	for (const OutputTransition &transition : kOutputTransitions)
+	{
+		if (transition.event == event)
+		{
+			self.setOutputState(transition.output, transition.state);
+			return;
+		}
+	}
+
 	switch (event)
 	{
+	case OBS_FRONTEND_EVENT_REPLAY_BUFFER_SAVED: {
+		char *path = obs_frontend_get_last_replay();
+		self.push(Json(Json::object({{"event", "replayBufferSaved"}, {"path", str(path)}})).dump());
+		bfree(path);
+		break;
+	}
+
+	case OBS_FRONTEND_EVENT_THEME_CHANGED: {
+		Json::object payload = theme().object_items();
+		payload["event"] = "themeChanged";
+		self.push(Json(std::move(payload)).dump());
+		break;
+	}
+
 	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
 		self.connectScenes();
 		self.m_loaded = true;
