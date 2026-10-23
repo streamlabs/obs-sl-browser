@@ -185,6 +185,7 @@ test/
     report.mjs     console, json and JUnit output
   suites/
     smoke/         the plugin comes up and answers
+    dual-output-api/ the vertical canvas api and its isolation
     source-message/ browsersource_sendMessage reaches the right browser source
     filesystem-api/ the sandboxed filesystem and process api, and its containment
 ```
