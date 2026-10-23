@@ -2,6 +2,7 @@
 #include "JavascriptApi.h"
 #include "PluginJsHandler.h"
 
+#include <chrono>
 #include <filesystem>
 
 /***
@@ -80,6 +81,8 @@ bool grpc_plugin_objClient::send_obsEvent(const std::string &json)
 
 	grpc_empty_Reply reply;
 	grpc::ClientContext context;
+	// A browser that stays connected but stops answering must not wedge ObsEvents::stop()
+	context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
 	grpc::Status status = stub_->com_grpc_obs_event(&context, request, &reply);
 
 	if (!status.ok())

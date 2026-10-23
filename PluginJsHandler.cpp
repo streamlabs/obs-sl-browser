@@ -18,6 +18,8 @@
 
 // Stl
 #include <chrono>
+#include <climits>
+#include <cmath>
 #include <functional>
 #include <codecvt>
 #include <filesystem>
@@ -3851,18 +3853,18 @@ static Json sceneItemToJson(obs_sceneitem_t *item)
 	});
 }
 
-// Runs on the UI thread. Fills out_error and returns null when there is no such item
+// Item ids are container-local: pass the group's name to address a group's children. Runs on the UI thread. Fills out_error and returns null when there is no such item
 static obs_sceneitem_t *findSceneItem(const std::string &sceneName, const Json &itemId, OBSSourceAutoRelease &scene, std::string &out_error)
 {
 	scene = obs_get_source_by_name(sceneName.c_str());
 
 	if (!scene)
 		out_error = "Did not find an object with name " + sceneName;
-	else if (!obs_source_is_scene(scene))
+	else if (!obs_source_is_scene(scene) && !obs_source_is_group(scene))
 		out_error = "The object found is not a scene";
-	else if (!itemId.is_number())
+	else if (!itemId.is_number() || itemId.number_value() != std::floor(itemId.number_value()) || itemId.number_value() < 0 || itemId.number_value() > static_cast<double>(INT_MAX))
 		out_error = "Invalid item id";
-	else if (obs_sceneitem_t *item = obs_scene_find_sceneitem_by_id(obs_scene_from_source(scene), static_cast<int64_t>(itemId.number_value())))
+	else if (obs_sceneitem_t *item = obs_scene_find_sceneitem_by_id(obs_group_or_scene_from_source(scene), static_cast<int64_t>(itemId.number_value())))
 		return item;
 	else
 		out_error = "Failed find the item in that scene";

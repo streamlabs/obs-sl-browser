@@ -108,14 +108,22 @@ obs_source_t *sourceFrom(calldata_t *params)
 	return static_cast<obs_source_t *>(calldata_ptr(params, "source"));
 }
 
-// pos, scale and rot, the part of a transform an event reports
-std::array<float, 5> readTransform(obs_sceneitem_t *item)
+// pos, scale, rot and crop, the part of a transform an event reports
+std::array<float, 9> readTransform(obs_sceneitem_t *item)
 {
 	vec2 pos, scale;
+	obs_sceneitem_crop crop;
 	obs_sceneitem_get_pos(item, &pos);
 	obs_sceneitem_get_scale(item, &scale);
+	obs_sceneitem_get_crop(item, &crop);
 
-	return {pos.x, pos.y, scale.x, scale.y, obs_sceneitem_get_rot(item)};
+	return {pos.x, pos.y, scale.x, scale.y, obs_sceneitem_get_rot(item), static_cast<float>(crop.left), static_cast<float>(crop.top), static_cast<float>(crop.right), static_cast<float>(crop.bottom)};
+}
+
+// Scenes and groups both hold items and signal them on their own handler
+bool isContainer(obs_source_t *source)
+{
+	return obs_source_is_scene(source) || obs_source_is_group(source);
 }
 
 // Names an item among all scenes: scene uuid, then item id
@@ -205,9 +213,12 @@ void ObsEvents::senderThread()
 
 				if (now >= dueMs)
 				{
-					m_queue.push_back(std::move(c.payload));
-					c.pending = false;
-					c.lastSentMs = now;
+					// A full queue leaves the newest payload pending
+					if (enqueueLocked(c.payload))
+					{
+						c.pending = false;
+						c.lastSentMs = now;
+					}
 				}
 				else if (nextDueMs < 0 || dueMs < nextDueMs)
 				{
@@ -247,21 +258,26 @@ void ObsEvents::senderThread()
 	}
 }
 
+bool ObsEvents::enqueueLocked(std::string &json)
+{
+	if (m_queue.size() >= kMaxQueued)
+	{
+		if (!m_overflowed)
+			blog(LOG_WARNING, "ObsEvents: queue is full, dropping events until the browser catches up");
+
+		m_overflowed = true;
+		return false;
+	}
+
+	m_queue.push_back(std::move(json));
+	return true;
+}
+
 void ObsEvents::push(std::string json)
 {
 	{
 		std::lock_guard<std::mutex> grd(m_mtx);
-
-		if (m_queue.size() >= kMaxQueued)
-		{
-			if (!m_overflowed)
-				blog(LOG_WARNING, "ObsEvents: queue is full, dropping events until the browser catches up");
-
-			m_overflowed = true;
-			return;
-		}
-
-		m_queue.push_back(std::move(json));
+		enqueueLocked(json);
 	}
 
 	m_cv.notify_one();
@@ -275,10 +291,9 @@ void ObsEvents::pushCoalesced(const std::string &key, long long intervalMs, std:
 		const long long now = nowMs();
 		c.intervalMs = intervalMs;
 
-		if (!c.pending && now - c.lastSentMs >= intervalMs)
+		if (!c.pending && now - c.lastSentMs >= intervalMs && enqueueLocked(json))
 		{
 			c.lastSentMs = now;
-			m_queue.push_back(std::move(json));
 		}
 		else
 		{
@@ -303,13 +318,13 @@ void ObsEvents::dropAllPending()
 	m_coalesced.clear();
 }
 
-void ObsEvents::seedTransform(const std::string &key, const std::array<float, 5> &transform)
+void ObsEvents::seedTransform(const std::string &key, const std::array<float, 9> &transform)
 {
 	std::lock_guard<std::mutex> grd(m_mtx);
 	m_transforms[key] = transform;
 }
 
-bool ObsEvents::transformChanged(const std::string &key, const std::array<float, 5> &transform)
+bool ObsEvents::transformChanged(const std::string &key, const std::array<float, 9> &transform)
 {
 	std::lock_guard<std::mutex> grd(m_mtx);
 	// The first sighting is a baseline: obs can draw a new item before it signals item_add
@@ -502,7 +517,7 @@ void ObsEvents::unregisterAllAppHotkeys()
 void ObsEvents::connectScenes()
 {
 	auto connect = [](void *data, obs_source_t *source) {
-		if (!obs_source_is_scene(source))
+		if (!isContainer(source))
 			return true;
 
 		static_cast<ObsEvents *>(data)->connectScene(source);
@@ -514,7 +529,7 @@ void ObsEvents::connectScenes()
 			return true;
 		};
 
-		obs_scene_enum_items(obs_scene_from_source(source), seedItem, data);
+		obs_scene_enum_items(obs_group_or_scene_from_source(source), seedItem, data);
 		return true;
 	};
 
@@ -525,7 +540,7 @@ void ObsEvents::connectScenes()
 void ObsEvents::disconnectScenes()
 {
 	auto disconnect = [](void *data, obs_source_t *source) {
-		if (obs_source_is_scene(source))
+		if (isContainer(source))
 			static_cast<ObsEvents *>(data)->disconnectScene(source);
 
 		return true;
@@ -571,7 +586,7 @@ void ObsEvents::onSourceCreate(void *data, calldata_t *params)
 		return;
 
 	// Connected even while events are held back: the scene's items are what come next
-	if (obs_source_is_scene(source))
+	if (isContainer(source))
 		self->connectScene(source);
 
 	if (!self->enabled())
@@ -707,7 +722,7 @@ void ObsEvents::onItemTransform(void *data, calldata_t *params)
 {
 	auto *self = static_cast<ObsEvents *>(data);
 	auto *item = static_cast<obs_sceneitem_t *>(calldata_ptr(params, "item"));
-	const std::array<float, 5> transform = readTransform(item);
+	const std::array<float, 9> transform = readTransform(item);
 
 	const std::string key = itemKey(params);
 
@@ -720,6 +735,7 @@ void ObsEvents::onItemTransform(void *data, calldata_t *params)
 	event["pos"] = Json::object({{"x", transform[0]}, {"y", transform[1]}});
 	event["scale"] = Json::object({{"x", transform[2]}, {"y", transform[3]}});
 	event["rot"] = transform[4];
+	event["crop"] = Json::object({{"left", transform[5]}, {"top", transform[6]}, {"right", transform[7]}, {"bottom", transform[8]}});
 
 	self->pushCoalesced("t:" + key, kTransformIntervalMs, Json(std::move(event)).dump());
 }
