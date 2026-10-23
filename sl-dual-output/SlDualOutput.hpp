@@ -52,6 +52,9 @@ public: // control surface, UI thread only
 	bool setEnabled(bool enabled);
 	bool setOutputMode(SlDualOutputMode mode);
 
+	// True while a resize would be refused: our output is in use, or the main stream is carrying the canvas.
+	bool canvasSizeLocked() const;
+
 	bool startStream();
 	bool stopStream();
 

@@ -29,7 +29,7 @@ static const SizePreset kPresets[] = {
 	{"540 x 960 (9:16 vertical)", 540, 960},
 };
 
-SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig &current, bool streamBusy, QWidget *parent) : QDialog(parent), m_base(current)
+SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig &current, bool sizeLocked, QWidget *parent) : QDialog(parent), m_base(current)
 {
 	setWindowTitle("Vertical Settings");
 	setMinimumWidth(420);
@@ -126,7 +126,7 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig &current, bool str
 	form->addRow("Video encoder:", m_encoder);
 
 	m_videoBitrate = new QSpinBox(this);
-	m_videoBitrate->setRange(500, 100000);
+	m_videoBitrate->setRange(kSlDualVideoBitrateMinKbps, kSlDualVideoBitrateMaxKbps);
 	m_videoBitrate->setSingleStep(250);
 	m_videoBitrate->setSuffix(" kbps");
 	m_videoBitrate->setValue(current.videoBitrateKbps);
@@ -141,7 +141,7 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig &current, bool str
 	form->addRow("Audio track:", m_audioTrack);
 
 	m_audioBitrate = new QSpinBox(this);
-	m_audioBitrate->setRange(64, 320);
+	m_audioBitrate->setRange(kSlDualAudioBitrateMinKbps, kSlDualAudioBitrateMaxKbps);
 	m_audioBitrate->setSingleStep(32);
 	m_audioBitrate->setSuffix(" kbps");
 	m_audioBitrate->setValue(current.audioBitrateKbps);
@@ -154,10 +154,10 @@ SlDualSettingsDialog::SlDualSettingsDialog(const SlDualConfig &current, bool str
 	auto *layout = new QVBoxLayout(this);
 	layout->addLayout(form);
 
-	if (streamBusy)
+	if (sizeLocked)
 	{
 		m_sizePreset->setEnabled(false);
-		auto *note = new QLabel("Canvas size is locked while the vertical stream is live.", this);
+		auto *note = new QLabel("Canvas size is locked while the vertical canvas is being streamed.", this);
 		note->setWordWrap(true);
 		layout->addWidget(note);
 	}

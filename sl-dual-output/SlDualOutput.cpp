@@ -73,6 +73,10 @@ bool SlDualOutput::setOutputMode(SlDualOutputMode)
 {
 	return false;
 }
+bool SlDualOutput::canvasSizeLocked() const
+{
+	return false;
+}
 bool SlDualOutput::startStream()
 {
 	return false;
@@ -220,6 +224,11 @@ bool SlDualOutput::setOutputMode(SlDualOutputMode mode)
 		return false;
 
 	return m_controller->setOutputMode(mode);
+}
+
+bool SlDualOutput::canvasSizeLocked() const
+{
+	return available() && m_controller->canvasSizeLocked();
 }
 
 bool SlDualOutput::startStream()

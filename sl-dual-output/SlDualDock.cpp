@@ -283,7 +283,7 @@ void SlDualDock::onStartStopClicked()
 
 void SlDualDock::openSettings()
 {
-	SlDualSettingsDialog dialog(m_controller.config, m_controller.streamBusy(), this);
+	SlDualSettingsDialog dialog(m_controller.config, m_controller.canvasSizeLocked(), this);
 
 	if (dialog.exec() == QDialog::Accepted)
 		m_controller.applySettings(dialog.resultConfig());

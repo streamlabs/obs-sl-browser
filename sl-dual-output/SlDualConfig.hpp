@@ -38,6 +38,12 @@ inline SlDualOutputMode slDualOutputModeFromString(const std::string &text)
 	return text == "enhanced_broadcasting" ? SlDualOutputMode::EnhancedBroadcasting : SlDualOutputMode::Rtmp;
 }
 
+// Shared by the settings dialog and the js api so the two cannot disagree on what is accepted.
+constexpr int kSlDualVideoBitrateMinKbps = 500;
+constexpr int kSlDualVideoBitrateMaxKbps = 100000;
+constexpr int kSlDualAudioBitrateMinKbps = 64;
+constexpr int kSlDualAudioBitrateMaxKbps = 320;
+
 struct SlDualConfig
 {
 	uint32_t canvasWidth = 1080;

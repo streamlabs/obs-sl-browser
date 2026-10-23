@@ -4443,6 +4443,12 @@ void PluginJsHandler::JS_DUALOUTPUT_SET_CANVAS_SIZE(const json11::Json &params, 
 			return;
 		}
 
+		if (dual.canvasSizeLocked())
+		{
+			out_jsonReturn = Json(Json::object({{"error", "Canvas size is locked while the main stream is using the canvas"}})).dump();
+			return;
+		}
+
 		SlDualConfig cfg = dual.config();
 		cfg.canvasWidth = static_cast<uint32_t>(width);
 		cfg.canvasHeight = static_cast<uint32_t>(height);
@@ -4495,7 +4501,7 @@ void PluginJsHandler::JS_DUALOUTPUT_SET_STREAM_SETTINGS(const json11::Json &para
 	// Presence is the whole contract here: a key that was passed (and is not null) is applied, a key
 	//	that was not is left alone. Nothing is inferred from the value, so "" clears a stored string
 	//	instead of being indistinguishable from a key nobody supplied - which had left the api with no
-	//	way to remove a stream key at all - and 0 is a rejected bitrate rather than a silent no-op.
+	//	way to remove a stream key at all - and an out-of-range bitrate is rejected rather than a silent no-op.
 	if (!params["param2"].is_string())
 	{
 		out_jsonReturn = Json(Json::object({{"error", "param2 (settings) must be a JSON string"}})).dump();
@@ -4566,15 +4572,15 @@ void PluginJsHandler::JS_DUALOUTPUT_SET_STREAM_SETTINGS(const json11::Json &para
 	const auto &p_audio_track = settings["audio_track"];
 	const auto &p_auto_start = settings["auto_start"];
 
-	if (p_video_bitrate.is_number() && p_video_bitrate.int_value() <= 0)
+	if (p_video_bitrate.is_number() && (p_video_bitrate.int_value() < kSlDualVideoBitrateMinKbps || p_video_bitrate.int_value() > kSlDualVideoBitrateMaxKbps))
 	{
-		out_jsonReturn = Json(Json::object({{"error", "video_bitrate must be greater than 0"}})).dump();
+		out_jsonReturn = Json(Json::object({{"error", "video_bitrate must be between " + std::to_string(kSlDualVideoBitrateMinKbps) + " and " + std::to_string(kSlDualVideoBitrateMaxKbps)}})).dump();
 		return;
 	}
 
-	if (p_audio_bitrate.is_number() && p_audio_bitrate.int_value() <= 0)
+	if (p_audio_bitrate.is_number() && (p_audio_bitrate.int_value() < kSlDualAudioBitrateMinKbps || p_audio_bitrate.int_value() > kSlDualAudioBitrateMaxKbps))
 	{
-		out_jsonReturn = Json(Json::object({{"error", "audio_bitrate must be greater than 0"}})).dump();
+		out_jsonReturn = Json(Json::object({{"error", "audio_bitrate must be between " + std::to_string(kSlDualAudioBitrateMinKbps) + " and " + std::to_string(kSlDualAudioBitrateMaxKbps)}})).dump();
 		return;
 	}
 

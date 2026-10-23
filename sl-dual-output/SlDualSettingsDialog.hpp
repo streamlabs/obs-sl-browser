@@ -14,7 +14,7 @@ class QSpinBox;
 class SlDualSettingsDialog : public QDialog
 {
 public:
-	SlDualSettingsDialog(const SlDualConfig &current, bool streamBusy, QWidget *parent);
+	SlDualSettingsDialog(const SlDualConfig &current, bool sizeLocked, QWidget *parent);
 
 	SlDualConfig resultConfig() const;
 

@@ -192,6 +192,11 @@ bool SlDualController::mainStreamBusy() const
 	return m_mainStreamStarting || obs_frontend_streaming_active();
 }
 
+bool SlDualController::canvasSizeLocked() const
+{
+	return streamBusy() || (config.enabled && config.outputMode == SlDualOutputMode::EnhancedBroadcasting && mainStreamBusy());
+}
+
 void SlDualController::applySettings(const SlDualConfig &next)
 {
 	// Scene state is owned by the dock/editor; preserve it.
@@ -202,7 +207,7 @@ void SlDualController::applySettings(const SlDualConfig &next)
 	// size put back after, because storing the requested one would have config() report a size the
 	// canvas never took - and nothing re-applies it on stop. The same lock the settings dialog and
 	// the js api use, and it holds while the output is merely starting.
-	bool sizeLocked = streamBusy();
+	bool sizeLocked = canvasSizeLocked();
 	uint32_t lockedWidth = config.canvasWidth;
 	uint32_t lockedHeight = config.canvasHeight;
 
@@ -342,6 +347,23 @@ void SlDualController::applyOutputModeSetting()
 	config_save(profile);
 
 	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "output mode '%s', multitrack canvas %s", slDualOutputModeToString(config.outputMode), want.empty() ? "released" : "claimed");
+}
+
+void SlDualController::releaseMultitrackClaim()
+{
+	config_t *profile = obs_frontend_get_profile_config();
+
+	if (!profile || !canvas || !canvas->valid())
+		return;
+
+	const char *ours = obs_canvas_get_uuid(canvas->canvasHandle());
+	const char *current = config_get_string(profile, "Stream1", "MultitrackExtraCanvas");
+
+	if (!ours || !current || strcmp(current, ours) != 0)
+		return;
+
+	config_set_string(profile, "Stream1", "MultitrackExtraCanvas", "");
+	config_save(profile);
 }
 
 void SlDualController::sceneSetActive(const std::string &name)
@@ -571,6 +593,9 @@ void SlDualController::onCollectionChanging()
 		// scenes are about to be destroyed
 		dock->resetEditorState(true);
 	}
+
+	// The next collection may not want the canvas, and OBS would keep pointing at a dead one.
+	releaseMultitrackClaim();
 
 	if (canvas)
 		canvas->detach();

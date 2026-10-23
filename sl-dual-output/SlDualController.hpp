@@ -56,6 +56,9 @@ public: // actions, UI thread (dock / editor / settings dialog)
 	// would mean latching the claim for the whole attempt rather than guarding the setters.
 	bool mainStreamBusy() const;
 
+	// The canvas cannot be resized while our output or, in enhanced_broadcasting mode, the main stream is encoding it.
+	bool canvasSizeLocked() const;
+
 	void applySettings(const SlDualConfig &next);
 
 	void sceneSetActive(const std::string &name);
@@ -123,6 +126,9 @@ private: // docks
 
 	// Hands the canvas UUID to OBS's multitrack path, or clears it. Read live at stream start, so no restart is needed.
 	void applyOutputModeSetting();
+
+	// Clears the multitrack claim if it still points at the current canvas, which is about to go away.
+	void releaseMultitrackClaim();
 
 private:
 	bool m_callbacksRegistered = false;

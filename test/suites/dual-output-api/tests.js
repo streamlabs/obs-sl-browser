@@ -344,6 +344,11 @@
   rejects("an unknown key", [JSON.stringify({ key: "other", videoBitrate: 5000 })], "Unknown stream setting: videoBitrate");
   rejects("a wrongly typed value", [JSON.stringify({ key: "other", video_bitrate: "3000" })], "video_bitrate must be a number");
 
+  rejects("a video bitrate below the minimum", [JSON.stringify({ video_bitrate: 499 })], "video_bitrate must be between 500 and 100000");
+  rejects("a video bitrate above the maximum", [JSON.stringify({ video_bitrate: 100001 })], "video_bitrate must be between 500 and 100000");
+  rejects("an audio bitrate below the minimum", [JSON.stringify({ audio_bitrate: 63 })], "audio_bitrate must be between 64 and 320");
+  rejects("an audio bitrate above the maximum", [JSON.stringify({ audio_bitrate: 321 })], "audio_bitrate must be between 64 and 320");
+
   test("a bitrate of zero is refused, not ignored", function () {
     return call("dualoutput_setStreamSettings", JSON.stringify({ video_bitrate: 0 }))
       .then(function (r) {
@@ -521,11 +526,11 @@
       if (!ctx.settingsBefore) return null;
       var b = JSON.parse(JSON.stringify(ctx.settingsBefore));
       // Exact, including fields that started empty: "" clears, so the originals go back whatever
-      // they were. Bitrates and the track are only sent if they were valid, since 0 is now refused
-      // and would abort the whole restore.
-      ["video_bitrate", "audio_bitrate", "audio_track"].forEach(function (k) {
-        if (!(b[k] > 0)) delete b[k];
-      });
+      // they were. Bitrates and the track are only sent if they were in range, since anything else
+      // is refused and would abort the whole restore.
+      if (!(b.video_bitrate >= 500 && b.video_bitrate <= 100000)) delete b.video_bitrate;
+      if (!(b.audio_bitrate >= 64 && b.audio_bitrate <= 320)) delete b.audio_bitrate;
+      if (!(b.audio_track > 0)) delete b.audio_track;
       return restore("stream settings", call("dualoutput_setStreamSettings", JSON.stringify(b)));
     }).then(function () { return { removed: removed, problems: problems }; });
   }

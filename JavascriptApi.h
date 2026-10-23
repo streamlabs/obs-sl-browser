@@ -616,6 +616,7 @@ public:
 
 			// .(@function(arg1), @int_width, @int_height)
 			//	Width is aligned to 4 and height to 2, so the applied size can differ from what was asked for.
+			//	Refused while streaming, including while the main stream carries the canvas in "enhanced_broadcasting" mode.
 			//		Example arg1 = { "width": 1080, "height": 1920 }
 			{"dualoutput_setCanvasSize", JS_DUALOUTPUT_SET_CANVAS_SIZE},
 
@@ -637,8 +638,9 @@ public:
 			//	'audio_track' is 1-based and selects which of the main audio mixes to encode - there is no separate vertical audio.
 			//		Out of range is an error rather than a clamp, so the reported track is always the one encoded.
 			//	Every key is optional: omitted or null keeps the stored value, so a partial update is safe.
-			//		"" clears a stored string, and a bitrate of 0 is an error rather than ignored.
+			//		"" clears a stored string.
 			//		'encoder_id' is the exception, having no meaningful empty value; "" leaves it alone.
+			//	'video_bitrate' must be 500..100000 kbps and 'audio_bitrate' 64..320 kbps; anything else is an error, not a clamp.
 			//	Unknown keys and wrong value types are errors, and nothing is applied when any key is rejected.
 			//	'auto_start' starts and stops this output with the main OBS stream.
 			//	Note: these settings live in the scene collection, so that each collection can stream
