@@ -47,11 +47,12 @@ private:
 
 	void senderThread();
 	void push(std::string json);
+	bool enqueueLocked(std::string &json);
 	void pushCoalesced(const std::string &key, long long intervalMs, std::string json);
 	void dropCoalesced(const std::string &key);
 	void dropAllPending();
-	void seedTransform(const std::string &key, const std::array<float, 5> &transform);
-	bool transformChanged(const std::string &key, const std::array<float, 5> &transform);
+	void seedTransform(const std::string &key, const std::array<float, 9> &transform);
+	bool transformChanged(const std::string &key, const std::array<float, 9> &transform);
 	void dropTransform(const std::string &key);
 	void dropSceneTransforms(const std::string &sceneUuid);
 
@@ -81,7 +82,7 @@ private:
 	std::map<std::string, Coalesced> m_coalesced;
 
 	// What each item's transform last was, so a signal that moved nothing is not an event
-	std::map<std::string, std::array<float, 5>> m_transforms;
+	std::map<std::string, std::array<float, 9>> m_transforms;
 	bool m_overflowed = false;
 	std::thread m_thread;
 };
