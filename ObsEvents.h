@@ -35,6 +35,7 @@ public:
 	// The functions below touch frontend state and are called on the Qt UI thread
 
 	json11::Json outputState();
+	void settleFailedStart(const char *output, bool active);
 	static json11::Json theme();
 
 	// Each answers with the json the api function replies. A hotkey is a frontend hotkey, so it shows in Settings > Hotkeys

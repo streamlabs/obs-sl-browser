@@ -369,6 +369,20 @@ void ObsEvents::setOutputState(const char *output, const char *state)
 	push(Json(Json::object({{"event", "outputStateChanged"}, {"output", output}, {"state", state}, {"time", time}})).dump());
 }
 
+// OBS emits *_STARTING before a start that can fail without any *_STOPPED
+void ObsEvents::settleFailedStart(const char *output, bool active)
+{
+	{
+		std::lock_guard<std::mutex> grd(m_mtx);
+		auto itr = m_outputStates.find(output);
+
+		if (active || itr == m_outputStates.end() || itr->second.state != "starting")
+			return;
+	}
+
+	setOutputState(output, "stopped");
+}
+
 Json ObsEvents::outputState()
 {
 	// Before the first transition seen, an output is as active as obs says

@@ -4051,7 +4051,10 @@ void PluginJsHandler::replayBufferRequest(const char *what, std::string &out_jso
 					mainWindow,
 					[request]() {
 						if (request == "start")
+						{
 							obs_frontend_replay_buffer_start();
+							ObsEvents::instance().settleFailedStart("replayBuffer", obs_frontend_replay_buffer_active());
+						}
 						else if (request == "stop")
 							obs_frontend_replay_buffer_stop();
 						else
@@ -4104,7 +4107,7 @@ void PluginJsHandler::JS_OBS_HOTKEY_UNREGISTER_APP(const json11::Json &params, s
 	const bool hasName = params["param3"].is_string();
 	const std::string name = params["param3"].string_value();
 
-	if (app_key.empty())
+	if (app_key.empty() || (!hasName && !params["param3"].is_null()))
 	{
 		out_jsonReturn = Json(Json::object({{"error", "Invalid params"}})).dump();
 		return;
