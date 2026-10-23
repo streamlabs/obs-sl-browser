@@ -48,6 +48,12 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 		return grpc::Status::OK;
 	}
 
+	grpc::Status com_grpc_obs_event(grpc::ServerContext *context, const grpc_obs_event *request, grpc_empty_Reply *response) override
+	{
+		BrowserClient::SendObsEventToReceiver(request->jsonstr());
+		return grpc::Status::OK;
+	}
+
 	grpc::Status com_grpc_window_toggleVisibility(grpc::ServerContext *context, const grpc_window_toggleVisibility *request, grpc_empty_Reply *response) override
 	{
 		// If hidden

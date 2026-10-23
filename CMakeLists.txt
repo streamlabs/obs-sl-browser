@@ -145,6 +145,7 @@ target_sources(
   PRIVATE sl-browser-plugin.cpp
     GrpcPlugin.cpp
     PluginJsHandler.cpp
+    ObsEvents.cpp
     QtGuiModifications.cpp
     WebServer.cpp
     SlDockEventFilter.cpp

@@ -90,6 +90,7 @@ public:
 public:
 	static int32_t GetReceiverFuncIdForBrowser(const int32_t browserCefId);
 	static void SendMsgToReceiver(CefRefPtr<CefBrowser> target, const std::string &msg, const int32_t senderUid);
+	static void SendObsEventToReceiver(const std::string &json);
 
 public:
 	static std::string cefListValueToJSONString(CefRefPtr<CefListValue> listValue);
@@ -97,6 +98,7 @@ public:
 private:
 	void UpdateExtraTexture();
 	static void AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid);
+	static void AssignObsEventReceiverFunc(const int32_t browserCefId, const int32_t funcid);
 
 	bool valid() const;
 
@@ -110,6 +112,11 @@ private:
 
 	static std::mutex m_tabReceiverMutex;
 	static std::map<int32_t, int32_t> m_tabReceiverDictionary;
+
+	// Main's slot for events_registerReceiver, apart from its tabs_registerMsgReceiver one
+	static std::mutex m_obsEventReceiverMutex;
+	static int32_t m_obsEventReceiverBrowserId;
+	static int32_t m_obsEventReceiverFuncId;
 
 private:
 	bool JS_BROWSER_RESIZE_BROWSER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
@@ -133,4 +140,5 @@ private:
 	bool JS_TABS_QUERY_ALL(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
 	bool JS_TABS_SET_ICON(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
 	bool JS_TABS_SET_TITLE(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_EVENTS_REGISTER_RECEIVER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
 };

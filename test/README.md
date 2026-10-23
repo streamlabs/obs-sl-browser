@@ -198,4 +198,5 @@ test/
     source-message/ browsersource_sendMessage reaches the right browser source
     filesystem-api/ the sandboxed filesystem and process api, and its containment
     multi-browser/ the tabs_* windows: privilege boundary, messaging, resize, lifecycle
+    obs-events/    events_registerReceiver: source, scene and scene item events, each exactly once
 ```

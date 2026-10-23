@@ -73,6 +73,21 @@ bool grpc_plugin_objClient::send_windowToggleVisibility()
 	return true;
 }
 
+bool grpc_plugin_objClient::send_obsEvent(const std::string &json)
+{
+	grpc_obs_event request;
+	request.set_jsonstr(json);
+
+	grpc_empty_Reply reply;
+	grpc::ClientContext context;
+	grpc::Status status = stub_->com_grpc_obs_event(&context, request, &reply);
+
+	if (!status.ok())
+		return m_connected = false;
+
+	return true;
+}
+
 // Grpc
 //
 
