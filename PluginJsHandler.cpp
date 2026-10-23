@@ -1,5 +1,6 @@
 #include "PluginJsHandler.h"
 #include "QtGuiModifications.h"
+#include "ObsEvents.h"
 
 // Local
 #include "JavascriptApi.h"
@@ -17,6 +18,8 @@
 
 // Stl
 #include <chrono>
+#include <climits>
+#include <cmath>
 #include <functional>
 #include <codecvt>
 #include <filesystem>
@@ -290,6 +293,9 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_GET_SCALE: JS_GET_SCALE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SCENE_GET_SOURCES: JS_SCENE_GET_SOURCES(jsonParams, jsonReturnStr); break;	
 		case JavascriptApi::JS_QUERY_ALL_SOURCES: JS_QUERY_ALL_SOURCES(jsonParams, jsonReturnStr); break;		
+		case JavascriptApi::JS_OBS_SCENE_GET_ITEMS: JS_OBS_SCENE_GET_ITEMS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_SCENEITEM_REMOVE: JS_OBS_SCENEITEM_REMOVE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_SCENEITEM_UPDATE: JS_OBS_SCENEITEM_UPDATE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_GET_SOURCE_DIMENSIONS: JS_GET_SOURCE_DIMENSIONS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_GET_CANVAS_DIMENSIONS: JS_GET_CANVAS_DIMENSIONS(jsonParams,jsonReturnStr); break;
 		case JavascriptApi::JS_GET_CURRENT_SCENE: JS_GET_CURRENT_SCENE(jsonParams,jsonReturnStr); break;
@@ -3773,6 +3779,215 @@ void PluginJsHandler::JS_SCENE_GET_SOURCES(const json11::Json &params, std::stri
 		Qt::BlockingQueuedConnection);
 }
 
+static Json sceneItemToJson(obs_sceneitem_t *item);
+
+static bool collectSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *param)
+{
+	static_cast<std::vector<Json> *>(param)->push_back(sceneItemToJson(item));
+	return true;
+}
+
+static Json sceneItemToJson(obs_sceneitem_t *item)
+{
+	obs_source_t *source = obs_sceneitem_get_source(item);
+
+	vec2 pos, scale;
+	obs_sceneitem_crop crop;
+	obs_sceneitem_get_pos(item, &pos);
+	obs_sceneitem_get_scale(item, &scale);
+	obs_sceneitem_get_crop(item, &crop);
+
+	const bool isGroup = obs_sceneitem_is_group(item);
+	std::vector<Json> children;
+
+	if (isGroup)
+		obs_sceneitem_group_enum_items(item, collectSceneItem, &children);
+
+	const char *name = obs_source_get_name(source);
+	const char *uuid = obs_source_get_uuid(source);
+	const char *id = obs_source_get_id(source);
+
+	return Json::object({
+		{"id", static_cast<int>(obs_sceneitem_get_id(item))},
+		{"sourceName", name ? name : ""},
+		{"sourceUuid", uuid ? uuid : ""},
+		{"sourceId", id ? id : ""},
+		{"visible", obs_sceneitem_visible(item)},
+		{"locked", obs_sceneitem_locked(item)},
+		{"pos", Json::object({{"x", pos.x}, {"y", pos.y}})},
+		{"scale", Json::object({{"x", scale.x}, {"y", scale.y}})},
+		{"rot", obs_sceneitem_get_rot(item)},
+		{"crop", Json::object({{"left", crop.left}, {"top", crop.top}, {"right", crop.right}, {"bottom", crop.bottom}})},
+		{"isGroup", isGroup},
+		{"children", children},
+	});
+}
+
+// Item ids are container-local: pass the group's name to address a group's children. Runs on the UI thread. Fills out_error and returns null when there is no such item
+static obs_sceneitem_t *findSceneItem(const std::string &sceneName, const Json &itemId, OBSSourceAutoRelease &scene, std::string &out_error)
+{
+	scene = obs_get_source_by_name(sceneName.c_str());
+
+	if (!scene)
+		out_error = "Did not find an object with name " + sceneName;
+	else if (!obs_source_is_scene(scene) && !obs_source_is_group(scene))
+		out_error = "The object found is not a scene";
+	else if (!itemId.is_number() || itemId.number_value() != std::floor(itemId.number_value()) || itemId.number_value() < 0 || itemId.number_value() > static_cast<double>(INT_MAX))
+		out_error = "Invalid item id";
+	else if (obs_sceneitem_t *item = obs_scene_find_sceneitem_by_id(obs_group_or_scene_from_source(scene), static_cast<int64_t>(itemId.number_value())))
+		return item;
+	else
+		out_error = "Failed find the item in that scene";
+
+	return nullptr;
+}
+
+void PluginJsHandler::JS_OBS_SCENE_GET_ITEMS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const std::string scene_name = params["param2"].string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+
+			if (!scene)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+				return;
+			}
+			else if (!obs_source_is_scene(scene))
+			{
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+				return;
+			}
+
+			std::vector<Json> items;
+			obs_scene_enum_items(obs_scene_from_source(scene), collectSceneItem, &items);
+
+			out_jsonReturn = Json(Json::object({{"items", items}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_SCENEITEM_REMOVE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const std::string scene_name = params["param2"].string_value();
+	const Json itemId = params["param3"];
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, itemId, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene;
+			std::string error;
+
+			if (obs_sceneitem_t *item = findSceneItem(scene_name, itemId, scene, error))
+				obs_sceneitem_remove(item);
+			else
+				out_jsonReturn = Json(Json::object({{"error", error}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_SCENEITEM_UPDATE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const std::string scene_name = params["param2"].string_value();
+	const Json itemId = params["param3"];
+
+	std::string parseError;
+	const Json patch = Json::parse(params["param4"].string_value(), parseError);
+
+	if (!parseError.empty() || !patch.is_object())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid patch"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, itemId, patch, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene;
+			std::string error;
+			obs_sceneitem_t *item = findSceneItem(scene_name, itemId, scene, error);
+
+			if (!item)
+			{
+				out_jsonReturn = Json(Json::object({{"error", error}})).dump();
+				return;
+			}
+
+			const Json &transform = patch["transform"].is_object() ? patch["transform"] : patch;
+			const Json &position = transform["position"].is_object() ? transform["position"] : transform["pos"];
+			const Json &rotation = transform["rotation"].is_number() ? transform["rotation"] : transform["rot"];
+			const Json &scaleValue = transform["scale"];
+			const Json &cropValue = transform["crop"];
+
+			// One transform update for every key of the patch
+			obs_sceneitem_defer_update_begin(item);
+
+			if (patch["visible"].is_bool())
+				obs_sceneitem_set_visible(item, patch["visible"].bool_value());
+
+			if (patch["locked"].is_bool())
+				obs_sceneitem_set_locked(item, patch["locked"].bool_value());
+
+			if (position.is_object())
+			{
+				vec2 pos;
+				obs_sceneitem_get_pos(item, &pos);
+
+				if (position["x"].is_number())
+					pos.x = (float)position["x"].number_value();
+				if (position["y"].is_number())
+					pos.y = (float)position["y"].number_value();
+
+				obs_sceneitem_set_pos(item, &pos);
+			}
+
+			if (scaleValue.is_object())
+			{
+				vec2 scale;
+				obs_sceneitem_get_scale(item, &scale);
+
+				if (scaleValue["x"].is_number())
+					scale.x = (float)scaleValue["x"].number_value();
+				if (scaleValue["y"].is_number())
+					scale.y = (float)scaleValue["y"].number_value();
+
+				obs_sceneitem_set_scale(item, &scale);
+			}
+
+			if (rotation.is_number())
+				obs_sceneitem_set_rot(item, (float)rotation.number_value());
+
+			if (cropValue.is_object())
+			{
+				obs_sceneitem_crop crop;
+				obs_sceneitem_get_crop(item, &crop);
+
+				if (cropValue["left"].is_number())
+					crop.left = cropValue["left"].int_value();
+				if (cropValue["top"].is_number())
+					crop.top = cropValue["top"].int_value();
+				if (cropValue["right"].is_number())
+					crop.right = cropValue["right"].int_value();
+				if (cropValue["bottom"].is_number())
+					crop.bottom = cropValue["bottom"].int_value();
+
+				obs_sceneitem_set_crop(item, &crop);
+			}
+
+			obs_sceneitem_defer_update_end(item);
+		},
+		Qt::BlockingQueuedConnection);
+}
+
 void PluginJsHandler::JS_RESTART_OBS(const json11::Json& params, std::string& out_jsonReturn)
 {
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
@@ -3833,11 +4048,13 @@ void PluginJsHandler::JS_QUERY_ALL_SOURCES(const json11::Json &params, std::stri
 
 					auto rawName = obs_source_get_name(source);
 					auto rawId = obs_source_get_id(source);
+					auto rawUuid = obs_source_get_uuid(source);
 
 					json11::Json sourceInfo = json11::Json::object({
 						{"name", rawName ? rawName : ""},
 						{"type", static_cast<int>(obs_source_get_type(source))},
 						{"id", rawId ? rawId : ""},
+						{"uuid", rawUuid ? rawUuid : ""},
 					});
 
 					sourcesList->push_back(sourceInfo);
@@ -3879,7 +4096,7 @@ void PluginJsHandler::JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::
 /*static*/
 void PluginJsHandler::handle_obs_frontend_event(obs_frontend_event event, void *data)
 {
-
+	ObsEvents::onFrontendEvent(event, data);
 }
 
 /***
@@ -3919,6 +4136,7 @@ LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 void PluginJsHandler::onWmClose()
 {
 	stop();
+	ObsEvents::instance().stop();
 	QtGuiModifications::instance().stop();
 	PluginJsHandler::instance().saveSlabsBrowserDocks();
 

@@ -191,6 +191,11 @@ void BrowserClient::RemoveBrowserFromCallback(CefRefPtr<CefBrowser> browser)
 
 	std::lock_guard<std::mutex> receiverGrd(m_tabReceiverMutex);
 	m_tabReceiverDictionary.erase(browser->GetIdentifier());
+
+	std::lock_guard<std::mutex> eventGrd(m_obsEventReceiverMutex);
+
+	if (m_obsEventReceiverBrowserId == browser->GetIdentifier())
+		m_obsEventReceiverFuncId = 0;
 }
 
 CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
@@ -224,6 +229,45 @@ int32_t BrowserClient::GetReceiverFuncIdForBrowser(const int32_t browserCefId)
 	std::lock_guard<std::mutex> grd(m_tabReceiverMutex);
 	auto itr = m_tabReceiverDictionary.find(browserCefId);
 	return itr != m_tabReceiverDictionary.end() ? itr->second : 0;
+}
+
+std::mutex BrowserClient::m_obsEventReceiverMutex;
+int32_t BrowserClient::m_obsEventReceiverBrowserId = 0;
+int32_t BrowserClient::m_obsEventReceiverFuncId = 0;
+
+void BrowserClient::AssignObsEventReceiverFunc(const int32_t browserCefId, const int32_t funcid)
+{
+	std::lock_guard<std::mutex> grd(m_obsEventReceiverMutex);
+	m_obsEventReceiverBrowserId = browserCefId;
+	m_obsEventReceiverFuncId = funcid;
+}
+
+void BrowserClient::SendObsEventToReceiver(const std::string &json)
+{
+	int32_t browserId = 0;
+	int32_t funcId = 0;
+
+	{
+		std::lock_guard<std::mutex> grd(m_obsEventReceiverMutex);
+		browserId = m_obsEventReceiverBrowserId;
+		funcId = m_obsEventReceiverFuncId;
+	}
+
+	if (funcId == 0)
+		return;
+
+	const auto main = SlBrowser::instance().m_mainBrowser;
+
+	if (main == nullptr || main->browser == nullptr || main->browser->GetIdentifier() != browserId)
+		return;
+
+	CefRefPtr<CefProcessMessage> processMsg = CefProcessMessage::Create("executeCallback_NoDelete");
+	CefRefPtr<CefListValue> execute_args = processMsg->GetArgumentList();
+	execute_args->SetInt(0, funcId);
+	execute_args->SetString(1, json);
+	execute_args->SetInt(2, 0);
+
+	SendBrowserProcessMessage(main->browser, PID_RENDERER, processMsg);
 }
 
 void BrowserClient::SendMsgToReceiver(CefRefPtr<CefBrowser> target, const std::string &msg, const int32_t senderUid)
@@ -349,6 +393,9 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			break;
 		case JavascriptApi::JS_TABS_SET_TITLE:
 			retVal = JS_TABS_SET_TITLE(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_EVENTS_REGISTER_RECEIVER:
+			retVal = JS_EVENTS_REGISTER_RECEIVER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
 			break;
 		default:
 			jsonOutput = Json(Json::object({{"error", "Unknown function"}})).dump();

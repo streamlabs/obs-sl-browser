@@ -102,6 +102,9 @@ private:
 	void JS_GET_SCENEITEM_BLENDING_METHOD(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SCENE_GET_SOURCES(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_QUERY_ALL_SOURCES(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_SCENE_GET_ITEMS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_SCENEITEM_REMOVE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_SCENEITEM_UPDATE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_SOURCE_DIMENSIONS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_CLEAR_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn);

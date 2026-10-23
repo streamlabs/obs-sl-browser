@@ -120,6 +120,10 @@ public:
 		JS_TABS_QUERY_ALL,
 		JS_TABS_SET_ICON,
 		JS_TABS_SET_TITLE,
+		JS_EVENTS_REGISTER_RECEIVER,
+		JS_OBS_SCENE_GET_ITEMS,
+		JS_OBS_SCENEITEM_REMOVE,
+		JS_OBS_SCENEITEM_UPDATE,
 	};
 
 public:
@@ -416,10 +420,25 @@ public:
 			//		Example arg1 = { "source_names": [] }
 			{"obs_scene_get_sources", JS_SCENE_GET_SOURCES},
 
+			// .(@function(arg1), @sceneName)
+			//	Every item of the scene, with the id obs_sceneitem_remove and obs_sceneitem_update take. A group's items are in its 'children'
+			//		Example arg1 = { "items": [{ "id": 1, "sourceName": ".", "sourceUuid": ".", "sourceId": ".", "visible": true, "locked": false, "pos": { "x": 0.0, "y": 0.0 }, "scale": { "x": 1.0, "y": 1.0 }, "rot": 0.0, "crop": { "left": 0, "top": 0, "right": 0, "bottom": 0 }, "isGroup": false, "children": [] }] }
+			{"obs_scene_get_items", JS_OBS_SCENE_GET_ITEMS},
+
+			// .(@function(arg1), @sceneName, @int_itemId)
+			//	Removes one item from the scene. The source stays, in any other scene using it and in obs_query_all_sources
+			{"obs_sceneitem_remove", JS_OBS_SCENEITEM_REMOVE},
+
+			// .(@function(arg1), @sceneName, @int_itemId, @patch_jsonStr)
+			//	Applies the keys present in the patch together, as Streamlabs Desktop's updateSceneItem does
+			//		Example patch = { "visible": true, "locked": false, "transform": { "position": { "x": 0.0, "y": 0.0 }, "scale": { "x": 1.0, "y": 1.0 }, "rotation": 0.0, "crop": { "left": 0, "top": 0, "right": 0, "bottom": 0 } } }
+			//		Every key is optional, as is every key of transform. The flat keys 'pos', 'scale', 'rot' and 'crop' are read when 'transform' is absent
+			{"obs_sceneitem_update", JS_OBS_SCENEITEM_UPDATE},
+
 			// .(@function(arg1))
 			//	OBS_SOURCE_TYPE_INPUT = 0
 			//	OBS_SOURCE_TYPE_FILTER = 1
-			//		Example arg1 = [ { "name": ".", "type": 0, "id": "." }, ... ]
+			//		Example arg1 = [ { "name": ".", "type": 0, "id": ".", "uuid": "." }, ... ]
 			//
 			//	Tansition/scene are sources yet may not be a part of obs_enum_sources
 			//		OBS_SOURCE_TYPE_TRANSITION = 2
@@ -711,6 +730,27 @@ public:
 
 			// .(@function(arg1), uidINT, titleStr)
 			{"tabs_setTitle", JS_TABS_SET_TITLE},
+
+			/**
+			* Obs events
+			*/
+
+			// .(@function(arg1))
+			//		function is remembered internally and is not called on registration, only when something happens in obs. It is given arg 'string', a json object with an 'event' key
+			//		Registering again replaces the previous function. Only the main frame of a page can register
+			//		Nothing is sent before obs has finished loading, nor while a scene collection is switching. A switch ends with one sceneCollectionChanged, after which the page should re-read what it needs
+			//		Events arrive in order, and one that cannot be delivered is dropped
+			//		Sources and scenes carry a name, which changes on rename, and a uuid, which does not. Private sources (transitions, audio monitors, ...) produce no events
+			//			sourceCreated { "event", "name", "uuid", "id", "isGroup" }
+			//			sourceRemoved { "event", "name", "uuid", "id" }
+			//			sourceRenamed { "event", "uuid", "prevName", "newName", "id" }, scenes included
+			//			sourceUpdated { "event", "name", "uuid" }, at most 4 per second per source, the last change always reported
+			//			sceneCreated, sceneRemoved, sceneSwitched { "event", "name", "uuid" }
+			//			sceneItemAdded, sceneItemRemoved { "event", "scene", "sceneUuid", "itemId", "source", "sourceUuid" }
+			//			sceneItemUpdated { "event", "scene", "sceneUuid", "itemId", "source", "sourceUuid", "reason": "visible" | "locked" | "transform" }
+			//				transform is at most 10 per second per item, the last change always reported, and carries "pos", "scale" and "rot" as of that change
+			//			sceneCollectionChanged { "event", "name" }
+			{"events_registerReceiver", JS_EVENTS_REGISTER_RECEIVER},
 		};
 
 		return names;
@@ -761,8 +801,8 @@ public:
 		return ref.find(str) != ref.end();
 	}
 
-	// tabs_* and tab_* drive windows and the app channel, so only a page's own main frame may call them
-	static bool isMainFrameOnlyFunctionName(const std::string &str) { return str.rfind("tabs_", 0) == 0 || str.rfind("tab_", 0) == 0; }
+	// tabs_*, tab_* and events_* drive windows, the app channel and the obs event stream, so only a page's own main frame may call them
+	static bool isMainFrameOnlyFunctionName(const std::string &str) { return str.rfind("tabs_", 0) == 0 || str.rfind("tab_", 0) == 0 || str.rfind("events_", 0) == 0; }
 
 	static JSFuncs getFunctionId(const std::string &funcName)
 	{

@@ -424,6 +424,15 @@ bool BrowserClient::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS(CefRefPtr<CefBrowser
 	return false;
 }
 
+bool BrowserClient::JS_EVENTS_REGISTER_RECEIVER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
+{
+	// Replaces the previous receiver, so a reloaded page does not hear every event twice
+	AssignObsEventReceiverFunc(browser->GetIdentifier(), funcId);
+
+	// No reply: the callback is only invoked with events
+	return false;
+}
+
 bool BrowserClient::JS_TAB_SEND_STRING_TO_MAIN(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
 	if (argsWithoutFunc.size() < 1)
