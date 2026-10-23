@@ -105,6 +105,17 @@ private:
 	void JS_OBS_SCENE_GET_ITEMS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_SCENEITEM_REMOVE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_SCENEITEM_UPDATE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_GET_OUTPUT_STATE(const json11::Json &params, std::string &out_jsonReturn);
+	void replayBufferRequest(const char *what, std::string &out_jsonReturn);
+	void JS_OBS_REPLAY_BUFFER_START(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_REPLAY_BUFFER_STOP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_REPLAY_BUFFER_SAVE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_HOTKEY_REGISTER_APP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_HOTKEY_UNREGISTER_APP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_QT_GET_THEME(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_SOURCE_UPDATE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_SOURCE_GET_INFO(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_GET_AVAILABLE_SOURCE_TYPES(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_SOURCE_DIMENSIONS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_CLEAR_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn);
