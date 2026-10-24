@@ -179,7 +179,7 @@ CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
 	return nullptr;
 }
 
-bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
+bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
 {
 	const std::string &name = message->GetName();
 	CefRefPtr<CefListValue> input_args = message->GetArgumentList();
@@ -188,6 +188,20 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		return false;
 
 	int funcid = input_args->GetInt(0);
+
+	std::string frameOrigin = BrowserApp::OriginOf(frame->GetURL());
+
+	if (!frame->IsMain() || frameOrigin.empty() || frameOrigin != SlBrowser::getApiOrigin())
+	{
+		printf("Refused api call %s from %s\n", name.c_str(), frame->GetURL().ToString().c_str());
+
+		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
+		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
+		execute_args->SetInt(0, funcid);
+		execute_args->SetString(1, Json(Json::object({{"error", "Not allowed"}})).dump());
+		frame->SendProcessMessage(PID_RENDERER, msg);
+		return true;
+	}
 
 	if (JavascriptApi::isBrowserFunctionName(name))
 	{
