@@ -2386,6 +2386,7 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 	std::string programDataPath = getenv("PROGRAMDATA");
 	std::string logDir = appDataPath + "\\obs-studio\\logs";
 	std::string cefLogPath = appDataPath + "\\StreamlabsOBS_CEF_Cache\\cef.log";
+	std::string migrationLogPath = appDataPath + "\\StreamlabsOBS_CEF_Cache\\profile-migration.log";
 	std::string streamlabsServiceDir = programDataPath + "\\StreamlabsService";
 
 	try
@@ -2425,6 +2426,9 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 		// Process the CEF log file
 		if (fs::exists(cefLogPath))
 			processLogFile(cefLogPath, fullReport);
+
+		if (fs::exists(migrationLogPath))
+			processLogFile(migrationLogPath, fullReport);
 
 		// Process Streamlabs Service log and text files with size check
 		if (fs::exists(streamlabsServiceDir) && fs::is_directory(streamlabsServiceDir))
