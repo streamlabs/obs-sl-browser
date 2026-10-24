@@ -114,6 +114,12 @@ std::string SlBrowser::getDefaultUrl()
 	return "https://obs-plugin.streamlabs.com";
 }
 
+/*static*/
+std::string SlBrowser::getApiOrigin()
+{
+	return BrowserApp::OriginOf(getDefaultUrl());
+}
+
 void SlBrowser::CreateCefBrowser(int arg)
 {
 	auto &app = SlBrowser::instance();
@@ -429,7 +435,7 @@ void SlBrowser::browserInit()
 	// Set the remote debugging port
 	settings.remote_debugging_port = 9123;
 
-	m_app = new BrowserApp();
+	m_app = new BrowserApp(getApiOrigin());
 
 	CefExecuteProcess(args, m_app, nullptr);
 
