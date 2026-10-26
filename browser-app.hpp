@@ -22,6 +22,9 @@ public:
 
 	static std::string OriginOf(const std::string &url);
 
+	// Port from SL_PLUGIN_REMOTE_DEBUGGING_PORT, or 0 when unset or invalid.
+	static int getRemoteDebuggingPort();
+
 	virtual CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override;
 	virtual CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override;
 	virtual void OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_line) override;
