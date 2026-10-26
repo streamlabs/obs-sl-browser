@@ -452,14 +452,14 @@ public:
 
 			// .(@function(arg1), @sourceName, @patch_jsonStr)
 			//	Applies the keys present in the patch. Everything is checked first, so an error means nothing was changed
-			//		Example patch = { "name": ".", "muted": false, "volume": 1.0, "monitoringType": 0 }
-			//		volume is obs's multiplier, not a deflection. monitoringType 0 turns monitoring off, 1 or 2 turn it on. obs no longer tells monitor-only from monitor-and-output, so it reads back as 0 or 2
+			//		Example patch = { "name": ".", "muted": false, "volume": 1.0, "monitoringEnabled": true }
+			//		volume is obs's multiplier, not a deflection. OBS 33 monitoring is enabled/disabled, not a three-way type
 			//		A name already in use is an error. A rename is the sourceRenamed event, with no sourceCreated or sourceRemoved
 			//		Example arg1 = {} or { "error": "." }
 			{"obs_source_update", JS_OBS_SOURCE_UPDATE},
 
 			// .(@function(arg1), @sourceName)
-			//		Example arg1 = { "uuid": ".", "flags": { "audio": true, "video": false, "async": false }, "width": 0, "height": 0, "muted": false, "volume": 1.0, "monitoringType": 0 }
+			//		Example arg1 = { "uuid": ".", "flags": { "audio": true, "video": false, "async": false }, "width": 0, "height": 0, "muted": false, "volume": 1.0, "monitoringEnabled": false }
 			{"obs_source_get_info", JS_OBS_SOURCE_GET_INFO},
 
 			// .(@function(arg1))

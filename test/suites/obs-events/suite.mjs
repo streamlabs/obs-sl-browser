@@ -303,12 +303,14 @@ export default {
 		});
 
 		await r.step("obs_source_update refuses a taken name, and applies nothing when any key is bad", async () => {
+			const before = await cdp.call("obs_source_get_info", "EvRenamed");
 			const bad = [
 				["a name in use", await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ name: "EvColor1", muted: true }))],
 				["an unknown source", await cdp.call("obs_source_update", "NoSuchSource", JSON.stringify({ muted: true }))],
 				["a patch that is not json", await cdp.call("obs_source_update", "EvRenamed", "{")],
 				["a negative volume", await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ muted: true, volume: -1 }))],
-				["a monitoringType of 3", await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ muted: true, monitoringType: 3 }))],
+				["a non-boolean monitoringEnabled", await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ muted: true, monitoringEnabled: 1 }))],
+				["the removed monitoringType field", await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ muted: true, monitoringType: 2 }))],
 				["an empty name", await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ name: "" }))],
 			].filter(([, reply]) => typeof reply.error !== "string");
 
@@ -316,13 +318,13 @@ export default {
 
 			const info = await cdp.call("obs_source_get_info", "EvRenamed");
 
-			if (info.muted !== false) return `muted was applied: ${JSON.stringify(info)}`;
+			if (info.muted !== before.muted || info.monitoringEnabled !== before.monitoringEnabled) return `invalid patch was applied: ${JSON.stringify(info)}`;
 		});
 
-		await r.step("obs_source_update and obs_source_get_info: muted, volume and monitoring type", async () => {
+		await r.step("obs_source_update and obs_source_get_info: muted, volume and monitoring enabled", async () => {
 			const why = await happens(
 				async () => {
-					const reply = await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ muted: true, volume: 0.5, monitoringType: 1 }));
+					const reply = await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ muted: true, volume: 0.5, monitoringEnabled: true }));
 					if (reply.error) throw new Error(reply.error);
 				},
 				{},
@@ -335,10 +337,14 @@ export default {
 
 			if (info.error) return info.error;
 			if (info.uuid !== entry.uuid) return `uuid ${info.uuid}, listed ${entry.uuid}`;
-			if (info.muted !== true || info.volume !== 0.5 || info.monitoringType !== 2) return JSON.stringify(info);
+			if (info.muted !== true || info.volume !== 0.5 || info.monitoringEnabled !== true) return JSON.stringify(info);
 			if (info.flags?.video !== true || info.flags?.audio !== false || info.flags?.async !== false) return `flags ${JSON.stringify(info.flags)}`;
 			if (info.width !== 100 || info.height !== 100) return `size ${info.width}x${info.height}`;
 			if (typeof (await cdp.call("obs_source_get_info", "NoSuchSource")).error !== "string") return "no error for an unknown source";
+
+			const off = await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ monitoringEnabled: false }));
+			if (off.error) return off.error;
+			if ((await cdp.call("obs_source_get_info", "EvRenamed")).monitoringEnabled !== false) return "monitoring stayed enabled";
 		});
 
 		await r.step("the renamed source is removed: one sourceRemoved under the new name", async () => {

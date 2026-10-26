@@ -4162,8 +4162,10 @@ void PluginJsHandler::JS_OBS_SOURCE_UPDATE(const json11::Json &params, std::stri
 				error = "Invalid muted";
 			else if (!patch["volume"].is_null() && (!patch["volume"].is_number() || !std::isfinite(patch["volume"].number_value()) || patch["volume"].number_value() < 0 || patch["volume"].number_value() > (std::numeric_limits<float>::max)()))
 				error = "Invalid volume";
-			else if (!patch["monitoringType"].is_null() && (!patch["monitoringType"].is_number() || (patch["monitoringType"].number_value() != 0 && patch["monitoringType"].number_value() != 1 && patch["monitoringType"].number_value() != 2)))
-				error = "Invalid monitoringType";
+			else if (patch.object_items().count("monitoringType"))
+				error = "Use monitoringEnabled instead of monitoringType";
+			else if (!patch["monitoringEnabled"].is_null() && !patch["monitoringEnabled"].is_bool())
+				error = "Invalid monitoringEnabled";
 
 			if (!error.empty())
 			{
@@ -4177,8 +4179,8 @@ void PluginJsHandler::JS_OBS_SOURCE_UPDATE(const json11::Json &params, std::stri
 			if (patch["volume"].is_number())
 				obs_source_set_volume(source, static_cast<float>(patch["volume"].number_value()));
 
-			if (patch["monitoringType"].is_number())
-				obs_source_set_monitoring_enabled(source, patch["monitoringType"].int_value() != OBS_MONITORING_TYPE_NONE);
+			if (patch["monitoringEnabled"].is_bool())
+				obs_source_set_monitoring_enabled(source, patch["monitoringEnabled"].bool_value());
 
 			if (patch["name"].is_string() && patch["name"].string_value() != source_name)
 				obs_source_set_name(source, patch["name"].string_value().c_str());
@@ -4213,7 +4215,7 @@ void PluginJsHandler::JS_OBS_SOURCE_GET_INFO(const json11::Json &params, std::st
 						      {"height", static_cast<int>(obs_source_get_height(source))},
 						      {"muted", obs_source_muted(source)},
 						      {"volume", obs_source_get_volume(source)},
-						      {"monitoringType", obs_source_get_monitoring_enabled(source) ? static_cast<int>(OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT) : static_cast<int>(OBS_MONITORING_TYPE_NONE)},
+						      {"monitoringEnabled", obs_source_get_monitoring_enabled(source)},
 					      }))
 						 .dump();
 		},
