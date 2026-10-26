@@ -66,7 +66,7 @@ not your real OBS profile.`);
 }
 
 // The plugin only opens DevTools when SL_PLUGIN_REMOTE_DEBUGGING_PORT is set, so a launched OBS
-// is given a free port. An OBS that is already running has to be told about by --devtools-port.
+// is given a free port. For an already running OBS, use --devtools-port or the default 9123.
 const DEVTOOLS_PORT = opt("--devtools-port", null);
 const JSON_OUT = has("--json");
 const say = (m) => { if (!JSON_OUT) console.log(grey("  " + m)); };
@@ -130,7 +130,7 @@ async function runSuite(name) {
 
 	const workDir = join(WORK, name);
 	let server, cdp, obs;
-	let PORT = Number(DEVTOOLS_PORT);
+	let PORT;
 	const run = { suite: name, results: [], ms: 0 };
 
 	// Importing the suite and preparing its scratch directory are inside the boundary too:
@@ -139,6 +139,9 @@ async function runSuite(name) {
 	try {
 		const suite = await load(name);
 		run.description = suite.description;
+		PORT = DEVTOOLS_PORT === null
+			? (has("--no-launch") ? 9123 : await freePort())
+			: Number(DEVTOOLS_PORT);
 
 		rmSync(workDir, { recursive: true, force: true });
 		mkdirSync(workDir, { recursive: true });
