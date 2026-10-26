@@ -20,7 +20,7 @@ import { readdirSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
-import { resolveObsExe, rundirOf, launchObs, assertObsExe, devtoolsUp, sleep } from "./harness/obs.mjs";
+import { resolveObsExe, rundirOf, launchObs, assertObsExe, devtoolsUp, freePort, sleep } from "./harness/obs.mjs";
 import { seedProfile, latestLog } from "./harness/profile.mjs";
 import { Cdp, waitForPage } from "./harness/cdp.mjs";
 import { startServer } from "./harness/observer.mjs";
@@ -32,7 +32,7 @@ const REPO = resolve(HERE, "..");
 const SUITES_DIR = join(HERE, "suites");
 const WORK = join(HERE, ".work");
 
-const TAKES_VALUE = new Set(["--obs", "--config", "--observer-port", "--junit"]);
+const TAKES_VALUE = new Set(["--obs", "--config", "--observer-port", "--devtools-port", "--junit"]);
 
 const argv = process.argv.slice(2);
 const has = (f) => argv.includes(f);
@@ -51,6 +51,7 @@ then closes it again.
   --obs <path>          obs64.exe to use (default: the CI\\dev_build.ps1 rundir, or $OBS_EXE)
   --config <name>       build config for that default path (default RelWithDebInfo)
   --observer-port <n>   pin the harness web server's port (default: an ephemeral one)
+  --devtools-port <n>   DevTools port to use (default: a free one; 9123 with --no-launch)
   --no-launch           use an OBS that is already running instead of starting one
   --keep-open           leave OBS running afterwards (the last suite's, if several run)
   --force               overwrite a portable config in the rundir that we did not write
@@ -64,9 +65,9 @@ not your real OBS profile.`);
 	process.exit(0);
 }
 
-// Not configurable: SlBrowser.cpp:227 hardcodes remote_debugging_port, so a flag here could
-// only ever point the poller at a port nothing was going to open.
-const PORT = 9123;
+// The plugin only opens DevTools when SL_PLUGIN_REMOTE_DEBUGGING_PORT is set, so a launched OBS
+// is given a free port. For an already running OBS, use --devtools-port or the default 9123.
+const DEVTOOLS_PORT = opt("--devtools-port", null);
 const JSON_OUT = has("--json");
 const say = (m) => { if (!JSON_OUT) console.log(grey("  " + m)); };
 
@@ -129,6 +130,7 @@ async function runSuite(name) {
 
 	const workDir = join(WORK, name);
 	let server, cdp, obs;
+	let PORT;
 	const run = { suite: name, results: [], ms: 0 };
 
 	// Importing the suite and preparing its scratch directory are inside the boundary too:
@@ -137,6 +139,9 @@ async function runSuite(name) {
 	try {
 		const suite = await load(name);
 		run.description = suite.description;
+		PORT = DEVTOOLS_PORT === null
+			? (has("--no-launch") ? 9123 : await freePort())
+			: Number(DEVTOOLS_PORT);
 
 		rmSync(workDir, { recursive: true, force: true });
 		mkdirSync(workDir, { recursive: true });
@@ -207,7 +212,7 @@ async function runSuite(name) {
 		if (!keepOpen && obs) {
 			obs.stop();
 			// Wait for the port to actually free before the next suite's guard looks at it:
-			// the CEF child processes can outlive the taskkill by a moment and keep 9123 bound.
+			// the CEF child processes can outlive the taskkill by a moment and keep the port bound.
 			for (let i = 0; i < 40 && (await devtoolsUp(PORT)); i++) await sleep(250);
 		}
 		current = null;
