@@ -18,7 +18,7 @@
  *   init script an initScript is in place before the page runs, on every document load.
  *   allow-list  a tab only loads, and only navigates to, approved origins; icons only come from
  *               under %APPDATA%\StreamlabsOBS.
- *   iframes     a subframe gets no tabs_* or tab_*, and a tab's subframe gets no slabsTab.
+ *   iframes     a subframe of either window gets neither slabsGlobal nor slabsTab.
  *   cookies     a tab shares cookies with no one but tabs created with the same key.
  *
  * Tab pages are served from the harness, which launchObs makes an approved origin through
@@ -26,8 +26,7 @@
  * process's own refusal of calls from a browser of the wrong role is not reachable from a page,
  * so it is not covered here; only that no legitimate call is refused.
  *
- * Tab windows open on the real desktop, so nothing else should be driven interactively while
- * this runs.
+ * The harness places tab windows offscreen during the run.
  */
 
 import { writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
@@ -495,25 +494,16 @@ export default {
 			const FRAME_ORIGINS = [["same-origin", observer.origin], ["cross-origin", otherOrigin]];
 			const frameReport = (who, event) => observer.events.find((e) => e.who === who && e.event === event)?.data;
 			const addFrame = (page, who, origin) => page.evaluate(`(() => { const f = document.createElement("iframe"); f.id = ${JSON.stringify(who)}; f.src = ${JSON.stringify(`${origin}/frame.html?who=${who}`)}; document.body.appendChild(f); return true; })()`);
-			const hasTabApi = (keys) => (keys || []).some((k) => k.startsWith("tabs_") || k.startsWith("tab_"));
 
-			await r.step("an iframe in the main page has no tabs_* or tab_*, but keeps the rest of slabsGlobal", async () => {
+			await r.step("an iframe in the main page has no slabsGlobal or slabsTab", async () => {
 				for (const [label, origin] of FRAME_ORIGINS) {
 					const who = `main-${label}-frame`;
 					await addFrame(cdp, who, origin);
-					// A cross-origin iframe is in another renderer process, which no reply is routed to, so only same-origin can be called.
-					const last = label === "same-origin" ? "FRAME_CALL" : "FRAME";
-					if (!(await observer.waitFor((evs) => evs.some((e) => e.who === who && e.event === last), { timeoutMs: 30000 }))) return `${label}: the iframe never reported`;
+					if (!(await observer.waitFor((evs) => evs.some((e) => e.who === who && e.event === "FRAME"), { timeoutMs: 30000 }))) return `${label}: the iframe never reported`;
 					const f = frameReport(who, "FRAME");
 					if (f.isTop) return `${label}: the report came from the top frame`;
-					if (!f.slabsGlobalKeys) return `${label}: the iframe has no slabsGlobal at all`;
-					if (hasTabApi(f.slabsGlobalKeys)) return `${label}: the iframe has ${f.slabsGlobalKeys.filter((k) => k.startsWith("tab")).join(", ")}`;
-					if (!f.slabsGlobalKeys.includes("sl_getVersionInfo")) return `${label}: the iframe lost sl_getVersionInfo`;
+					if (f.slabsGlobalKeys) return `${label}: the iframe has slabsGlobal`;
 					if (f.slabsTabKeys) return `${label}: the iframe has slabsTab`;
-					if (label === "same-origin") {
-						const reply = frameReport(who, "FRAME_CALL").reply;
-						if (reply.__missing || reply.__timeout || isError(reply)) return `${label}: sl_getVersionInfo from the iframe answered ${JSON.stringify(reply)}`;
-					}
 					await cdp.evaluate(`document.getElementById(${JSON.stringify(who)}).remove()`);
 				}
 				// The top frame is unaffected.
@@ -1170,7 +1160,7 @@ export default {
 				if (wrong.length) return `${wrong.length} of ${spam.length} messages carried uid ${wrong[0][1]}, first ${JSON.stringify(wrong[0])}`;
 			});
 
-			await r.step("main keeps slabsGlobal, and never gets slabsTab, across a cross-origin navigation and back", async () => {
+			await r.step("main exposes slabsGlobal only on the configured origin across navigation", async () => {
 				const home = await cdp.evaluate("location.href");
 				const away = `${observer.origin.replace("127.0.0.1", "localhost")}/page.html`;
 				const onPage = (href) => until(async () => {
@@ -1180,12 +1170,13 @@ export default {
 					} catch { return null; }
 				}, { timeoutMs: 20000, everyMs: 250 });
 
-				for (const [name, href] of [["the other origin", away], ["the original page", home]]) {
+				for (const [name, href, expectApi] of [["the other origin", away, false], ["the original page", home, true]]) {
 					await cdp.evaluate(`location.href = ${JSON.stringify(href)}`).catch(() => {});
 					const s = await onPage(href);
 					if (!s) return `${name} never loaded`;
-					if (s.g !== "object") return `slabsGlobal is ${s.g} on ${name}`;
+					if (s.g !== (expectApi ? "object" : "undefined")) return `slabsGlobal is ${s.g} on ${name}`;
 					if (s.t !== "undefined") return `slabsTab is ${s.t} on ${name}`;
+					if (!expectApi) continue;
 					const names = await cdp.evaluate("__slt.names()");
 					const missing = TABS_NAMES.filter((n) => !names.includes(n));
 					if (missing.length) return `on ${name}, missing on slabsGlobal: ${missing.join(", ")}`;

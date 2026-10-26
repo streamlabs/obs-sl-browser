@@ -75,8 +75,6 @@ target_sources(
           browser-app.hpp
           browser-client.cpp
           browser-client.hpp
-          browser-scheme.cpp
-          browser-scheme.hpp
           browser-version.h
           cef-headers.hpp
           deps/json11/json11.cpp

@@ -2,8 +2,8 @@
  * A minimal Chrome DevTools Protocol client - enough to run code inside the plugin's page.
  *
  * The api under test only exists on window.slabsGlobal in the Streamlabs browser process,
- * so tests do not reimplement it: SlBrowser.cpp already sets remote_debugging_port = 9123,
- * and this attaches there. Only Runtime.evaluate is needed.
+ * so tests do not reimplement it: OBS opens the DevTools port the harness
+ * names in SL_PLUGIN_REMOTE_DEBUGGING_PORT, and this attaches there. Only Runtime.evaluate is needed.
  *
  * Node 22+ for the built-in WebSocket. No dependencies.
  */
@@ -180,8 +180,8 @@ export class Cdp {
 			await sleep(500);
 		}
 		throw new Error(
-			"window.slabsGlobal never appeared on this page. If it is not the Streamlabs " +
-			"browser page, the suite's page url is wrong.");
+			"window.slabsGlobal never appeared. The main page must be top-level on the origin " +
+			"configured by SL_PLUGIN_DEFAULT_URL when OBS started.");
 	}
 
 	/** Call a plugin api function and get its reply back parsed. See inpage.js for the shape. */

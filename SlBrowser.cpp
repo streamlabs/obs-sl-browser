@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <ctime>
 
 #include <QTimer>
 #include <QPointer>
@@ -24,7 +25,6 @@
 #include <QPushButton>
 #include <QApplication>
 
-#include "browser-scheme.hpp"
 #include "browser-version.h"
 #include "json11/json11.hpp"
 #include "cef-headers.hpp"
@@ -34,6 +34,7 @@
 #include "ConsoleToggle.h"
 
 #include <include/base/cef_callback.h>
+#include <include/base/cef_logging.h>
 #include <include/wrapper/cef_closure_task.h>
 
 #include <dxgi.h>
@@ -44,6 +45,8 @@
 
 using namespace std;
 using namespace json11;
+
+static constexpr UINT kCefInitFailedExitBase = 1000;
 
 SlBrowser::SlBrowser() {}
 
@@ -126,43 +129,15 @@ std::string SlBrowser::getDefaultUrl()
 }
 
 /*static*/
+std::string SlBrowser::getApiOrigin()
+{
+	return BrowserApp::OriginOf(getDefaultUrl());
+}
+
+/*static*/
 bool SlBrowser::isApprovedTabUrl(const std::string &url)
 {
-	CefURLParts parts;
-
-	if (!CefParseURL(url, parts))
-		return false;
-
-	if (!CefString(&parts.username).empty() || !CefString(&parts.password).empty())
-		return false;
-
-	// The parsed origin is lowercased and drops a default port, whatever the url's own spelling
-	std::string origin = CefString(&parts.origin).ToString();
-
-	while (!origin.empty() && origin.back() == '/')
-		origin.pop_back();
-
-	if (origin.empty())
-		return false;
-
-	for (const char *allowed : JavascriptApi::kTabAllowedOrigins)
-	{
-		if (origin == allowed)
-			return true;
-	}
-
-	static const std::string testOrigin = []() {
-		char buffer[MAX_PATH];
-		DWORD len = GetEnvironmentVariableA(JavascriptApi::kTestTabOriginEnvVar, buffer, MAX_PATH);
-		std::string value = (len > 0 && len < MAX_PATH) ? std::string(buffer, len) : std::string();
-
-		while (!value.empty() && value.back() == '/')
-			value.pop_back();
-
-		return value;
-	}();
-
-	return !testOrigin.empty() && origin == testOrigin;
+	return BrowserApp::isApprovedTabUrl(url);
 }
 
 // Empty when the key is empty or too long. Every byte outside [a-z0-9-] is escaped, so no two keys share a directory, even on a case-insensitive disk, and nothing can climb out of it
@@ -474,6 +449,7 @@ void SlBrowser::attachCefBrowser(std::shared_ptr<BrowserElements> browserElement
 	realHeight = static_cast<int>(realHeight * scaleFactor);
 
 	// Now set the parent of the CEF browser to the QWidget
+	window_info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
 	window_info.SetAsChild((HWND)browserElements->widget->winId(), CefRect(0, 0, realWidth, realHeight));
 
 	// Reaches the renderer's OnBrowserCreated: the role decides what it binds, and the script runs in every main-frame document of the tab
@@ -523,7 +499,199 @@ void SlBrowser::attachCefBrowser(std::shared_ptr<BrowserElements> browserElement
 	replyCreated(browserElements, "");
 }
 
-void SlBrowser::browserInit()
+#if CHROME_VERSION_BUILD > 6533
+namespace
+{
+struct ProfileMigrationLock
+{
+	HANDLE handle = CreateMutexW(nullptr, FALSE, L"Local\\StreamlabsOBS_CEF_Cache_ProfileMigration");
+	bool acquired = false;
+
+	ProfileMigrationLock()
+	{
+		if (!handle)
+			return;
+
+		DWORD wait = WaitForSingleObject(handle, 30000);
+		acquired = wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED;
+	}
+
+	~ProfileMigrationLock()
+	{
+		if (!handle)
+			return;
+
+		if (acquired)
+			ReleaseMutex(handle);
+
+		CloseHandle(handle);
+	}
+};
+
+bool needsProfileMigration(const std::filesystem::path &root, std::string *reason = nullptr)
+{
+	std::error_code ec;
+	if (std::filesystem::exists(root / "Default", ec))
+	{
+		if (reason)
+			*reason = "Default profile already exists";
+		return false;
+	}
+
+	if (!std::filesystem::exists(root / "LocalPrefs.json", ec))
+	{
+		if (reason)
+			*reason = "no LocalPrefs.json, nothing to migrate";
+		return false;
+	}
+
+	return true;
+}
+
+std::string describeError(const std::error_code &ec)
+{
+	return "error " + std::to_string(ec.value()) + ": " + ec.message();
+}
+
+constexpr size_t kMigrationLogMaxBytes = 64 * 1024;
+
+void appendMigrationLog(const std::filesystem::path &root, const std::vector<std::string> &lines)
+{
+	std::string content;
+	{
+		std::ifstream in(root / "profile-migration.log", std::ios::binary);
+		if (in)
+			content.assign(std::istreambuf_iterator<char>(in), {});
+	}
+
+	std::time_t now = std::time(nullptr);
+	std::tm tm{};
+	localtime_s(&tm, &now);
+	char stamp[32]{};
+	std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", &tm);
+
+	for (const auto &line : lines)
+		content += std::string(stamp) + " " + line + "\n";
+
+	if (content.size() > kMigrationLogMaxBytes)
+	{
+		size_t cut = content.size() - kMigrationLogMaxBytes / 2;
+		size_t nl = content.find('\n', cut);
+		content.erase(0, nl == std::string::npos ? cut : nl + 1);
+	}
+
+	std::ofstream out(root / "profile-migration.log", std::ios::binary | std::ios::trunc);
+	out << content;
+}
+} // namespace
+
+// Chrome-runtime CEF only reads the "Default" profile; copy the pre-Chrome root layout into it.
+static void migrateToChromeProfileLayout(const std::filesystem::path &root, std::vector<std::string> &log)
+{
+	namespace fs = std::filesystem;
+
+	std::vector<std::string> persistent;
+	auto record = [&](const std::string &line, bool persist) {
+		log.push_back(line);
+		if (persist)
+			persistent.push_back(line);
+	};
+	const std::string fallback = " - CEF will start with a fresh profile; the old data is still in " + root.string() + " and can be recovered manually";
+	auto fail = [&](const std::string &step, const fs::path &path, const std::error_code &ec) {
+		record("Profile migration failed at " + step + " (" + path.string() + "), " + describeError(ec) + fallback, true);
+		appendMigrationLog(root, persistent);
+	};
+
+	std::string reason;
+	if (!needsProfileMigration(root, &reason))
+	{
+		record("Profile migration not needed: " + reason, false);
+		return;
+	}
+
+	ProfileMigrationLock lock;
+	if (!lock.acquired)
+	{
+		if (lock.handle)
+			record("Profile migration skipped: lock not acquired within 30s" + fallback, true);
+		else
+			record("Profile migration skipped: could not create lock, error " + std::to_string(GetLastError()) + fallback, true);
+
+		appendMigrationLog(root, persistent);
+		return;
+	}
+
+	if (!needsProfileMigration(root, &reason))
+	{
+		record("Profile migration not needed: " + reason + " (migrated by another instance)", false);
+		return;
+	}
+
+	const std::string suffix = ".migrating-" + std::to_string(GetCurrentProcessId());
+	const fs::path state = root / "Local State";
+	const fs::path stateStaging = root / ("Local State" + suffix);
+	const fs::path profile = root / "Default";
+	const fs::path profileStaging = root / ("Default" + suffix);
+	std::error_code ec;
+
+	// Local State holds the key that decrypts the cookies, so it goes first.
+	if (!fs::exists(state, ec))
+	{
+		fs::copy_file(root / "LocalPrefs.json", stateStaging, fs::copy_options::overwrite_existing, ec);
+		if (!ec && !MoveFileExW(stateStaging.c_str(), state.c_str(), 0) && GetLastError() != ERROR_ALREADY_EXISTS)
+			ec = std::error_code(GetLastError(), std::system_category());
+
+		if (ec)
+		{
+			std::error_code cleanupEc;
+			fs::remove(stateStaging, cleanupEc);
+			fail("Local State", root / "LocalPrefs.json", ec);
+			return;
+		}
+
+		fs::remove(stateStaging, ec);
+	}
+
+	fs::remove_all(profileStaging, ec);
+	fs::create_directories(profileStaging, ec);
+
+	std::string failedStep = "creating Default staging directory";
+	fs::path failedPath = profileStaging;
+	for (const char *name : {"Local Storage", "Session Storage", "Network"})
+	{
+		if (ec)
+			break;
+
+		failedStep = name;
+		failedPath = root / name;
+		if (fs::exists(root / name, ec))
+			fs::copy(root / name, profileStaging / name, fs::copy_options::recursive, ec);
+	}
+
+	if (!ec && !MoveFileExW(profileStaging.c_str(), profile.c_str(), 0) && GetLastError() != ERROR_ALREADY_EXISTS)
+	{
+		ec = std::error_code(GetLastError(), std::system_category());
+		failedStep = "moving Default into place";
+		failedPath = profile;
+	}
+
+	if (ec)
+	{
+		std::error_code cleanupEc;
+		fs::remove_all(profileStaging, cleanupEc);
+		fail(failedStep, failedPath, ec);
+		return;
+	}
+
+	// A lost race leaves our staging dir behind; the winner's Default is already in place.
+	std::error_code cleanupEc;
+	fs::remove_all(profileStaging, cleanupEc);
+	record("Profile migration succeeded: copied Local State, Local Storage, Session Storage and Network into Default", true);
+	appendMigrationLog(root, persistent);
+}
+#endif
+
+bool SlBrowser::browserInit()
 {
 	std::string version;
 	std::string githubRevision;
@@ -585,6 +753,9 @@ void SlBrowser::browserInit()
 	{
 		cache_pathStdStr = std::string(cache_path) + "\\StreamlabsOBS_CEF_Cache";
 		CefString(&settings.cache_path) = cache_pathStdStr;
+#if CHROME_VERSION_BUILD > 6533
+		CefString(&settings.root_cache_path) = cache_pathStdStr;
+#endif
 	}
 
 	CefString(&settings.browser_subprocess_path) = path.c_str();
@@ -599,16 +770,38 @@ void SlBrowser::browserInit()
 		CrashHandler::instance().addLogfilePath(logPathFile);
 	}
 
-	// Set the remote debugging port
-	settings.remote_debugging_port = 9123;
+	if (int port = BrowserApp::getRemoteDebuggingPort())
+	{
+		settings.remote_debugging_port = port;
+		std::cout << "Remote debugging enabled on port " << port << std::endl;
+	}
+	else
+	{
+		char value[32];
+		if (GetEnvironmentVariableA("SL_PLUGIN_REMOTE_DEBUGGING_PORT", value, sizeof(value)) > 0)
+			std::cout << "Warning: SL_PLUGIN_REMOTE_DEBUGGING_PORT must be a port from 1024 to 65535; remote debugging disabled" << std::endl;
+		else
+			std::cout << "Remote debugging disabled" << std::endl;
+	}
 
-	m_app = new BrowserApp();
+	m_app = new BrowserApp(getApiOrigin());
 
 	CefExecuteProcess(args, m_app, nullptr);
-	CefInitialize(args, settings, m_app, nullptr);
 
-	// Register http://absolute/ scheme handler for older CEF builds which do not support file:// URLs
-	CefRegisterSchemeHandlerFactory("http", "absolute", new BrowserSchemeHandlerFactory());
+	std::vector<std::string> migrationLog;
+#if CHROME_VERSION_BUILD > 6533
+	if (!cache_pathStdStr.empty())
+		migrateToChromeProfileLayout(cache_pathStdStr, migrationLog);
+#endif
+
+	if (!CefInitialize(args, settings, m_app, nullptr))
+		return false;
+
+	// CEF logging is only live after CefInitialize
+	for (const auto &line : migrationLog)
+		LOG(INFO) << line;
+
+	return true;
 }
 
 std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid, const std::shared_ptr<BrowserElements> &expected)
@@ -710,7 +903,14 @@ void SlBrowser::browserShutdown()
 
 void SlBrowser::browserManagerThread()
 {
-	browserInit();
+	if (!browserInit())
+	{
+		// Distinct from abort()'s exit code 3; the plugin logs it
+		int cefExitCode = CefGetExitCode();
+		printf("sl-browser: CefInitialize failed, CEF exit code = %d\n", cefExitCode);
+		ExitProcess(kCefInitFailedExitBase + cefExitCode);
+	}
+
 	m_cefInit = true;
 	CefRunMessageLoop();
 	browserShutdown();

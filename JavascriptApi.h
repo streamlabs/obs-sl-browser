@@ -453,7 +453,7 @@ public:
 			// .(@function(arg1), @sourceName, @patch_jsonStr)
 			//	Applies the keys present in the patch. Everything is checked first, so an error means nothing was changed
 			//		Example patch = { "name": ".", "muted": false, "volume": 1.0, "monitoringEnabled": true }
-			//		volume is obs's multiplier, not a deflection. OBS 33 monitoring is enabled/disabled, not a three-way type
+			//		volume is obs's multiplier, not a deflection. OBS 33 monitoring is enabled/disabled; on OBS 32 true maps to MONITOR_AND_OUTPUT and false to NONE
 			//		A name already in use is an error. A rename is the sourceRenamed event, with no sourceCreated or sourceRemoved
 			//		Example arg1 = {} or { "error": "." }
 			{"obs_source_update", JS_OBS_SOURCE_UPDATE},

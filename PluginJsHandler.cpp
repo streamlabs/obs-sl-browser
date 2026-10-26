@@ -51,6 +51,27 @@
 
 using namespace json11;
 
+namespace
+{
+void setSourceMonitoringEnabled(obs_source_t *source, bool enabled)
+{
+#if LIBOBS_API_MAJOR_VER >= 33
+	obs_source_set_monitoring_enabled(source, enabled);
+#else
+	obs_source_set_monitoring_type(source, enabled ? OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT : OBS_MONITORING_TYPE_NONE);
+#endif
+}
+
+bool sourceMonitoringEnabled(const obs_source_t *source)
+{
+#if LIBOBS_API_MAJOR_VER >= 33
+	return obs_source_get_monitoring_enabled(source);
+#else
+	return obs_source_get_monitoring_type(source) != OBS_MONITORING_TYPE_NONE;
+#endif
+}
+} // namespace
+
 PluginJsHandler::PluginJsHandler() {}
 
 PluginJsHandler::~PluginJsHandler()
@@ -2423,6 +2444,7 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 	std::string programDataPath = getenv("PROGRAMDATA");
 	std::string logDir = appDataPath + "\\obs-studio\\logs";
 	std::string cefLogPath = appDataPath + "\\StreamlabsOBS_CEF_Cache\\cef.log";
+	std::string migrationLogPath = appDataPath + "\\StreamlabsOBS_CEF_Cache\\profile-migration.log";
 	std::string streamlabsServiceDir = programDataPath + "\\StreamlabsService";
 
 	try
@@ -2462,6 +2484,9 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 		// Process the CEF log file
 		if (fs::exists(cefLogPath))
 			processLogFile(cefLogPath, fullReport);
+
+		if (fs::exists(migrationLogPath))
+			processLogFile(migrationLogPath, fullReport);
 
 		// Process Streamlabs Service log and text files with size check
 		if (fs::exists(streamlabsServiceDir) && fs::is_directory(streamlabsServiceDir))
@@ -4179,10 +4204,8 @@ void PluginJsHandler::JS_OBS_SOURCE_UPDATE(const json11::Json &params, std::stri
 			if (patch["volume"].is_number())
 				obs_source_set_volume(source, static_cast<float>(patch["volume"].number_value()));
 
-			// OBS 32: use obs_source_set_monitoring_type with
-			// OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT (true) or OBS_MONITORING_TYPE_NONE (false).
 			if (patch["monitoringEnabled"].is_bool())
-				obs_source_set_monitoring_enabled(source, patch["monitoringEnabled"].bool_value());
+				setSourceMonitoringEnabled(source, patch["monitoringEnabled"].bool_value());
 
 			if (patch["name"].is_string() && patch["name"].string_value() != source_name)
 				obs_source_set_name(source, patch["name"].string_value().c_str());
@@ -4217,8 +4240,7 @@ void PluginJsHandler::JS_OBS_SOURCE_GET_INFO(const json11::Json &params, std::st
 						      {"height", static_cast<int>(obs_source_get_height(source))},
 						      {"muted", obs_source_muted(source)},
 						      {"volume", obs_source_get_volume(source)},
-						      // OBS 32: obs_source_get_monitoring_type(source) != OBS_MONITORING_TYPE_NONE.
-						      {"monitoringEnabled", obs_source_get_monitoring_enabled(source)},
+						      {"monitoringEnabled", sourceMonitoringEnabled(source)},
 					      }))
 						 .dump();
 		},

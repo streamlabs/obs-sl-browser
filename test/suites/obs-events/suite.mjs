@@ -76,9 +76,7 @@ export default {
 			const frame = observer.events.find((e) => e.who === "events-frame").data;
 
 			if (frame.isTop) return "the report came from the top frame";
-			if (!frame.keys) return "the iframe has no slabsGlobal at all";
-			if (frame.keys.includes("events_registerReceiver")) return "the iframe can register for events";
-			if (!frame.keys.includes("sl_getVersionInfo")) return "the iframe lost the rest of slabsGlobal";
+			if (frame.keys) return "the iframe has slabsGlobal";
 		});
 
 		const registered = await cdp.listen("slabsGlobal", "events_registerReceiver");

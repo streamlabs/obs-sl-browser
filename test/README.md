@@ -29,7 +29,7 @@ The default OBS is the rundir `CI\dev_build.ps1` produces, resolved through `obs
 ```powershell
 node test/run.mjs
 node test/run.mjs --obs "D:\some\other\rundir\bin\64bit\obs64.exe"
-node test/run.mjs --no-launch --keep-open      # against an OBS you already have open
+node test/run.mjs smoke --no-launch --observer-port 8765 --devtools-port 9123
 node test/run.mjs --json --junit results.xml   # what CI runs
 ```
 
@@ -70,10 +70,20 @@ that merely look like the suite's, because the real Streamlabs writes there too.
 
 ### One OBS at a time
 
-Only one process can hold the CEF DevTools port (9123, hardcoded in `SlBrowser.cpp`, which is
-why there is no flag for it). If something is already on it the harness refuses to start a
-second OBS, because it would have no way to tell which one it had attached to. Close it, or
-use `--no-launch` to run against it.
+The plugin only opens the CEF DevTools port when `SL_PLUGIN_REMOTE_DEBUGGING_PORT` is set. The
+harness picks a free port for each launched OBS and sets it; `--devtools-port <n>` pins one.
+Only one process can hold a port, so if something is already on it the harness refuses to start
+a second OBS, because it would have no way to tell which one it had attached to.
+
+`--no-launch` attaches to an OBS that is already running, so it needs to know that OBS's port:
+pass `--devtools-port <n>`, or it assumes 9123 (start that OBS with
+`SL_PLUGIN_REMOTE_DEBUGGING_PORT=9123`).
+It also requires `--observer-port <n>` and an OBS process started with
+`SL_PLUGIN_DEFAULT_URL` on that exact origin, for example
+`http://127.0.0.1:8765/page.html` for `--observer-port 8765`. The harness starts
+its server and navigates the existing browser to the suite page after attaching;
+it cannot change the origin that OBS allowed when it started. Suites that need a
+seeded profile or the test-only tab origin must use the normal launch mode.
 
 That is also why `--keep-open` applies to the last suite of a run: an OBS left open by an
 earlier suite would block every later one.

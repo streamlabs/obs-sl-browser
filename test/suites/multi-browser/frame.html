@@ -25,8 +25,4 @@ report('FRAME', {
 	slabsTabKeys: typeof t === 'object' ? Object.keys(t).sort() : null
 });
 
-// A function that is still there must still work from here.
-if (g && typeof g.sl_getVersionInfo === 'function') {
-	__slt.call('sl_getVersionInfo').then(function (reply) { report('FRAME_CALL', {reply: reply}); });
-}
 </script>

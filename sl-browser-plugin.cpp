@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <string>
 #include <filesystem>
+#include <atomic>
+#include <thread>
 
 #include "GrpcPlugin.h"
 #include "PluginJsHandler.h"
@@ -24,9 +26,10 @@
 #include <QToolbar>
 
 PROCESS_INFORMATION g_browserProcessInfo;
+static std::thread g_browserWatchThread;
+static std::atomic<bool> g_browserTerminating = false;
 
 OBS_DECLARE_MODULE()
-OBS_MODULE_USE_DEFAULT_LOCALE("sl-browser-plugin", "en-US")
 MODULE_EXPORT const char *obs_module_description(void)
 {
 	return "Streamlabs";
@@ -215,6 +218,15 @@ void obs_module_post_load(void)
 		return;
 	}
 
+	g_browserWatchThread = std::thread([]() {
+		WaitForSingleObject(g_browserProcessInfo.hProcess, INFINITE);
+
+		DWORD exitCode = 0;
+		GetExitCodeProcess(g_browserProcessInfo.hProcess, &exitCode);
+		if (!g_browserTerminating)
+			blog(LOG_ERROR, "[SL_PLUGIN]: sl-browser process exited unexpectedly, exit code = %lu (1000 + N = CefInitialize failed with CEF exit code N)", exitCode);
+	});
+
 	// Streamlabs button to toggle visibility
 	QMainWindow * window = (QMainWindow *)obs_frontend_get_main_window();
 	QAction *action = new QAction("Streamlabs", window);
@@ -233,7 +245,10 @@ void obs_module_post_load(void)
 void obs_module_unload(void)
 {
 	// Terminates the browser process (it shouldn't exist)
+	g_browserTerminating = true;
 	::TerminateProcess(g_browserProcessInfo.hProcess, EXIT_SUCCESS);
+	if (g_browserWatchThread.joinable())
+		g_browserWatchThread.join();
 	::CloseHandle(g_browserProcessInfo.hProcess);
 	::CloseHandle(g_browserProcessInfo.hThread);
 

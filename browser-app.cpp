@@ -7,7 +7,27 @@
 
 #include <windows.h>
 
+#include <algorithm>
+
 using namespace json11;
+
+/*static*/
+int BrowserApp::getRemoteDebuggingPort()
+{
+	char buffer[32];
+	DWORD len = GetEnvironmentVariableA("SL_PLUGIN_REMOTE_DEBUGGING_PORT", buffer, sizeof(buffer));
+
+	if (len == 0 || len >= sizeof(buffer))
+		return 0;
+
+	char *end = nullptr;
+	long port = strtol(buffer, &end, 10);
+
+	if (*end != '\0' || port < 1024 || port > 65535)
+		return 0;
+
+	return static_cast<int>(port);
+}
 
 CefRefPtr<CefRenderProcessHandler> BrowserApp::GetRenderProcessHandler()
 {
@@ -25,6 +45,71 @@ void BrowserApp::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_li
 {
 	std::string pid = std::to_string(GetCurrentProcessId());
 	command_line->AppendSwitchWithValue("parent_pid", pid);
+
+	if (!m_apiOrigin.empty())
+		command_line->AppendSwitchWithValue("api_origin", m_apiOrigin);
+}
+
+std::string BrowserApp::OriginOf(const std::string &url)
+{
+	CefURLParts parts;
+	if (!CefParseURL(url, parts))
+		return {};
+
+	std::string scheme = CefString(&parts.scheme).ToString();
+	std::string host = CefString(&parts.host).ToString();
+	std::string port = CefString(&parts.port).ToString();
+
+	if (scheme.empty() || host.empty())
+		return {};
+
+	std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+	std::transform(host.begin(), host.end(), host.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+	if ((scheme == "http" && port == "80") || (scheme == "https" && port == "443"))
+		port.clear();
+
+	return scheme + "://" + host + (port.empty() ? "" : ":" + port);
+}
+
+/*static*/
+bool BrowserApp::isApprovedTabUrl(const std::string &url)
+{
+	CefURLParts parts;
+
+	if (!CefParseURL(url, parts))
+		return false;
+
+	if (!CefString(&parts.username).empty() || !CefString(&parts.password).empty())
+		return false;
+
+	// The parsed origin is lowercased and drops a default port, whatever the url's own spelling
+	std::string origin = CefString(&parts.origin).ToString();
+
+	while (!origin.empty() && origin.back() == '/')
+		origin.pop_back();
+
+	if (origin.empty())
+		return false;
+
+	for (const char *allowed : JavascriptApi::kTabAllowedOrigins)
+	{
+		if (origin == allowed)
+			return true;
+	}
+
+	static const std::string testOrigin = []() {
+		char buffer[MAX_PATH];
+		DWORD len = GetEnvironmentVariableA(JavascriptApi::kTestTabOriginEnvVar, buffer, MAX_PATH);
+		std::string value = (len > 0 && len < MAX_PATH) ? std::string(buffer, len) : std::string();
+
+		while (!value.empty() && value.back() == '/')
+			value.pop_back();
+
+		return value;
+	}();
+
+	return !testOrigin.empty() && origin == testOrigin;
 }
 
 void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefCommandLine> command_line)
@@ -37,20 +122,26 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 		command_line->AppendSwitch("disable-gpu-compositing");
 	}
 
-	if (command_line->HasSwitch("disable-features"))
-	{
-		// Don't override existing, as this can break OSR
-		std::string disableFeatures = command_line->GetSwitchValue("disable-features");
-		disableFeatures += ",HardwareMediaKeyHandling";
-		command_line->AppendSwitchWithValue("disable-features", disableFeatures);
-	}
-	else
-	{
-		command_line->AppendSwitchWithValue("disable-features", "HardwareMediaKeyHandling");
-	}
+	const char *disableFeaturesDefault = "CalculateNativeWinOcclusion,HardwareMediaKeyHandling,LiveCaption,MediaRouter,StorageNotificationService,WebBluetooth,EnableWindowsGamingInputDataFetcher";
+
+	// Don't override existing, as this can break OSR
+	std::string disableFeatures = command_line->GetSwitchValue("disable-features");
+	disableFeatures += (disableFeatures.empty() ? "" : ",") + std::string(disableFeaturesDefault);
+	command_line->AppendSwitchWithValue("disable-features", disableFeatures);
+
+	std::string disableBlinkFeatures = command_line->GetSwitchValue("disable-blink-features");
+	disableBlinkFeatures += (disableBlinkFeatures.empty() ? "" : ",") + std::string("DocumentPictureInPictureAPI");
+	command_line->AppendSwitchWithValue("disable-blink-features", disableBlinkFeatures);
+
+	command_line->AppendSwitch("disable-extensions");
+	command_line->AppendSwitch("hide-crash-restore-bubble");
+	command_line->AppendSwitch("do-not-de-elevate");
 
 	command_line->AppendSwitchWithValue("autoplay-policy", "no-user-gesture-required");
-	command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:9123");
+
+	// Read from the environment here because this also runs in the helper processes, which inherit it.
+	if (int port = getRemoteDebuggingPort())
+		command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:" + std::to_string(port));
 }
 
 BrowserApp::Role BrowserApp::roleOf(CefRefPtr<CefBrowser> browser)
@@ -58,6 +149,12 @@ BrowserApp::Role BrowserApp::roleOf(CefRefPtr<CefBrowser> browser)
 	std::lock_guard<std::mutex> grd(m_browserInfoMutex);
 	auto itr = m_browserInfos.find(browser->GetIdentifier());
 	return itr != m_browserInfos.end() ? itr->second.role : Role::None;
+}
+
+bool BrowserApp::OnAlreadyRunningAppRelaunch(CefRefPtr<CefCommandLine>, const CefString &)
+{
+	// Another instance shares our cache; don't let CEF open a stray default window.
+	return true;
 }
 
 void BrowserApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionaryValue> extra_info)
@@ -94,10 +191,17 @@ void BrowserApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
 
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
+	if (!frame->IsMain())
+		return;
+
 	const Role role = roleOf(browser);
 
 	if (role == Role::Main)
 	{
+		const std::string allowedOrigin = CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("api_origin");
+		if (allowedOrigin.empty() || OriginOf(frame->GetURL()) != allowedOrigin)
+			return;
+
 		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
 		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
 		globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
@@ -107,22 +211,14 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
 
 		for (auto &itr : JavascriptApi::getBrowserFunctionNames())
-		{
-			if (!frame->IsMain() && JavascriptApi::isMainFrameOnlyFunctionName(itr.first))
-				continue;
-
 			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
-		}
 
 		// A page that closes its own window leaves main half closed. Hiding it goes through browser_setHiddenState
-		if (frame->IsMain())
-		{
-			CefRefPtr<CefV8Value> retval;
-			CefRefPtr<CefV8Exception> exception;
-			context->Eval("window.close = function close() {};", frame->GetURL(), 0, retval, exception);
-		}
+		CefRefPtr<CefV8Value> retval;
+		CefRefPtr<CefV8Exception> exception;
+		context->Eval("window.close = function close() {};", frame->GetURL(), 0, retval, exception);
 	}
-	else if (role == Role::Tab && frame->IsMain())
+	else if (role == Role::Tab && isApprovedTabUrl(frame->GetURL()))
 	{
 		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
 		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
@@ -197,7 +293,9 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 	const std::string funcName = name.ToString();
 	const Role role = roleOf(browser);
 	const bool allowedForBrowser = role == Role::Main ? (JavascriptApi::isPluginFunctionName(funcName) || JavascriptApi::isBrowserFunctionName(funcName)) : (role == Role::Tab && JavascriptApi::isBrowserTabFunctionName(funcName));
-	const bool allowed = allowedForBrowser && (current->GetFrame()->IsMain() || !JavascriptApi::isMainFrameOnlyFunctionName(funcName));
+	const std::string allowedOrigin = CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("api_origin");
+	const bool allowedForOrigin = role == Role::Main ? (!allowedOrigin.empty() && OriginOf(current->GetFrame()->GetURL()) == allowedOrigin) : (role == Role::Tab && isApprovedTabUrl(current->GetFrame()->GetURL()));
+	const bool allowed = allowedForBrowser && current->GetFrame()->IsMain() && allowedForOrigin;
 
 	if (allowed)
 	{
