@@ -21,7 +21,6 @@
 #include <QPushButton>
 #include <QApplication>
 
-#include "browser-scheme.hpp"
 #include "browser-version.h"
 #include "json11/json11.hpp"
 #include "cef-headers.hpp"
@@ -450,9 +449,6 @@ void SlBrowser::browserInit()
 	// CEF logging is only live after CefInitialize
 	for (const auto &line : migrationLog)
 		LOG(INFO) << line;
-
-	// Register http://absolute/ scheme handler for older CEF builds which do not support file:// URLs
-	CefRegisterSchemeHandlerFactory("http", "absolute", new BrowserSchemeHandlerFactory());
 }
 
 void SlBrowser::browserShutdown()
