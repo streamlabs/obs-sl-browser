@@ -137,6 +137,7 @@ void SlBrowser::CreateCefBrowser(int arg)
 	realHeight = static_cast<int>(realHeight * scaleFactor);
 
 	// Now set the parent of the CEF browser to the QWidget
+	window_info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
 	window_info.SetAsChild((HWND)app.m_widget->winId(), CefRect(0, 0, realWidth, realHeight));
 	app.m_browser = CefBrowserHost::CreateBrowserSync(window_info, app.browserClient.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), nullptr);
 
