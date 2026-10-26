@@ -21,7 +21,6 @@
 #include <QPushButton>
 #include <QApplication>
 
-#include "browser-scheme.hpp"
 #include "browser-version.h"
 #include "json11/json11.hpp"
 #include "cef-headers.hpp"
@@ -42,6 +41,8 @@
 
 using namespace std;
 using namespace json11;
+
+static constexpr UINT kCefInitFailedExitBase = 1000;
 
 SlBrowser::SlBrowser() {}
 
@@ -138,6 +139,7 @@ void SlBrowser::CreateCefBrowser(int arg)
 	realHeight = static_cast<int>(realHeight * scaleFactor);
 
 	// Now set the parent of the CEF browser to the QWidget
+	window_info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
 	window_info.SetAsChild((HWND)app.m_widget->winId(), CefRect(0, 0, realWidth, realHeight));
 	app.m_browser = CefBrowserHost::CreateBrowserSync(window_info, app.browserClient.get(), url, browser_settings, CefRefPtr<CefDictionaryValue>(), nullptr);
 
@@ -355,7 +357,7 @@ static void migrateToChromeProfileLayout(const std::filesystem::path &root, std:
 }
 #endif
 
-void SlBrowser::browserInit()
+bool SlBrowser::browserInit()
 {
 	std::string version;
 	std::string githubRevision;
@@ -432,8 +434,19 @@ void SlBrowser::browserInit()
 		CrashHandler::instance().addLogfilePath(logPathFile);
 	}
 
-	// Set the remote debugging port
-	settings.remote_debugging_port = 9123;
+	if (int port = BrowserApp::getRemoteDebuggingPort())
+	{
+		settings.remote_debugging_port = port;
+		std::cout << "Remote debugging enabled on port " << port << std::endl;
+	}
+	else
+	{
+		char value[32];
+		if (GetEnvironmentVariableA("SL_PLUGIN_REMOTE_DEBUGGING_PORT", value, sizeof(value)) > 0)
+			std::cout << "Warning: SL_PLUGIN_REMOTE_DEBUGGING_PORT must be a port from 1024 to 65535; remote debugging disabled" << std::endl;
+		else
+			std::cout << "Remote debugging disabled" << std::endl;
+	}
 
 	m_app = new BrowserApp(getApiOrigin());
 
@@ -445,14 +458,14 @@ void SlBrowser::browserInit()
 		migrateToChromeProfileLayout(cache_pathStdStr, migrationLog);
 #endif
 
-	CefInitialize(args, settings, m_app, nullptr);
+	if (!CefInitialize(args, settings, m_app, nullptr))
+		return false;
 
 	// CEF logging is only live after CefInitialize
 	for (const auto &line : migrationLog)
 		LOG(INFO) << line;
 
-	// Register http://absolute/ scheme handler for older CEF builds which do not support file:// URLs
-	CefRegisterSchemeHandlerFactory("http", "absolute", new BrowserSchemeHandlerFactory());
+	return true;
 }
 
 void SlBrowser::browserShutdown()
@@ -464,7 +477,14 @@ void SlBrowser::browserShutdown()
 
 void SlBrowser::browserManagerThread()
 {
-	browserInit();
+	if (!browserInit())
+	{
+		// Distinct from abort()'s exit code 3; the plugin logs it
+		int cefExitCode = CefGetExitCode();
+		printf("sl-browser: CefInitialize failed, CEF exit code = %d\n", cefExitCode);
+		ExitProcess(kCefInitFailedExitBase + cefExitCode);
+	}
+
 	m_cefInit = true;
 	CefRunMessageLoop();
 	browserShutdown();
