@@ -64,20 +64,29 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 		command_line->AppendSwitch("disable-gpu-compositing");
 	}
 
-	if (command_line->HasSwitch("disable-features"))
-	{
-		// Don't override existing, as this can break OSR
-		std::string disableFeatures = command_line->GetSwitchValue("disable-features");
-		disableFeatures += ",HardwareMediaKeyHandling";
-		command_line->AppendSwitchWithValue("disable-features", disableFeatures);
-	}
-	else
-	{
-		command_line->AppendSwitchWithValue("disable-features", "HardwareMediaKeyHandling");
-	}
+	const char *disableFeaturesDefault = "CalculateNativeWinOcclusion,HardwareMediaKeyHandling,LiveCaption,MediaRouter,StorageNotificationService,WebBluetooth,EnableWindowsGamingInputDataFetcher";
+
+	// Don't override existing, as this can break OSR
+	std::string disableFeatures = command_line->GetSwitchValue("disable-features");
+	disableFeatures += (disableFeatures.empty() ? "" : ",") + std::string(disableFeaturesDefault);
+	command_line->AppendSwitchWithValue("disable-features", disableFeatures);
+
+	std::string disableBlinkFeatures = command_line->GetSwitchValue("disable-blink-features");
+	disableBlinkFeatures += (disableBlinkFeatures.empty() ? "" : ",") + std::string("DocumentPictureInPictureAPI");
+	command_line->AppendSwitchWithValue("disable-blink-features", disableBlinkFeatures);
+
+	command_line->AppendSwitch("disable-extensions");
+	command_line->AppendSwitch("hide-crash-restore-bubble");
+	command_line->AppendSwitch("do-not-de-elevate");
 
 	command_line->AppendSwitchWithValue("autoplay-policy", "no-user-gesture-required");
 	command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:9123");
+}
+
+bool BrowserApp::OnAlreadyRunningAppRelaunch(CefRefPtr<CefCommandLine>, const CefString &)
+{
+	// Another instance shares our cache; don't let CEF open a stray default window.
+	return true;
 }
 
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
