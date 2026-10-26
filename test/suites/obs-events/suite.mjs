@@ -457,7 +457,7 @@ export default {
 		const binding = (key) => JSON.stringify([{ key }]);
 
 		await r.step("hotkeys: a registered key is one hotkey down and one up, with the app and name", async () => {
-			const reply = await cdp.call("obs_hotkey_registerApp", "evapp", "toggle", "Ev toggle", binding("OBS_KEY_F24"));
+			const reply = await cdp.call("obs_hotkey_registerForApp", "evapp", "toggle", "Ev toggle", binding("OBS_KEY_F24"));
 
 			if (typeof reply.id !== "number") return JSON.stringify(reply);
 
@@ -474,7 +474,7 @@ export default {
 		});
 
 		await r.step("hotkeys: registering the same app and name again replaces it", async () => {
-			const reply = await cdp.call("obs_hotkey_registerApp", "evapp", "toggle", "Ev toggle", binding("OBS_KEY_F24"));
+			const reply = await cdp.call("obs_hotkey_registerForApp", "evapp", "toggle", "Ev toggle", binding("OBS_KEY_F24"));
 
 			if (typeof reply.id !== "number") return JSON.stringify(reply);
 
@@ -486,22 +486,22 @@ export default {
 
 		await r.step("hotkeys: a bad binding is an error and registers nothing", async () => {
 			const bad = [
-				["an unknown key", await cdp.call("obs_hotkey_registerApp", "evapp", "bad", "Ev bad", binding("OBS_KEY_NOT_A_KEY"))],
-				["no key", await cdp.call("obs_hotkey_registerApp", "evapp", "bad", "Ev bad", JSON.stringify([{ shift: true }]))],
-				["bindings that are not an array", await cdp.call("obs_hotkey_registerApp", "evapp", "bad", "Ev bad", "{}")],
-				["bindings that are not json", await cdp.call("obs_hotkey_registerApp", "evapp", "bad", "Ev bad", "[")],
-				["no name", await cdp.call("obs_hotkey_registerApp", "evapp", "", "Ev bad", "[]")],
+				["an unknown key", await cdp.call("obs_hotkey_registerForApp", "evapp", "bad", "Ev bad", binding("OBS_KEY_NOT_A_KEY"))],
+				["no key", await cdp.call("obs_hotkey_registerForApp", "evapp", "bad", "Ev bad", JSON.stringify([{ shift: true }]))],
+				["bindings that are not an array", await cdp.call("obs_hotkey_registerForApp", "evapp", "bad", "Ev bad", "{}")],
+				["bindings that are not json", await cdp.call("obs_hotkey_registerForApp", "evapp", "bad", "Ev bad", "[")],
+				["no name", await cdp.call("obs_hotkey_registerForApp", "evapp", "", "Ev bad", "[]")],
 			].filter(([, reply]) => typeof reply.error !== "string");
 
 			if (bad.length) return `no error for ${bad.map(([what, reply]) => `${what} (${JSON.stringify(reply)})`).join(", ")}`;
 
-			const removed = await cdp.call("obs_hotkey_unregisterApp", "evapp", "bad");
+			const removed = await cdp.call("obs_hotkey_unregisterForApp", "evapp", "bad");
 
 			if (removed.removed !== 0) return `"bad" was registered: ${JSON.stringify(removed)}`;
 		});
 
 		await r.step("hotkeys: unregistering one name stops it, and says how many it removed", async () => {
-			const removed = await cdp.call("obs_hotkey_unregisterApp", "evapp", "toggle");
+			const removed = await cdp.call("obs_hotkey_unregisterForApp", "evapp", "toggle");
 
 			if (removed.removed !== 1) return JSON.stringify(removed);
 
@@ -509,14 +509,14 @@ export default {
 			const why = await happens(async () => (pressed = press(F24)), {});
 
 			if (pressed || why) return pressed || why;
-			if ((await cdp.call("obs_hotkey_unregisterApp", "evapp", "toggle")).removed !== 0) return "the second unregister removed something";
+			if ((await cdp.call("obs_hotkey_unregisterForApp", "evapp", "toggle")).removed !== 0) return "the second unregister removed something";
 		});
 
 		await r.step("hotkeys: unregistering an app without a name removes all of its hotkeys and no other app's", async () => {
 			const made = [
-				await cdp.call("obs_hotkey_registerApp", "evapp", "one", "Ev one", binding("OBS_KEY_F24")),
-				await cdp.call("obs_hotkey_registerApp", "evapp", "two", "Ev two", binding("OBS_KEY_F24")),
-				await cdp.call("obs_hotkey_registerApp", "otherapp", "other", "Other", binding("OBS_KEY_F23")),
+				await cdp.call("obs_hotkey_registerForApp", "evapp", "one", "Ev one", binding("OBS_KEY_F24")),
+				await cdp.call("obs_hotkey_registerForApp", "evapp", "two", "Ev two", binding("OBS_KEY_F24")),
+				await cdp.call("obs_hotkey_registerForApp", "otherapp", "other", "Other", binding("OBS_KEY_F23")),
 			];
 
 			if (made.some((m) => typeof m.id !== "number")) return JSON.stringify(made);
@@ -529,7 +529,7 @@ export default {
 
 			if ((await events()).filter((e) => e.name === "one").length !== 2 || (await events()).filter((e) => e.name === "two").length !== 2) return `events ${JSON.stringify(await events())}`;
 
-			const removed = await cdp.call("obs_hotkey_unregisterApp", "evapp");
+			const removed = await cdp.call("obs_hotkey_unregisterForApp", "evapp");
 
 			if (removed.removed !== 2) return JSON.stringify(removed);
 
@@ -544,11 +544,11 @@ export default {
 		});
 
 		await r.step("hotkeys: unregistering twice removes nothing the second time, and an empty appKey is an error", async () => {
-			const reply = await cdp.call("obs_hotkey_unregisterApp", "otherapp");
+			const reply = await cdp.call("obs_hotkey_unregisterForApp", "otherapp");
 
 			if (reply.removed !== 1) return `otherapp ${JSON.stringify(reply)}`;
-			if ((await cdp.call("obs_hotkey_unregisterApp", "otherapp")).removed !== 0) return "removed twice";
-			if (typeof (await cdp.call("obs_hotkey_unregisterApp", "")).error !== "string") return "no error for an empty appKey";
+			if ((await cdp.call("obs_hotkey_unregisterForApp", "otherapp")).removed !== 0) return "removed twice";
+			if (typeof (await cdp.call("obs_hotkey_unregisterForApp", "")).error !== "string") return "no error for an empty appKey";
 		});
 
 		await r.step("obs_source_set_settings_json: one sourceUpdated", async () => {

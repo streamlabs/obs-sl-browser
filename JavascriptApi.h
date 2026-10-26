@@ -128,8 +128,8 @@ public:
 		JS_OBS_REPLAY_BUFFER_START,
 		JS_OBS_REPLAY_BUFFER_STOP,
 		JS_OBS_REPLAY_BUFFER_SAVE,
-		JS_OBS_HOTKEY_REGISTER_APP,
-		JS_OBS_HOTKEY_UNREGISTER_APP,
+		JS_OBS_HOTKEY_REGISTER_FOR_APP,
+		JS_OBS_HOTKEY_UNREGISTER_FOR_APP,
 		JS_QT_GET_THEME,
 		JS_OBS_SOURCE_UPDATE,
 		JS_OBS_SOURCE_GET_INFO,
@@ -492,13 +492,13 @@ public:
 			//		Bindings are the defaults, [] for none. A key obs does not know is an error and nothing is made
 			//		The same appKey and name again replaces the earlier one. A rebind made in Settings is not kept across obs restarts, so register on every start
 			//		Example arg1 = { "id": 1 } or { "error": "." }
-			{"obs_hotkey_registerApp", JS_OBS_HOTKEY_REGISTER_APP},
+			{"obs_hotkey_registerForApp", JS_OBS_HOTKEY_REGISTER_FOR_APP},
 
 			// .(@function(arg1), @appKey, @name)
 			//	Removes that hotkey of the app. Without a name, removes all of the app's hotkeys, which an app should do when it is reloaded or closed
 			//		Hotkeys are not removed when the app's window is destroyed. The page that registered them has to
 			//		Example arg1 = { "removed": 1 }, 0 when there was none
-			{"obs_hotkey_unregisterApp", JS_OBS_HOTKEY_UNREGISTER_APP},
+			{"obs_hotkey_unregisterForApp", JS_OBS_HOTKEY_UNREGISTER_FOR_APP},
 
 			// .(@function(arg1))
 			//	OBS_SOURCE_TYPE_INPUT = 0
@@ -821,7 +821,7 @@ public:
 			//				Desktop's live / ending / offline, recording / wrote, and running / offline are these, mapped by the page
 			//			replayBufferSaved { "event", "path" }
 			//			themeChanged { "event", "isDark", "id" }, as qt_getTheme
-			//			hotkey { "event", "appKey", "name", "pressed" }, for a key made with obs_hotkey_registerApp. One with pressed true, one with pressed false
+			//			hotkey { "event", "appKey", "name", "pressed" }, for a key made with obs_hotkey_registerForApp. One with pressed true, one with pressed false
 			{"events_registerReceiver", JS_EVENTS_REGISTER_RECEIVER},
 		};
 

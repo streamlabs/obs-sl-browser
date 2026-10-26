@@ -309,11 +309,11 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_OBS_REPLAY_BUFFER_SAVE:
 			JS_OBS_REPLAY_BUFFER_SAVE(jsonParams, jsonReturnStr);
 			break;
-		case JavascriptApi::JS_OBS_HOTKEY_REGISTER_APP:
-			JS_OBS_HOTKEY_REGISTER_APP(jsonParams, jsonReturnStr);
+		case JavascriptApi::JS_OBS_HOTKEY_REGISTER_FOR_APP:
+			JS_OBS_HOTKEY_REGISTER_FOR_APP(jsonParams, jsonReturnStr);
 			break;
-		case JavascriptApi::JS_OBS_HOTKEY_UNREGISTER_APP:
-			JS_OBS_HOTKEY_UNREGISTER_APP(jsonParams, jsonReturnStr);
+		case JavascriptApi::JS_OBS_HOTKEY_UNREGISTER_FOR_APP:
+			JS_OBS_HOTKEY_UNREGISTER_FOR_APP(jsonParams, jsonReturnStr);
 			break;
 		case JavascriptApi::JS_QT_GET_THEME:
 			JS_QT_GET_THEME(jsonParams, jsonReturnStr);
@@ -4081,7 +4081,7 @@ void PluginJsHandler::JS_OBS_REPLAY_BUFFER_SAVE(const json11::Json &params, std:
 	replayBufferRequest("save", out_jsonReturn);
 }
 
-void PluginJsHandler::JS_OBS_HOTKEY_REGISTER_APP(const json11::Json &params, std::string &out_jsonReturn)
+void PluginJsHandler::JS_OBS_HOTKEY_REGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn)
 {
 	const std::string app_key = params["param2"].string_value();
 	const std::string name = params["param3"].string_value();
@@ -4101,7 +4101,7 @@ void PluginJsHandler::JS_OBS_HOTKEY_REGISTER_APP(const json11::Json &params, std
 	QMetaObject::invokeMethod(mainWindow, [app_key, name, description, bindings, &out_jsonReturn]() { out_jsonReturn = ObsEvents::instance().registerAppHotkey(app_key, name, description, bindings); }, Qt::BlockingQueuedConnection);
 }
 
-void PluginJsHandler::JS_OBS_HOTKEY_UNREGISTER_APP(const json11::Json &params, std::string &out_jsonReturn)
+void PluginJsHandler::JS_OBS_HOTKEY_UNREGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn)
 {
 	const std::string app_key = params["param2"].string_value();
 	const bool hasName = params["param3"].is_string();

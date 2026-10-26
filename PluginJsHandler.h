@@ -110,8 +110,8 @@ private:
 	void JS_OBS_REPLAY_BUFFER_START(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_REPLAY_BUFFER_STOP(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_REPLAY_BUFFER_SAVE(const json11::Json &params, std::string &out_jsonReturn);
-	void JS_OBS_HOTKEY_REGISTER_APP(const json11::Json &params, std::string &out_jsonReturn);
-	void JS_OBS_HOTKEY_UNREGISTER_APP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_HOTKEY_REGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_HOTKEY_UNREGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_QT_GET_THEME(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_SOURCE_UPDATE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_SOURCE_GET_INFO(const json11::Json &params, std::string &out_jsonReturn);
