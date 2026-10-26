@@ -42,6 +42,8 @@
 using namespace std;
 using namespace json11;
 
+static constexpr UINT kCefInitFailedExitBase = 1000;
+
 SlBrowser::SlBrowser() {}
 
 SlBrowser::~SlBrowser() {}
@@ -355,7 +357,7 @@ static void migrateToChromeProfileLayout(const std::filesystem::path &root, std:
 }
 #endif
 
-void SlBrowser::browserInit()
+bool SlBrowser::browserInit()
 {
 	std::string version;
 	std::string githubRevision;
@@ -445,11 +447,14 @@ void SlBrowser::browserInit()
 		migrateToChromeProfileLayout(cache_pathStdStr, migrationLog);
 #endif
 
-	CefInitialize(args, settings, m_app, nullptr);
+	if (!CefInitialize(args, settings, m_app, nullptr))
+		return false;
 
 	// CEF logging is only live after CefInitialize
 	for (const auto &line : migrationLog)
 		LOG(INFO) << line;
+
+	return true;
 }
 
 void SlBrowser::browserShutdown()
@@ -461,7 +466,14 @@ void SlBrowser::browserShutdown()
 
 void SlBrowser::browserManagerThread()
 {
-	browserInit();
+	if (!browserInit())
+	{
+		// Distinct from abort()'s exit code 3; the plugin logs it
+		int cefExitCode = CefGetExitCode();
+		printf("sl-browser: CefInitialize failed, CEF exit code = %d\n", cefExitCode);
+		ExitProcess(kCefInitFailedExitBase + cefExitCode);
+	}
+
 	m_cefInit = true;
 	CefRunMessageLoop();
 	browserShutdown();
