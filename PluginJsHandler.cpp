@@ -4179,6 +4179,8 @@ void PluginJsHandler::JS_OBS_SOURCE_UPDATE(const json11::Json &params, std::stri
 			if (patch["volume"].is_number())
 				obs_source_set_volume(source, static_cast<float>(patch["volume"].number_value()));
 
+			// OBS 32: use obs_source_set_monitoring_type with
+			// OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT (true) or OBS_MONITORING_TYPE_NONE (false).
 			if (patch["monitoringEnabled"].is_bool())
 				obs_source_set_monitoring_enabled(source, patch["monitoringEnabled"].bool_value());
 
@@ -4215,6 +4217,7 @@ void PluginJsHandler::JS_OBS_SOURCE_GET_INFO(const json11::Json &params, std::st
 						      {"height", static_cast<int>(obs_source_get_height(source))},
 						      {"muted", obs_source_muted(source)},
 						      {"volume", obs_source_get_volume(source)},
+						      // OBS 32: obs_source_get_monitoring_type(source) != OBS_MONITORING_TYPE_NONE.
 						      {"monitoringEnabled", obs_source_get_monitoring_enabled(source)},
 					      }))
 						 .dump();
