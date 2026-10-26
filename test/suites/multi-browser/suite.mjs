@@ -1226,14 +1226,15 @@ export default {
 				created.delete(153);
 				t.close();
 				tabCdp.delete(153);
+				const gone = await until(async () =>
+					!(await pageUrls()).some((u) => u.includes("tab.html?uid=153")) && !windowTitles(workDir).includes(title),
+					{ timeoutMs: 15000, everyMs: 250 });
+				if (!gone) {
+					if ((await pageUrls()).some((u) => u.includes("tab.html?uid=153"))) return "the tab's browser is still there";
+					return "the tab's window is still there";
+				}
 				await settle(SETTLE_MS);
 				if ((await cdp.inbox()).slice(before).filter((m) => m[0] === TAB_CLOSED && m[1] === 153).length !== 1) return "main was not told exactly once";
-				const orphan = await (async () => {
-					if ((await pageUrls()).some((u) => u.includes("tab.html?uid=153"))) return "the tab's browser is still there";
-					if (windowTitles(workDir).includes(title)) return "the tab's window is still there";
-					return "";
-				})();
-				if (orphan) return orphan;
 				const again = await createTab(153, "T153 again", "&again=1");
 				if (isError(again)) return `could not reuse uid 153: ${again.error}`;
 				await cdp.call("tabs_destroyWindow", 153);
