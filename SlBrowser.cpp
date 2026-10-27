@@ -405,6 +405,7 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 
 	browserElements->client = new BrowserClient(false);
 	browserElements->client->SetIsMain(browserElements->isMain);
+	browserElements->client->SetElements(browserElements);
 
 	// Only main uses the global context; a tab sharing it would share cookies and login with main
 	if (browserElements->isMain)
@@ -804,7 +805,7 @@ bool SlBrowser::browserInit()
 	return true;
 }
 
-std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid, const std::shared_ptr<BrowserElements> &expected)
+std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid, const std::shared_ptr<BrowserElements> &expected, bool notifyClosed)
 {
 	std::lock_guard<std::mutex> g(m_mutex);
 
@@ -820,6 +821,8 @@ std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid, const std::shar
 		return "uid not found";
 
 	std::shared_ptr<BrowserElements> ptr = browserElements->second;
+	if (notifyClosed)
+		ptr->notifyClosed = true;
 	ptr->closed = true;
 
 	// The widget is released with the elements, after the CEF browser is closed
@@ -837,12 +840,9 @@ std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid, const std::shar
 	return "";
 }
 
-void SlBrowser::closeTabWindow(const int32_t uid)
+bool SlBrowser::closeTabWindow(const int32_t uid, const std::shared_ptr<BrowserElements> &expected)
 {
-	if (auto elements = getBrowserElements(uid))
-		elements->notifyClosed = true;
-
-	queueDestroyCefBrowser(uid);
+	return queueDestroyCefBrowser(uid, expected, true).empty();
 }
 
 namespace
@@ -870,7 +870,7 @@ void SlBrowser::cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> brow
 	browserElements->browser = nullptr;
 	browserElements->client = nullptr;
 
-	if (browser)
+	if (browser && browser->IsValid())
 	{
 		// Its own root window, so closing it can never be taken for a close of the Qt widget
 		// Null when the page already closed it itself

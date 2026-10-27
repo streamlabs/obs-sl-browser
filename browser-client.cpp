@@ -82,6 +82,23 @@ CefResourceRequestHandler::ReturnValue BrowserClient::OnBeforeResourceLoad(CefRe
 }
 #endif
 
+bool BrowserClient::DoClose(CefRefPtr<CefBrowser>)
+{
+	if (!m_isMain)
+	{
+		if (auto elements = m_elements.lock(); elements && !elements->closed)
+		{
+			// A page requested the close. Handle it before CEF sends WM_CLOSE to Qt's
+			// root window, whose closeEvent ignores the event. The queued cleanup
+			// closes the detached CEF child after the uid is removed.
+			if (SlBrowser::instance().closeTabWindow(elements->uid, elements))
+				return true;
+		}
+	}
+
+	return false;
+}
+
 bool BrowserClient::OnBeforePopup(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>,
 #if CHROME_VERSION_BUILD >= 6834
 				  int,
@@ -447,11 +464,12 @@ void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser)
 {
 	RemoveBrowserFromCallback(browser);
 
-	// A tab whose page closed its own window is still registered: it goes too, as when the user closes it
-	const int32_t uid = m_isMain ? -1 : SlBrowser::instance().getUuidFromCefId(browser->GetIdentifier());
-
-	if (uid > 0)
-		SlBrowser::instance().closeTabWindow(uid);
+	// If CEF closes a tab outside the normal cleanup path, unregister that exact tab.
+	if (!m_isMain)
+	{
+		if (auto elements = m_elements.lock())
+			SlBrowser::instance().closeTabWindow(elements->uid, elements);
+	}
 
 	auto onBeforeClose = std::move(m_onBeforeClose);
 	m_onBeforeClose = nullptr;

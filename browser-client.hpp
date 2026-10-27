@@ -4,9 +4,11 @@
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 
 struct BrowserSource;
+struct BrowserElements;
 
 class BrowserClient : public CefClient, public CefDisplayHandler, public CefLifeSpanHandler, public CefRequestHandler, public CefResourceRequestHandler, public CefContextMenuHandler, public CefRenderHandler, public CefAudioHandler, public CefLoadHandler
 {
@@ -16,6 +18,7 @@ public:
 
 	// Must be set before the browser is created
 	void SetIsMain(const bool b) { m_isMain = b; }
+	void SetElements(std::weak_ptr<BrowserElements> elements) { m_elements = std::move(elements); }
 
 	// Runs once on the CEF UI thread, when the browser is gone. Set on that thread too
 	void SetOnBeforeClose(std::function<void()> fn) { m_onBeforeClose = std::move(fn); }
@@ -34,6 +37,7 @@ public:
 	bool OnConsoleMessage(CefRefPtr<CefBrowser> browser, cef_log_severity_t level, const CefString &message, const CefString &source, int line) override;
 
 	/* CefLifeSpanHandler */
+	bool DoClose(CefRefPtr<CefBrowser> browser) override;
 	bool OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
 #if CHROME_VERSION_BUILD >= 6834
 			   int popup_id,
@@ -104,6 +108,7 @@ private:
 
 	bool m_reroute_audio = true;
 	bool m_isMain = false;
+	std::weak_ptr<BrowserElements> m_elements;
 	std::function<void()> m_onBeforeClose;
 	std::recursive_mutex m_recursiveMutex;
 	std::map<int32_t, CefRefPtr<CefBrowser>> m_callbackDictionary;

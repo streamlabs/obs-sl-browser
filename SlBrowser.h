@@ -50,7 +50,7 @@ struct BrowserElements
 	// Set when the tab is destroyed, so a browser still waiting for its profile is never made
 	std::atomic<bool> closed = false;
 
-	// The user closed the tab, so main is told once it is gone
+	// The user or the tab's page closed it, so main is told once it is gone
 	std::atomic<bool> notifyClosed = false;
 
 	static void queueCleanupQtObj(QWidget *widget)
@@ -77,8 +77,8 @@ public:
 	std::string resolveTabIconPath(const std::string &path, std::wstring &resolved) const;
 	std::string createTabWindow(const int32_t uid, const std::string &url, TabWindowOptions options);
 	// With expected, only that very tab is destroyed, not a newer one that reused the uid
-	std::string queueDestroyCefBrowser(const int32_t uuid, const std::shared_ptr<BrowserElements> &expected = nullptr);
-	void closeTabWindow(const int32_t uid);
+	std::string queueDestroyCefBrowser(const int32_t uuid, const std::shared_ptr<BrowserElements> &expected = nullptr, bool notifyClosed = false);
+	bool closeTabWindow(const int32_t uid, const std::shared_ptr<BrowserElements> &expected = nullptr);
 	void setMainPageSuccess(const bool b) { m_mainPageSuccess = b; }
 	void setMainLoadingInProgress(const bool b) { m_mainLoadingInProgress = b; }
 	void saveHiddenState(const bool b) const;
