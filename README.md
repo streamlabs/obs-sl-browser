@@ -27,9 +27,10 @@ Older OBS installers continue to install the four files into the selected plugin
 The signed ZIP contains the four flat runtime files for the existing update pipeline; it is
 not an OBS installation tree.
 
-When OBS runs as administrator on Windows, the plugin starts `sl-browser.exe` with OBS's
-linked standard user token and uses OBS's `bin/64bit` as the working directory. This keeps
-the browser at standard integrity and lets Windows find the Qt runtime supplied by OBS.
+When OBS runs as administrator under the desktop user's account on Windows, the plugin
+starts `sl-browser.exe` with the desktop shell's standard user token and uses OBS's
+`bin/64bit` as the working directory. It rejects a shell from another user or session.
+This keeps the browser at standard integrity and lets Windows find the Qt runtime supplied by OBS.
 OBS's bundled `obs-browser` initializes CEF separately. This plugin does not change that
 startup path or OBS's own locale lookup.
 

@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <atomic>
 #include <thread>
+#include <vector>
 
 #include "GrpcPlugin.h"
 #include "PluginJsHandler.h"
@@ -27,6 +28,21 @@
 PROCESS_INFORMATION g_browserProcessInfo;
 static std::thread g_browserWatchThread;
 static std::atomic<bool> g_browserTerminating = false;
+
+static bool get_token_user(HANDLE token, std::vector<BYTE> &buffer)
+{
+	DWORD required = 0;
+	if (GetTokenInformation(token, TokenUser, nullptr, 0, &required))
+	{
+		SetLastError(ERROR_INVALID_DATA);
+		return false;
+	}
+	if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || !required)
+		return false;
+
+	buffer.resize(required);
+	return GetTokenInformation(token, TokenUser, buffer.data(), required, &required);
+}
 
 static bool launch_browser_process(const std::wstring &process_path, std::wstring &command_line,
 				   const std::wstring &working_dir, STARTUPINFOW &startup_info)
@@ -58,42 +74,102 @@ static bool launch_browser_process(const std::wstring &process_path, std::wstrin
 				      CREATE_NEW_CONSOLE, nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo);
 	}
 
-	// Start at standard integrity so CEF will not relaunch the Qt-dependent helper.
-	TOKEN_LINKED_TOKEN linked_token{};
-	if (!GetTokenInformation(process_token, TokenLinkedToken, &linked_token, sizeof(linked_token), &returned))
+	std::vector<BYTE> obs_user;
+	if (!get_token_user(process_token, obs_user))
 	{
-		const DWORD query_error = GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not get OBS's standard user token, error %lu", query_error);
+		const DWORD token_error = GetLastError();
+		blog(LOG_ERROR, "[SL_PLUGIN]: Could not query OBS's user, error %lu", token_error);
 		CloseHandle(process_token);
-		SetLastError(query_error);
+		SetLastError(token_error);
 		return false;
 	}
 	CloseHandle(process_token);
 
-	TOKEN_ELEVATION linked_elevation{};
-	if (!GetTokenInformation(linked_token.LinkedToken, TokenElevation, &linked_elevation,
-				 sizeof(linked_elevation), &returned) || linked_elevation.TokenIsElevated)
+	// UAC's linked token may only be an identification token. Use the desktop shell's
+	// primary token to start the Qt-dependent helper at standard integrity.
+	DWORD shell_pid = 0;
+	const HWND shell_window = GetShellWindow();
+	if (!shell_window || !GetWindowThreadProcessId(shell_window, &shell_pid) || !shell_pid)
 	{
-		const DWORD token_error = linked_elevation.TokenIsElevated ? ERROR_ACCESS_DENIED : GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: OBS's linked token is not a standard user token, error %lu", token_error);
-		CloseHandle(linked_token.LinkedToken);
+		blog(LOG_ERROR, "[SL_PLUGIN]: Could not find the desktop shell process");
+		SetLastError(ERROR_NOT_FOUND);
+		return false;
+	}
+
+	DWORD obs_session = 0;
+	DWORD shell_session = 0;
+	if (!ProcessIdToSessionId(GetCurrentProcessId(), &obs_session) ||
+	    !ProcessIdToSessionId(shell_pid, &shell_session) || obs_session != shell_session)
+	{
+		const DWORD session_error = obs_session != shell_session ? ERROR_ACCESS_DENIED : GetLastError();
+		blog(LOG_ERROR, "[SL_PLUGIN]: Desktop shell is not in OBS's session, error %lu", session_error);
+		SetLastError(session_error);
+		return false;
+	}
+
+	HANDLE shell_process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, shell_pid);
+	if (!shell_process)
+	{
+		const DWORD process_error = GetLastError();
+		blog(LOG_ERROR, "[SL_PLUGIN]: Could not open the desktop shell process, error %lu", process_error);
+		SetLastError(process_error);
+		return false;
+	}
+
+	HANDLE shell_token = nullptr;
+	const BOOL opened_shell_token = OpenProcessToken(shell_process, TOKEN_QUERY | TOKEN_DUPLICATE, &shell_token);
+	const DWORD shell_token_error = opened_shell_token ? ERROR_SUCCESS : GetLastError();
+	CloseHandle(shell_process);
+	if (!opened_shell_token)
+	{
+		blog(LOG_ERROR, "[SL_PLUGIN]: Could not open the desktop shell token, error %lu", shell_token_error);
+		SetLastError(shell_token_error);
+		return false;
+	}
+
+	std::vector<BYTE> shell_user;
+	if (!get_token_user(shell_token, shell_user))
+	{
+		const DWORD token_error = GetLastError();
+		blog(LOG_ERROR, "[SL_PLUGIN]: Could not query the desktop shell's user, error %lu", token_error);
+		CloseHandle(shell_token);
+		SetLastError(token_error);
+		return false;
+	}
+	const auto *obs_token_user = reinterpret_cast<const TOKEN_USER *>(obs_user.data());
+	const auto *shell_token_user = reinterpret_cast<const TOKEN_USER *>(shell_user.data());
+	if (!EqualSid(obs_token_user->User.Sid, shell_token_user->User.Sid))
+	{
+		blog(LOG_ERROR, "[SL_PLUGIN]: Desktop shell belongs to a different user than OBS");
+		CloseHandle(shell_token);
+		SetLastError(ERROR_ACCESS_DENIED);
+		return false;
+	}
+
+	TOKEN_ELEVATION shell_elevation{};
+	if (!GetTokenInformation(shell_token, TokenElevation, &shell_elevation,
+				 sizeof(shell_elevation), &returned) || shell_elevation.TokenIsElevated)
+	{
+		const DWORD token_error = shell_elevation.TokenIsElevated ? ERROR_ACCESS_DENIED : GetLastError();
+		blog(LOG_ERROR, "[SL_PLUGIN]: Desktop shell token is not a standard user token, error %lu", token_error);
+		CloseHandle(shell_token);
 		SetLastError(token_error);
 		return false;
 	}
 
 	HANDLE browser_token = nullptr;
-	if (!DuplicateTokenEx(linked_token.LinkedToken, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
+	if (!DuplicateTokenEx(shell_token, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
 			      nullptr, SecurityImpersonation, TokenPrimary, &browser_token))
 	{
 		const DWORD token_error = GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not duplicate OBS's standard user token, error %lu", token_error);
-		CloseHandle(linked_token.LinkedToken);
+		blog(LOG_ERROR, "[SL_PLUGIN]: Could not duplicate the desktop shell token, error %lu", token_error);
+		CloseHandle(shell_token);
 		SetLastError(token_error);
 		return false;
 	}
-	CloseHandle(linked_token.LinkedToken);
+	CloseHandle(shell_token);
 
-	blog(LOG_INFO, "[SL_PLUGIN]: Launching browser with OBS's standard user token");
+	blog(LOG_INFO, "[SL_PLUGIN]: Launching browser with the desktop shell's standard user token");
 	const BOOL started = CreateProcessWithTokenW(browser_token, LOGON_WITH_PROFILE,
 						     process_path.c_str(), command_line.data(), CREATE_NEW_CONSOLE,
 						     nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo);
