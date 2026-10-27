@@ -44,38 +44,6 @@ static bool get_token_user(HANDLE token, std::vector<BYTE> &buffer)
 	return GetTokenInformation(token, TokenUser, buffer.data(), required, &required);
 }
 
-static void probe_standard_user_launch(HANDLE token, const std::wstring &working_dir,
-				       const STARTUPINFOW &startup_info)
-{
-	wchar_t system_dir[MAX_PATH]{};
-	const UINT system_dir_length = GetSystemDirectoryW(system_dir, MAX_PATH);
-	if (!system_dir_length || system_dir_length >= MAX_PATH)
-	{
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not locate System32 for browser launch probe");
-		return;
-	}
-
-	const std::wstring probe_path = (std::filesystem::path(system_dir) / L"whoami.exe").wstring();
-	auto probe = [&](const char *label, const wchar_t *cwd) {
-		std::wstring command_line = L"whoami.exe";
-		STARTUPINFOW probe_startup_info = startup_info;
-		PROCESS_INFORMATION process_info{};
-		const BOOL started = CreateProcessWithTokenW(token, 0, probe_path.c_str(), command_line.data(),
-							    CREATE_NEW_CONSOLE, nullptr, cwd, &probe_startup_info, &process_info);
-		const DWORD error = started ? ERROR_SUCCESS : GetLastError();
-		blog(started ? LOG_INFO : LOG_ERROR,
-		     "[SL_PLUGIN]: Standard user launch probe (%s): started = %d, error = %lu", label, started, error);
-		if (started)
-		{
-			CloseHandle(process_info.hThread);
-			CloseHandle(process_info.hProcess);
-		}
-	};
-	probe("System32 directory", system_dir);
-	probe("OBS binary directory", working_dir.c_str());
-	probe("inherited directory", nullptr);
-}
-
 static bool launch_browser_process(const std::wstring &process_path, std::wstring &command_line,
 				   const std::wstring &working_dir, STARTUPINFOW &startup_info)
 {
@@ -197,6 +165,7 @@ static bool launch_browser_process(const std::wstring &process_path, std::wstrin
 	}
 
 	HANDLE browser_token = nullptr;
+	// Match Chromium's access mask for a medium primary token used by CreateProcessWithTokenW.
 	if (!DuplicateTokenEx(shell_token, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY |
 				       TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID,
 			      nullptr, SecurityImpersonation, TokenPrimary, &browser_token))
@@ -209,56 +178,6 @@ static bool launch_browser_process(const std::wstring &process_path, std::wstrin
 	}
 	CloseHandle(shell_token);
 
-	TOKEN_TYPE browser_token_type{};
-	DWORD browser_token_session = 0;
-	if (GetTokenInformation(browser_token, TokenType, &browser_token_type, sizeof(browser_token_type), &returned) &&
-	    GetTokenInformation(browser_token, TokenSessionId, &browser_token_session, sizeof(browser_token_session), &returned))
-		blog(LOG_INFO, "[SL_PLUGIN]: Browser token type = %lu, session = %lu", (DWORD)browser_token_type,
-		     browser_token_session);
-	else
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not inspect browser token, error %lu", GetLastError());
-
-	HANDLE caller_token = nullptr;
-	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &caller_token))
-	{
-		const DWORD token_error = GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not open OBS token to enable impersonation, error %lu", token_error);
-		CloseHandle(browser_token);
-		SetLastError(token_error);
-		return false;
-	}
-
-	LUID impersonate_luid{};
-	if (!LookupPrivilegeValueW(nullptr, L"SeImpersonatePrivilege", &impersonate_luid))
-	{
-		const DWORD privilege_error = GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not look up impersonation privilege, error %lu", privilege_error);
-		CloseHandle(caller_token);
-		CloseHandle(browser_token);
-		SetLastError(privilege_error);
-		return false;
-	}
-	TOKEN_PRIVILEGES enable_privilege{};
-	enable_privilege.PrivilegeCount = 1;
-	enable_privilege.Privileges[0].Luid = impersonate_luid;
-	enable_privilege.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-	TOKEN_PRIVILEGES previous_privileges{};
-	DWORD previous_length = sizeof(previous_privileges);
-	SetLastError(ERROR_SUCCESS);
-	const BOOL adjusted = AdjustTokenPrivileges(caller_token, FALSE, &enable_privilege,
-						   sizeof(previous_privileges), &previous_privileges, &previous_length);
-	const DWORD privilege_error = GetLastError();
-	if (!adjusted || privilege_error != ERROR_SUCCESS)
-	{
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not enable impersonation privilege, error %lu", privilege_error);
-		CloseHandle(caller_token);
-		CloseHandle(browser_token);
-		SetLastError(privilege_error);
-		return false;
-	}
-	blog(LOG_INFO, "[SL_PLUGIN]: Impersonation privilege was %s",
-	     previous_privileges.PrivilegeCount ? "disabled" : "already enabled");
-
 	blog(LOG_INFO, "[SL_PLUGIN]: Launching browser with the desktop shell's standard user token");
 	// The desktop shell already loaded this user's profile. LOGON_WITH_PROFILE
 	// requires additional token rights and backup/restore privileges.
@@ -266,17 +185,6 @@ static bool launch_browser_process(const std::wstring &process_path, std::wstrin
 						     process_path.c_str(), command_line.data(), CREATE_NEW_CONSOLE,
 						     nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo);
 	const DWORD launch_error = started ? ERROR_SUCCESS : GetLastError();
-	if (!started)
-		probe_standard_user_launch(browser_token, working_dir, startup_info);
-	if (previous_privileges.PrivilegeCount)
-	{
-		SetLastError(ERROR_SUCCESS);
-		const BOOL restored = AdjustTokenPrivileges(caller_token, FALSE, &previous_privileges, 0, nullptr, nullptr);
-		const DWORD restore_error = GetLastError();
-		if (!restored || restore_error != ERROR_SUCCESS)
-			blog(LOG_ERROR, "[SL_PLUGIN]: Could not restore OBS impersonation privilege, error %lu", restore_error);
-	}
-	CloseHandle(caller_token);
 	CloseHandle(browser_token);
 	SetLastError(launch_error);
 	return started;
