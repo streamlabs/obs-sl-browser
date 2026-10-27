@@ -4,6 +4,9 @@ Defining SL_PLUGIN_DEFAULT_URL as an env variable will override the default URL 
 
 Remote debugging is off by default. To debug the plugin's page, set SL_PLUGIN_REMOTE_DEBUGGING_PORT to a port from 1024 to 65535 (e.g. `setx SL_PLUGIN_REMOTE_DEBUGGING_PORT 9123`), restart OBS, then open chrome://inspect or http://localhost:9123.
 
+When OBS runs elevated, the plugin forwards `SL_PLUGIN_DEFAULT_URL` and
+`SL_PLUGIN_REMOTE_DEBUGGING_PORT` from OBS's process environment to the standard user browser.
+
 ## Local Build Instructions
 
 1. Build OBS (clone recursive).

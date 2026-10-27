@@ -5,10 +5,15 @@
 #include <util\platform.h>
 
 #include <Windows.h>
+#include <userenv.h>
 #include <stdio.h>
 #include <string>
+#include <string_view>
 #include <filesystem>
+#include <algorithm>
 #include <atomic>
+#include <cwchar>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -42,6 +47,83 @@ static bool get_token_user(HANDLE token, std::vector<BYTE> &buffer)
 
 	buffer.resize(required);
 	return GetTokenInformation(token, TokenUser, buffer.data(), required, &required);
+}
+
+static bool environment_entry_matches(const wchar_t *entry, const wchar_t *name)
+{
+	const size_t name_length = wcslen(name);
+	return _wcsnicmp(entry, name, name_length) == 0 && entry[name_length] == L'=';
+}
+
+static bool build_browser_environment(HANDLE token, std::vector<wchar_t> &environment)
+{
+	const auto free_obs_environment = [](wchar_t *value) {
+		if (value)
+			FreeEnvironmentStringsW(value);
+	};
+	std::unique_ptr<wchar_t, decltype(free_obs_environment)> obs_environment(GetEnvironmentStringsW(),
+									    free_obs_environment);
+	if (!obs_environment)
+		return false;
+
+	constexpr wchar_t default_url_name[] = L"SL_PLUGIN_DEFAULT_URL";
+	constexpr wchar_t debug_port_name[] = L"SL_PLUGIN_REMOTE_DEBUGGING_PORT";
+	std::wstring default_url_override;
+	std::wstring debug_port_override;
+	for (const wchar_t *entry = obs_environment.get(); *entry; entry += wcslen(entry) + 1)
+	{
+		if (environment_entry_matches(entry, default_url_name))
+			default_url_override = entry;
+		else if (environment_entry_matches(entry, debug_port_name))
+			debug_port_override = entry;
+	}
+	if (default_url_override.empty() && debug_port_override.empty())
+		return true;
+
+	LPVOID raw_user_environment = nullptr;
+	if (!CreateEnvironmentBlock(&raw_user_environment, token, FALSE))
+	{
+		const DWORD environment_error = GetLastError();
+		obs_environment.reset();
+		SetLastError(environment_error);
+		return false;
+	}
+	std::unique_ptr<void, decltype(&DestroyEnvironmentBlock)> user_environment(raw_user_environment,
+									  DestroyEnvironmentBlock);
+
+	std::vector<std::wstring> entries;
+	for (const wchar_t *entry = static_cast<const wchar_t *>(user_environment.get()); *entry;
+	     entry += wcslen(entry) + 1)
+	{
+		if ((!default_url_override.empty() && environment_entry_matches(entry, default_url_name)) ||
+		    (!debug_port_override.empty() && environment_entry_matches(entry, debug_port_name)))
+			continue;
+		entries.emplace_back(entry);
+	}
+	if (!default_url_override.empty())
+		entries.push_back(default_url_override);
+	if (!debug_port_override.empty())
+		entries.push_back(debug_port_override);
+	auto entry_name = [](const std::wstring &entry) {
+		const size_t separator = entry.find(L'=', entry.front() == L'=' ? 1 : 0);
+		return std::wstring_view(entry).substr(0, separator);
+	};
+	std::sort(entries.begin(), entries.end(), [&](const std::wstring &a, const std::wstring &b) {
+		const auto a_name = entry_name(a);
+		const auto b_name = entry_name(b);
+		return CompareStringOrdinal(a_name.data(), static_cast<int>(a_name.size()), b_name.data(),
+					    static_cast<int>(b_name.size()), TRUE) == CSTR_LESS_THAN;
+	});
+
+	for (const auto &entry : entries)
+	{
+		environment.insert(environment.end(), entry.begin(), entry.end());
+		environment.push_back(L'\0');
+	}
+	environment.push_back(L'\0');
+	if (entries.empty())
+		environment.push_back(L'\0');
+	return true;
 }
 
 static bool launch_browser_process(const std::wstring &process_path, std::wstring &command_line,
@@ -178,12 +260,25 @@ static bool launch_browser_process(const std::wstring &process_path, std::wstrin
 	}
 	CloseHandle(shell_token);
 
+	// Keep the shell user's environment and forward only OBS's two browser overrides.
+	std::vector<wchar_t> environment;
+	if (!build_browser_environment(browser_token, environment))
+	{
+		const DWORD environment_error = GetLastError();
+		blog(LOG_ERROR, "[SL_PLUGIN]: Could not prepare the browser environment, error %lu", environment_error);
+		CloseHandle(browser_token);
+		SetLastError(environment_error);
+		return false;
+	}
+
 	blog(LOG_INFO, "[SL_PLUGIN]: Launching browser with the desktop shell's standard user token");
 	// The desktop shell already loaded this user's profile. LOGON_WITH_PROFILE
 	// requires additional token rights and backup/restore privileges.
+	const DWORD creation_flags = CREATE_NEW_CONSOLE | (environment.empty() ? 0 : CREATE_UNICODE_ENVIRONMENT);
 	const BOOL started = CreateProcessWithTokenW(browser_token, 0,
-						     process_path.c_str(), command_line.data(), CREATE_NEW_CONSOLE,
-						     nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo);
+						     process_path.c_str(), command_line.data(), creation_flags,
+						     environment.empty() ? nullptr : environment.data(), working_dir.c_str(),
+						     &startup_info, &g_browserProcessInfo);
 	const DWORD launch_error = started ? ERROR_SUCCESS : GetLastError();
 	CloseHandle(browser_token);
 	SetLastError(launch_error);
