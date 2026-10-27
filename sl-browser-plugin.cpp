@@ -170,7 +170,9 @@ static bool launch_browser_process(const std::wstring &process_path, std::wstrin
 	CloseHandle(shell_token);
 
 	blog(LOG_INFO, "[SL_PLUGIN]: Launching browser with the desktop shell's standard user token");
-	const BOOL started = CreateProcessWithTokenW(browser_token, LOGON_WITH_PROFILE,
+	// The desktop shell already loaded this user's profile. LOGON_WITH_PROFILE
+	// requires additional token rights and backup/restore privileges.
+	const BOOL started = CreateProcessWithTokenW(browser_token, 0,
 						     process_path.c_str(), command_line.data(), CREATE_NEW_CONSOLE,
 						     nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo);
 	const DWORD launch_error = started ? ERROR_SUCCESS : GetLastError();
