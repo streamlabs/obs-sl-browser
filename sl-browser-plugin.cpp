@@ -28,6 +28,81 @@ PROCESS_INFORMATION g_browserProcessInfo;
 static std::thread g_browserWatchThread;
 static std::atomic<bool> g_browserTerminating = false;
 
+static bool launch_browser_process(const std::wstring &process_path, std::wstring &command_line,
+				   const std::wstring &working_dir, STARTUPINFOW &startup_info)
+{
+	HANDLE process_token = nullptr;
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &process_token))
+	{
+		const DWORD token_error = GetLastError();
+		blog(LOG_ERROR, "[SL_PLUGIN]: OpenProcessToken failed with error %lu", token_error);
+		SetLastError(token_error);
+		return false;
+	}
+
+	TOKEN_ELEVATION elevation{};
+	DWORD returned = 0;
+	if (!GetTokenInformation(process_token, TokenElevation, &elevation, sizeof(elevation), &returned))
+	{
+		const DWORD query_error = GetLastError();
+		blog(LOG_ERROR, "[SL_PLUGIN]: Could not query OBS elevation, error %lu", query_error);
+		CloseHandle(process_token);
+		SetLastError(query_error);
+		return false;
+	}
+
+	if (!elevation.TokenIsElevated)
+	{
+		CloseHandle(process_token);
+		return CreateProcessW(process_path.c_str(), command_line.data(), nullptr, nullptr, FALSE,
+				      CREATE_NEW_CONSOLE, nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo);
+	}
+
+	// Start at standard integrity so CEF will not relaunch the Qt-dependent helper.
+	TOKEN_LINKED_TOKEN linked_token{};
+	if (!GetTokenInformation(process_token, TokenLinkedToken, &linked_token, sizeof(linked_token), &returned))
+	{
+		const DWORD query_error = GetLastError();
+		blog(LOG_ERROR, "[SL_PLUGIN]: Could not get OBS's standard user token, error %lu", query_error);
+		CloseHandle(process_token);
+		SetLastError(query_error);
+		return false;
+	}
+	CloseHandle(process_token);
+
+	TOKEN_ELEVATION linked_elevation{};
+	if (!GetTokenInformation(linked_token.LinkedToken, TokenElevation, &linked_elevation,
+				 sizeof(linked_elevation), &returned) || linked_elevation.TokenIsElevated)
+	{
+		const DWORD token_error = linked_elevation.TokenIsElevated ? ERROR_ACCESS_DENIED : GetLastError();
+		blog(LOG_ERROR, "[SL_PLUGIN]: OBS's linked token is not a standard user token, error %lu", token_error);
+		CloseHandle(linked_token.LinkedToken);
+		SetLastError(token_error);
+		return false;
+	}
+
+	HANDLE browser_token = nullptr;
+	if (!DuplicateTokenEx(linked_token.LinkedToken, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
+			      nullptr, SecurityImpersonation, TokenPrimary, &browser_token))
+	{
+		const DWORD token_error = GetLastError();
+		blog(LOG_ERROR, "[SL_PLUGIN]: Could not duplicate OBS's standard user token, error %lu", token_error);
+		CloseHandle(linked_token.LinkedToken);
+		SetLastError(token_error);
+		return false;
+	}
+	CloseHandle(linked_token.LinkedToken);
+
+	blog(LOG_INFO, "[SL_PLUGIN]: Launching browser with OBS's standard user token");
+	const BOOL started = CreateProcessWithTokenW(browser_token, LOGON_WITH_PROFILE,
+						     process_path.c_str(), command_line.data(), CREATE_NEW_CONSOLE,
+						     nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo);
+	const DWORD launch_error = started ? ERROR_SUCCESS : GetLastError();
+	CloseHandle(browser_token);
+	SetLastError(launch_error);
+	return started;
+}
+
 OBS_DECLARE_MODULE()
 MODULE_EXPORT const char *obs_module_description(void)
 {
@@ -180,12 +255,38 @@ void obs_module_post_load(void)
 				}
 			}
 			std::wstring process_path = (process_dir / "sl-browser.exe").wstring();
-			std::wstring startparams = L"sl-browser " + std::to_wstring(GetCurrentProcessId()) + L" " + std::to_wstring(myListenPort) + L" " + std::to_wstring(targetListenPort);
-			blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load process_path: %ls", process_path.c_str());
-			blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load startparams: %ls", startparams.c_str());
-			browserGood = CreateProcessW(process_path.c_str(), startparams.data(), NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &g_browserProcessInfo);
-			if (!browserGood)
-				blog(LOG_ERROR, "[SL_PLUGIN]: CreateProcessW failed with error %lu", GetLastError());
+			std::wstring obs_exe_path(MAX_PATH, L'\0');
+			DWORD obs_exe_path_length = 0;
+			for (;;)
+			{
+				obs_exe_path_length = GetModuleFileNameW(nullptr, obs_exe_path.data(), static_cast<DWORD>(obs_exe_path.size()));
+				if (obs_exe_path_length == 0 || obs_exe_path_length < obs_exe_path.size())
+					break;
+				if (obs_exe_path.size() >= 32768)
+				{
+					SetLastError(ERROR_INSUFFICIENT_BUFFER);
+					obs_exe_path_length = 0;
+					break;
+				}
+				obs_exe_path.resize(obs_exe_path.size() * 2);
+			}
+			if (obs_exe_path_length == 0)
+			{
+				const DWORD path_error = GetLastError();
+				blog(LOG_ERROR, "[SL_PLUGIN]: Could not determine the OBS executable directory, error %lu", path_error);
+				SetLastError(path_error);
+			}
+			else
+			{
+				obs_exe_path.resize(obs_exe_path_length);
+				const std::wstring obs_binary_dir = std::filesystem::path(obs_exe_path).parent_path().wstring();
+				std::wstring startparams = L"sl-browser " + std::to_wstring(GetCurrentProcessId()) + L" " + std::to_wstring(myListenPort) + L" " + std::to_wstring(targetListenPort);
+				blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load process_path: %ls", process_path.c_str());
+				blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load startparams: %ls", startparams.c_str());
+				browserGood = launch_browser_process(process_path, startparams, obs_binary_dir, si);
+				if (!browserGood)
+					blog(LOG_ERROR, "[SL_PLUGIN]: Browser process launch failed with error %lu", GetLastError());
+			}
 		}
 		catch (...)
 		{
