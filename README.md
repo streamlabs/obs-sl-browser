@@ -27,6 +27,9 @@ Older OBS installers continue to install the four files into the selected plugin
 The signed ZIP contains the four flat runtime files for the existing update pipeline; it is
 not an OBS installation tree.
 
+When OBS runs as administrator on Windows, the plugin starts `sl-browser.exe` with the
+desktop user's standard token and OBS's `bin/64bit` working directory when available.
+
 ## Commits and PRs
 
 - Merge changes that are intended to affect all version branches into `main`.
