@@ -164,7 +164,7 @@ jobs:
           absl_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\absl
           gRPC_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\grpc
           utf8_range_DIR: ${{ github.workspace }}\grpc_dist\lib\cmake\utf8_range
-        run: ./obs-sl-browser/CI/workflows/build_plugin.ps1 -PluginOnly
+        run: ./obs-sl-browser/CI/workflows/build_plugin.ps1 -PluginOnly -E2EUseObsToken
 
       # OBS 33 relinks obs.dll to register the plugin. Warn if any other libobs source rebuilt.
       - name: Check OBS rebuild scope

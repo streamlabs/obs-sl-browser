@@ -34,6 +34,11 @@ This keeps the browser at standard integrity and lets Windows find the Qt runtim
 OBS's bundled `obs-browser` initializes CEF separately. This plugin does not change that
 startup path or OBS's own locale lookup.
 
+The Windows end-to-end runner has no standard desktop shell token. Its test build uses
+`-E2EUseObsToken` to retain the runner's existing elevated helper launch; normal and release
+builds leave this option off. Elevated release behavior needs a manual test on an interactive
+Windows desktop.
+
 ## Commits and PRs
 
 - Merge changes that are intended to affect all version branches into `main`.

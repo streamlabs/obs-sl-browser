@@ -47,6 +47,13 @@ static bool get_token_user(HANDLE token, std::vector<BYTE> &buffer)
 static bool launch_browser_process(const std::wstring &process_path, std::wstring &command_line,
 				   const std::wstring &working_dir, STARTUPINFOW &startup_info)
 {
+#ifdef SL_BROWSER_E2E_USE_OBS_TOKEN
+	// The CI runner has no standard desktop shell token. Keep its existing
+	// launch behavior so the suites can exercise the rest of the plugin.
+	return CreateProcessW(process_path.c_str(), command_line.data(), nullptr, nullptr, FALSE,
+			      CREATE_NEW_CONSOLE, nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo);
+#endif
+
 	HANDLE process_token = nullptr;
 	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &process_token))
 	{
