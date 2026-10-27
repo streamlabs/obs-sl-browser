@@ -34,13 +34,15 @@ void SlBrowserWidget::closeEvent(QCloseEvent *event) /*override*/
 	event->ignore();
 
 	auto elements = m_elements.lock();
+	if (!elements)
+		return;
 
-	if (elements && elements != SlBrowser::instance().m_mainBrowser)
+	if (elements != SlBrowser::instance().m_mainBrowser)
 	{
 		if (elements->hideOnClose)
 			setHidden(true);
 		else
-			SlBrowser::instance().closeTabWindow(elements->uid);
+			SlBrowser::instance().closeTabWindow(elements->uid, elements);
 
 		return;
 	}

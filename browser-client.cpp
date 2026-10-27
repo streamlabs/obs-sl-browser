@@ -10,6 +10,8 @@
 #include "SlBrowser.h"
 #include "WindowsFunctions.h"
 
+#include <include/base/cef_callback.h>
+#include <include/wrapper/cef_closure_task.h>
 #include <json11/json11.hpp>
 
 using namespace json11;
@@ -251,6 +253,16 @@ int32_t BrowserClient::GetReceiverFuncIdForBrowser(const int32_t browserCefId)
 std::mutex BrowserClient::m_obsEventReceiverMutex;
 int32_t BrowserClient::m_obsEventReceiverBrowserId = 0;
 int32_t BrowserClient::m_obsEventReceiverFuncId = 0;
+std::mutex BrowserClient::m_obsEventPendingMutex;
+std::deque<std::string> BrowserClient::m_obsEventPending;
+bool BrowserClient::m_obsEventDrainScheduled = false;
+bool BrowserClient::m_obsEventOverflowed = false;
+
+namespace
+{
+constexpr size_t kMaxPendingObsEvents = 10000;
+constexpr int kObsEventsPerTask = 64;
+}
 
 void BrowserClient::AssignObsEventReceiverFunc(const int32_t browserCefId, const int32_t funcid)
 {
@@ -261,6 +273,37 @@ void BrowserClient::AssignObsEventReceiverFunc(const int32_t browserCefId, const
 
 void BrowserClient::SendObsEventToReceiver(const std::string &json)
 {
+	// Receiver registration also runs on CEF UI. Read its ID and send on that
+	// thread so the replacement ACK cannot overtake an event using the old ID.
+	if (!CefCurrentlyOn(TID_UI))
+	{
+		bool schedule = false;
+		{
+			std::lock_guard<std::mutex> grd(m_obsEventPendingMutex);
+			if (m_obsEventPending.size() >= kMaxPendingObsEvents)
+			{
+				if (!m_obsEventOverflowed)
+					printf("sl-proxy: OBS event queue is full, dropping events until CEF catches up\n");
+				m_obsEventOverflowed = true;
+				return;
+			}
+			m_obsEventPending.push_back(json);
+			if (!m_obsEventDrainScheduled)
+			{
+				m_obsEventDrainScheduled = true;
+				schedule = true;
+			}
+		}
+		if (schedule && !CefPostTask(TID_UI, base::BindOnce(&DrainObsEvents)))
+		{
+			std::lock_guard<std::mutex> grd(m_obsEventPendingMutex);
+			m_obsEventPending.clear();
+			m_obsEventDrainScheduled = false;
+			m_obsEventOverflowed = false;
+		}
+		return;
+	}
+
 	int32_t browserId = 0;
 	int32_t funcId = 0;
 
@@ -285,6 +328,34 @@ void BrowserClient::SendObsEventToReceiver(const std::string &json)
 	execute_args->SetInt(2, 0);
 
 	SendBrowserProcessMessage(main->browser, PID_RENDERER, processMsg);
+}
+
+void BrowserClient::DrainObsEvents()
+{
+	for (int i = 0; i < kObsEventsPerTask; ++i)
+	{
+		std::string json;
+		{
+			std::lock_guard<std::mutex> grd(m_obsEventPendingMutex);
+			if (m_obsEventPending.empty())
+			{
+				m_obsEventDrainScheduled = false;
+				m_obsEventOverflowed = false;
+				return;
+			}
+			json = std::move(m_obsEventPending.front());
+			m_obsEventPending.pop_front();
+		}
+		SendObsEventToReceiver(json);
+	}
+
+	if (!CefPostTask(TID_UI, base::BindOnce(&DrainObsEvents)))
+	{
+		std::lock_guard<std::mutex> grd(m_obsEventPendingMutex);
+		m_obsEventPending.clear();
+		m_obsEventDrainScheduled = false;
+		m_obsEventOverflowed = false;
+	}
 }
 
 void BrowserClient::SendMsgToReceiver(CefRefPtr<CefBrowser> target, const std::string &msg, const int32_t senderUid)
@@ -351,7 +422,8 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		bool retVal = true;
 		std::string internalMsgType = "executeCallback";
 
-		switch (JavascriptApi::getFunctionId(name))
+		const auto functionId = JavascriptApi::getFunctionId(name);
+		switch (functionId)
 		{
 		case JavascriptApi::JS_MAIN_SEND_STRING_TO_TAB:
 			retVal = JS_MAIN_SEND_STRING_TO_TAB(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
@@ -422,6 +494,15 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		default:
 			jsonOutput = Json(Json::object({{"error", "Unknown function"}})).dump();
 			break;
+		}
+
+		if (!retVal && funcid > 0 &&
+		    (functionId == JavascriptApi::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS || functionId == JavascriptApi::JS_TABS_REGISTER_MSG_RECEIVER || functionId == JavascriptApi::JS_EVENTS_REGISTER_RECEIVER))
+		{
+			// The renderer keeps the previous receiver until this registration is active.
+			CefRefPtr<CefProcessMessage> ack = CefProcessMessage::Create("receiverRegistered");
+			ack->GetArgumentList()->SetInt(0, funcid);
+			frame->SendProcessMessage(PID_RENDERER, ack);
 		}
 
 		if (retVal)

@@ -13,7 +13,22 @@ class BrowserApp : public CefApp, public CefRenderProcessHandler, public CefBrow
 {
 	int m_callbackIdCounter = 0;
 	std::recursive_mutex m_callbackMutex;
-	std::map<int, std::pair<CefRefPtr<CefV8Value>, CefRefPtr<CefV8Context>>> m_callbackMap;
+	enum class ReceiverKind
+	{
+		None,
+		Messages,
+		ObsEvents,
+	};
+
+	struct CallbackInfo
+	{
+		CefRefPtr<CefV8Value> function;
+		CefRefPtr<CefV8Context> context;
+		int browserId;
+		ReceiverKind receiverKind;
+	};
+
+	std::map<int, CallbackInfo> m_callbackMap;
 
 	// Told by the browser process when it creates the browser, so a browser it did not describe binds nothing
 	enum class Role
@@ -55,6 +70,7 @@ public:
 	virtual void OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) override;
 	virtual bool OnAlreadyRunningAppRelaunch(CefRefPtr<CefCommandLine> command_line, const CefString &current_directory) override;
 	virtual void OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) override;
+	virtual void OnContextReleased(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) override;
 	virtual bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message) override;
 	virtual bool Execute(const CefString &name, CefRefPtr<CefV8Value> object, const CefV8ValueList &arguments, CefRefPtr<CefV8Value> &retval, CefString &exception) override;
 

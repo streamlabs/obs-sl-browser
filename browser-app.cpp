@@ -182,11 +182,32 @@ void BrowserApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDi
 
 void BrowserApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
 {
-	std::lock_guard<std::mutex> grd(m_browserInfoMutex);
-	auto itr = m_browserInfos.find(browser->GetIdentifier());
+	const int browserId = browser->GetIdentifier();
+	bool lastInstance = false;
+	{
+		std::lock_guard<std::mutex> grd(m_browserInfoMutex);
+		auto itr = m_browserInfos.find(browserId);
 
-	if (itr != m_browserInfos.end() && --itr->second.instances <= 0)
-		m_browserInfos.erase(itr);
+		if (itr == m_browserInfos.end() || --itr->second.instances <= 0)
+		{
+			if (itr != m_browserInfos.end())
+				m_browserInfos.erase(itr);
+			lastInstance = true;
+		}
+	}
+
+	// Cross-origin navigation may create the replacement browser before destroying the old one.
+	if (lastInstance)
+	{
+		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
+		for (auto itr = m_callbackMap.begin(); itr != m_callbackMap.end();)
+		{
+			if (itr->second.browserId == browserId)
+				itr = m_callbackMap.erase(itr);
+			else
+				++itr;
+		}
+	}
 }
 
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
@@ -248,6 +269,18 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 	}
 }
 
+void BrowserApp::OnContextReleased(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefV8Context> context)
+{
+	std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
+	for (auto itr = m_callbackMap.begin(); itr != m_callbackMap.end();)
+	{
+		if (itr->second.context->IsSame(context))
+			itr = m_callbackMap.erase(itr);
+		else
+			++itr;
+	}
+}
+
 bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message)
 {
 	if (message->GetName() == "executeCallback" || message->GetName() == "executeCallback_NoDelete")
@@ -259,9 +292,16 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
 
-		if (CefRefPtr<CefV8Value> function = m_callbackMap[callbackID].first)
+		auto itr = m_callbackMap.find(callbackID);
+		if (itr != m_callbackMap.end() && itr->second.browserId == browser->GetIdentifier())
 		{
-			CefRefPtr<CefV8Context> context = m_callbackMap[callbackID].second;
+			CefRefPtr<CefV8Value> function = itr->second.function;
+			CefRefPtr<CefV8Context> context = itr->second.context;
+			if (!context->IsValid())
+			{
+				m_callbackMap.erase(itr);
+				return true;
+			}
 
 			CefV8ValueList args;
 			args.push_back(CefV8Value::CreateString(jsonString));
@@ -273,6 +313,23 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 			if (message->GetName() != "executeCallback_NoDelete")
 				m_callbackMap.erase(callbackID);
+		}
+	}
+	else if (message->GetName() == "receiverRegistered")
+	{
+		const int callbackID = message->GetArgumentList()->GetInt(0);
+		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
+		auto current = m_callbackMap.find(callbackID);
+		if (current != m_callbackMap.end() && current->second.browserId == browser->GetIdentifier() && current->second.receiverKind != ReceiverKind::None)
+		{
+			const ReceiverKind kind = current->second.receiverKind;
+			for (auto itr = m_callbackMap.begin(); itr != m_callbackMap.end();)
+			{
+				if (itr->first < callbackID && itr->second.receiverKind == kind && (kind == ReceiverKind::ObsEvents || itr->second.browserId == current->second.browserId))
+					itr = m_callbackMap.erase(itr);
+				else
+					++itr;
+			}
 		}
 	}
 	else if (message->GetName() == "executeJavascript")
@@ -300,12 +357,15 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 	if (allowed)
 	{
 		int callBackId = 0;
+		const int browserId = browser->GetIdentifier();
+		const ReceiverKind receiverKind = funcName == "events_registerReceiver" ? ReceiverKind::ObsEvents : (funcName == "tabs_registerMsgReceiver" || funcName == "tab_registerMsgReceiver" ? ReceiverKind::Messages : ReceiverKind::None);
+		const bool hasCallback = !arguments.empty() && arguments[0]->IsFunction();
 
-		if (arguments.size() >= 1 && arguments[0]->IsFunction())
+		if (hasCallback)
 		{
 			std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
 			callBackId = ++m_callbackIdCounter;
-			m_callbackMap[callBackId] = {arguments[0], CefV8Context::GetCurrentContext()};
+			m_callbackMap.emplace(callBackId, CallbackInfo{arguments[0], current, browserId, receiverKind});
 		}
 
 		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create(name);

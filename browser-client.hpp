@@ -3,6 +3,7 @@
 #include "cef-headers.hpp"
 
 #include <functional>
+#include <deque>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -103,6 +104,7 @@ private:
 	void UpdateExtraTexture();
 	static void AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid);
 	static void AssignObsEventReceiverFunc(const int32_t browserCefId, const int32_t funcid);
+	static void DrainObsEvents();
 
 	bool valid() const;
 
@@ -122,6 +124,10 @@ private:
 	static std::mutex m_obsEventReceiverMutex;
 	static int32_t m_obsEventReceiverBrowserId;
 	static int32_t m_obsEventReceiverFuncId;
+	static std::mutex m_obsEventPendingMutex;
+	static std::deque<std::string> m_obsEventPending;
+	static bool m_obsEventDrainScheduled;
+	static bool m_obsEventOverflowed;
 
 private:
 	bool JS_BROWSER_RESIZE_BROWSER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);

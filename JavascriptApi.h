@@ -437,15 +437,17 @@ public:
 
 			// .(@function(arg1), @sceneName)
 			//	Every item of the scene, with the id obs_sceneitem_remove and obs_sceneitem_update take. A group's items are in its 'children'
+			//	Item ids are local to their containing scene or group. For a child, pass its group's sourceName to remove or update, not the scene name used for this listing
 			//		Example arg1 = { "items": [{ "id": 1, "sourceName": ".", "sourceUuid": ".", "sourceId": ".", "visible": true, "locked": false, "pos": { "x": 0.0, "y": 0.0 }, "scale": { "x": 1.0, "y": 1.0 }, "rot": 0.0, "crop": { "left": 0, "top": 0, "right": 0, "bottom": 0 }, "isGroup": false, "children": [] }] }
 			{"obs_scene_get_items", JS_OBS_SCENE_GET_ITEMS},
 
 			// .(@function(arg1), @sceneName, @int_itemId)
-			//	Removes one item from the scene. The source stays, in any other scene using it and in obs_query_all_sources
+			//	Removes one item from the scene or group named by sceneName. For a child, sceneName is the containing group's sourceName
+			//	The source stays, in any other scene using it and in obs_query_all_sources
 			{"obs_sceneitem_remove", JS_OBS_SCENEITEM_REMOVE},
 
 			// .(@function(arg1), @sceneName, @int_itemId, @patch_jsonStr)
-			//	Applies the keys present in the patch together, as Streamlabs Desktop's updateSceneItem does
+			//	Applies the keys present in the patch together, as Streamlabs Desktop's updateSceneItem does. For a child, sceneName is the containing group's sourceName
 			//		Example patch = { "visible": true, "locked": false, "transform": { "position": { "x": 0.0, "y": 0.0 }, "scale": { "x": 1.0, "y": 1.0 }, "rotation": 0.0, "crop": { "left": 0, "top": 0, "right": 0, "bottom": 0 } } }
 			//		Every key is optional, as is every key of transform. The flat keys 'pos', 'scale', 'rot' and 'crop' are read when 'transform' is absent
 			{"obs_sceneitem_update", JS_OBS_SCENEITEM_UPDATE},

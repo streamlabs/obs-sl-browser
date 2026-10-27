@@ -628,6 +628,24 @@ export default {
 				}
 			});
 
+			await r.step("a negative nonzero tab uid can send its actual uid to main", async () => {
+				const uid = -2;
+				const made = await createTab(uid, "T-2");
+				if (isError(made)) return made.error;
+				const tab = await attach(uid);
+				const before = (await cdp.inbox()).length;
+				const message = `from-${uid}-${Date.now()}`;
+				const sent = await tab.callOn("slabsTab", "tab_sendStringToMain", message);
+				if (sent.__timeout || isError(sent)) return `send failed: ${JSON.stringify(sent)}`;
+				const received = await until(async () => (await cdp.inbox()).slice(before).find((m) => m[0] === message), { timeoutMs: 10000, everyMs: 250 });
+				if (!received || received[1] !== uid) return `main received ${JSON.stringify(received)}`;
+				tab.close();
+				tabCdp.delete(uid);
+				const destroyed = await cdp.call("tabs_destroyWindow", uid);
+				if (isError(destroyed) || destroyed.__timeout) return `destroy failed: ${JSON.stringify(destroyed)}`;
+				created.delete(uid);
+			});
+
 			await r.step("main to tab: arrives once as the string alone, and main's callback fires", async () => {
 				const res = await cdp.call("tabs_sendStringToTab", 101, TRICKY);
 				if (res.__timeout) return "main's callback never fired";

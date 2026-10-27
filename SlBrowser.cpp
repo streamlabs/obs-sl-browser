@@ -179,6 +179,18 @@ void replyCreated(const std::shared_ptr<BrowserElements> &elements, const std::s
 	elements->onCreated = nullptr;
 }
 
+void finishBrowserCreation(std::shared_ptr<BrowserElements> elements)
+{
+	if (elements->closed)
+	{
+		replyCreated(elements, kClosedBeforeCreated);
+		return;
+	}
+
+	elements->ready = true;
+	replyCreated(elements, "");
+}
+
 // Zero when unset
 int testEnvMs(const char *name)
 {
@@ -375,6 +387,9 @@ std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url
 	QMetaObject::invokeMethod(
 		qApp,
 		[elements, url, title = std::move(options.title), iconPath = std::move(options.iconPath)]() {
+			if (elements->closed)
+				return;
+
 			elements->widget = new SlBrowserWidget;
 			elements->widget->setElements(elements);
 			elements->widget->setWindowTitle(title.c_str());
@@ -439,19 +454,40 @@ void SlBrowser::attachCefBrowser(std::shared_ptr<BrowserElements> browserElement
 		return;
 	}
 
+	// A keyed profile may have been initializing while the widget was resized.
+	// Capture its native handle and current geometry on Qt's thread, then return to CEF.
+	QMetaObject::invokeMethod(
+		qApp,
+		[browserElements, url, startHidden, keepOnTop, request_context]() {
+			if (browserElements->closed)
+			{
+				CefPostTask(TID_UI, base::BindOnce(&finishBrowserCreation, browserElements));
+				return;
+			}
+
+			auto *widget = browserElements->widget;
+			const qreal scaleFactor = widget->devicePixelRatioF();
+			const int width = static_cast<int>(widget->width() * scaleFactor);
+			const int height = static_cast<int>(widget->height() * scaleFactor);
+			const CefWindowHandle parentWindow = (CefWindowHandle)widget->winId();
+			CefPostTask(TID_UI, base::BindOnce(&attachCefBrowserWithWindow, browserElements, url, startHidden, keepOnTop, request_context, parentWindow, width, height));
+		},
+		Qt::QueuedConnection);
+}
+
+/*static*/
+void SlBrowser::attachCefBrowserWithWindow(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop, CefRefPtr<CefRequestContext> request_context, CefWindowHandle parentWindow, int width, int height)
+{
+	if (browserElements->closed)
+	{
+		replyCreated(browserElements, kClosedBeforeCreated);
+		return;
+	}
+
 	CefWindowInfo window_info;
 	CefBrowserSettings browser_settings;
-
-	// Adjust for possible DPI
-	int realWidth = browserElements->widget->width();
-	int realHeight = browserElements->widget->height();
-	qreal scaleFactor = browserElements->widget->devicePixelRatioF();
-	realWidth = static_cast<int>(realWidth * scaleFactor);
-	realHeight = static_cast<int>(realHeight * scaleFactor);
-
-	// Now set the parent of the CEF browser to the QWidget
 	window_info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
-	window_info.SetAsChild((HWND)browserElements->widget->winId(), CefRect(0, 0, realWidth, realHeight));
+	window_info.SetAsChild(parentWindow, CefRect(0, 0, width, height));
 
 	// Reaches the renderer's OnBrowserCreated: the role decides what it binds, and the script runs in every main-frame document of the tab
 	CefRefPtr<CefDictionaryValue> extra_info = CefDictionaryValue::Create();
@@ -469,35 +505,37 @@ void SlBrowser::attachCefBrowser(std::shared_ptr<BrowserElements> browserElement
 		return;
 	}
 
-	if (startHidden)
-	{
-		browserElements->widget->hide();
-	}
-	else
-	{
-		browserElements->widget->showNormal();
+	QMetaObject::invokeMethod(
+		qApp,
+		[browserElements, startHidden, keepOnTop]() {
+			if (!browserElements->closed)
+			{
+				auto *widget = browserElements->widget;
+				if (startHidden)
+					widget->hide();
+				else
+				{
+					widget->showNormal();
 
-		if (keepOnTop && !WindowsFunctions::TestOffscreen())
-		{
-			std::thread(
-				[](std::shared_ptr<BrowserElements> b) {
-					// For the next second keep the window on top
-					for (int i = 0; i < 10; ++i)
+					if (keepOnTop && !WindowsFunctions::TestOffscreen())
 					{
-						::SetForegroundWindow((HWND)b->widget->winId());
-						::Sleep(100);
+						// Keep the main window in front briefly without touching its widget from a worker thread.
+						std::weak_ptr<BrowserElements> weak = browserElements;
+						for (int i = 0; i < 10; ++i)
+							QTimer::singleShot(i * 100, widget, [weak, widget]() {
+								if (auto elements = weak.lock(); elements && !elements->closed)
+									::SetForegroundWindow((HWND)widget->winId());
+							});
 					}
-				},
-				browserElements)
-				.detach();
-		}
-	}
+				}
 
-	// The main widget was shown before it had elements to report to
-	browserElements->hidden = browserElements->widget->isHidden();
-	browserElements->ready = true;
+				// The main widget was shown before it had elements to report to.
+				browserElements->hidden = widget->isHidden();
+			}
 
-	replyCreated(browserElements, "");
+			CefPostTask(TID_UI, base::BindOnce(&finishBrowserCreation, browserElements));
+		},
+		Qt::QueuedConnection);
 }
 
 #if CHROME_VERSION_BUILD > 6533

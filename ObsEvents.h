@@ -45,6 +45,7 @@ public:
 private:
 	ObsEvents() = default;
 	~ObsEvents() = default;
+	struct PendingStart;
 
 	struct Coalesced
 	{
@@ -67,6 +68,9 @@ private:
 	void dropTransform(const std::string &key);
 	void dropSceneTransforms(const std::string &sceneUuid);
 	void setOutputState(const char *output, const char *state);
+	void watchFailedStart(const char *output);
+	void checkFailedStart(const std::string &output, const std::shared_ptr<PendingStart> &pending);
+	static void onOutputStarting(void *data, calldata_t *params);
 	void unregisterAllAppHotkeys();
 
 	void connectScenes();
@@ -116,6 +120,7 @@ private:
 
 	// The last transition seen per output, under m_mtx
 	std::map<std::string, OutputState> m_outputStates;
+	std::map<std::string, std::shared_ptr<PendingStart>> m_pendingStarts;
 
 	// appKey, then hotkey name. The AppHotkey is the callback's data, so it lives until obs_hotkey_unregister has returned
 	std::mutex m_hotkeyMtx;

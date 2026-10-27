@@ -5,10 +5,13 @@
 
 #include <util/config-file.h>
 
+#include <QApplication>
 #include <QMainWindow>
 #include <QPalette>
+#include <QTimer>
 
 #include <chrono>
+#include <cstring>
 #include <ctime>
 #include <vector>
 
@@ -154,6 +157,13 @@ Json::object itemEvent(const char *event, calldata_t *params)
 }
 } // namespace
 
+struct ObsEvents::PendingStart
+{
+	std::atomic<bool> accepted = false;
+	OBSOutputAutoRelease output;
+	OBSSignal signal;
+};
+
 void ObsEvents::start()
 {
 	if (m_running.exchange(true))
@@ -191,6 +201,7 @@ void ObsEvents::stop()
 	m_queue.clear();
 	m_coalesced.clear();
 	m_transforms.clear();
+	m_pendingStarts.clear();
 	m_outputStates.clear();
 }
 
@@ -364,9 +375,82 @@ void ObsEvents::setOutputState(const char *output, const char *state)
 	{
 		std::lock_guard<std::mutex> grd(m_mtx);
 		m_outputStates[output] = {state, time};
+		m_pendingStarts.erase(output);
 	}
 
 	push(Json(Json::object({{"event", "outputStateChanged"}, {"output", output}, {"state", state}, {"time", time}})).dump());
+}
+
+/*static*/
+void ObsEvents::onOutputStarting(void *data, calldata_t *)
+{
+	static_cast<PendingStart *>(data)->accepted = true;
+}
+
+// The output's "starting" signal means obs_output_start accepted the request.
+// Check after the frontend callback returns so failed starts from OBS controls
+// get the same terminal event as starts made through the browser API.
+void ObsEvents::watchFailedStart(const char *output)
+{
+	auto pending = std::make_shared<PendingStart>();
+	if (std::strcmp(output, "streaming") == 0)
+		pending->output = obs_frontend_get_streaming_output();
+	else if (std::strcmp(output, "recording") == 0)
+		pending->output = obs_frontend_get_recording_output();
+	else
+		pending->output = obs_frontend_get_replay_buffer_output();
+
+	if (pending->output)
+		pending->signal.Connect(obs_output_get_signal_handler(pending->output), "starting", onOutputStarting, pending.get());
+
+	{
+		std::lock_guard<std::mutex> grd(m_mtx);
+		m_pendingStarts[output] = pending;
+	}
+
+	const std::string name = output;
+	auto *mainWindow = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+	QTimer::singleShot(0, mainWindow, [this, name, pending]() { checkFailedStart(name, pending); });
+}
+
+void ObsEvents::checkFailedStart(const std::string &output, const std::shared_ptr<PendingStart> &pending)
+{
+	if (!m_running)
+		return;
+
+	{
+		std::lock_guard<std::mutex> grd(m_mtx);
+		auto itr = m_pendingStarts.find(output);
+		if (itr == m_pendingStarts.end() || itr->second != pending)
+			return;
+	}
+
+	bool active;
+	if (output == "streaming")
+		active = obs_frontend_streaming_active();
+	else if (output == "recording")
+		active = obs_frontend_recording_active();
+	else
+		active = obs_frontend_replay_buffer_active();
+
+	const bool accepted = pending->accepted || active || (pending->output && obs_output_active(pending->output));
+	if (!accepted && QApplication::activeModalWidget()) {
+		// OBS can enter a nested event loop while the start call is still on the stack.
+		auto *mainWindow = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+		QTimer::singleShot(100, mainWindow, [this, output, pending]() { checkFailedStart(output, pending); });
+		return;
+	}
+
+	{
+		std::lock_guard<std::mutex> grd(m_mtx);
+		auto itr = m_pendingStarts.find(output);
+		if (itr == m_pendingStarts.end() || itr->second != pending)
+			return;
+		m_pendingStarts.erase(itr);
+	}
+
+	if (!accepted)
+		settleFailedStart(output.c_str(), false);
 }
 
 // OBS emits *_STARTING before a start that can fail without any *_STOPPED
@@ -767,6 +851,8 @@ void ObsEvents::onFrontendEvent(enum obs_frontend_event event, void *)
 		if (transition.event == event)
 		{
 			self.setOutputState(transition.output, transition.state);
+			if (std::strcmp(transition.state, "starting") == 0)
+				self.watchFailedStart(transition.output);
 			return;
 		}
 	}

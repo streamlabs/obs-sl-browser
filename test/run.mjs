@@ -126,6 +126,10 @@ const REAL_APPDATA = process.env.APPDATA;
 const SCRATCH_HOME = join(HERE, ".home");
 const SCRATCH_APPDATA = join(SCRATCH_HOME, "AppData", "Roaming");
 if (!has("--no-launch")) {
+	if (REAL_APPDATA && resolve(REAL_APPDATA).toLowerCase() === resolve(SCRATCH_APPDATA).toLowerCase()) {
+		console.error(`${red("Refusing to run:")} the scratch profile is the real one (${REAL_APPDATA}).`);
+		process.exit(1);
+	}
 	// The previous run's CEF processes can still be exiting, and hold files in it
 	rmSync(SCRATCH_HOME, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 });
 	mkdirSync(SCRATCH_APPDATA, { recursive: true });
@@ -133,10 +137,6 @@ if (!has("--no-launch")) {
 	process.env.USERPROFILE = SCRATCH_HOME;
 	process.env.APPDATA = SCRATCH_APPDATA;
 	process.env.LOCALAPPDATA = join(SCRATCH_HOME, "AppData", "Local");
-	if (REAL_APPDATA && resolve(REAL_APPDATA).toLowerCase() === resolve(SCRATCH_APPDATA).toLowerCase()) {
-		console.error(`${red("Refusing to run:")} the scratch profile is the real one (${REAL_APPDATA}).`);
-		process.exit(1);
-	}
 }
 
 const exe = resolveObsExe({ repoRoot: REPO, explicit: opt("--obs", null), config: opt("--config", "RelWithDebInfo") });

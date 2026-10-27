@@ -123,6 +123,7 @@ private:
 
 	static void createCefBrowser_internal(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop);
 	static void attachCefBrowser(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop, CefRefPtr<CefRequestContext> request_context);
+	static void attachCefBrowserWithWindow(std::shared_ptr<BrowserElements> browserElements, const std::string &url, const bool startHidden, const bool keepOnTop, CefRefPtr<CefRequestContext> request_context, CefWindowHandle parentWindow, int width, int height);
 	static void cleanupCefBrowser_Internal(std::shared_ptr<BrowserElements> browserElements);
 
 	std::wstring getCacheDir() const;

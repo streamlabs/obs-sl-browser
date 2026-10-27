@@ -441,14 +441,15 @@ bool BrowserClient::JS_TAB_SEND_STRING_TO_MAIN(CefRefPtr<CefBrowser> &browser, i
 		return true;
 	}
 
-	// A tab that is already being destroyed is not main, which is what a uid of 0 would pass it off as
-	const int32_t senderUid = SlBrowser::instance().getUuidFromCefId(browser->GetIdentifier());
-
-	if (senderUid < 0)
+	// The client's own tab survives registry removal until its CEF browser has closed.
+	// Check that instance instead of using a negative uid as a missing-tab sentinel.
+	auto elements = m_elements.lock();
+	if (!elements || elements->closed || !elements->ready || !elements->browser || elements->browser->GetIdentifier() != browser->GetIdentifier())
 	{
 		jsonOutput = Json(Json::object({{"error", "tab is closing"}})).dump();
 		return true;
 	}
+	const int32_t senderUid = elements->uid;
 
 	std::shared_ptr<BrowserElements> ptr = SlBrowser::instance().getBrowserElements(0);
 
