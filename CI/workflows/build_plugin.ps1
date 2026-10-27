@@ -6,17 +6,12 @@
     Build the three plugin targets and their dependencies. OBS 33 also regenerates its core
     module list and relinks obs.dll. Without this switch the whole of OBS is built, which is
     what happens when the archive was missing.
-
-.PARAMETER E2EUseObsToken
-    Build the plugin for the elevated CI runner, which has no standard desktop shell token.
-    Never set this for an installer or release package.
 #>
 [CmdletBinding()]
 param(
     [string]$PluginDir = 'obs-sl-browser',
     [string]$ObsDir = 'obs-studio',
     [switch]$PluginOnly,
-    [switch]$E2EUseObsToken,
     [string]$LogFile = 'build.log'
 )
 
@@ -24,12 +19,11 @@ $ErrorActionPreference = 'Stop'
 
 $ver = (Get-Content (Join-Path $PluginDir 'obs.ver') -Raw).Trim()
 if ($ver -notmatch '^\d+\.\d+\.\d+') { throw "obs.ver gave no usable version: '$ver'" }
-$e2eTokenOption = if ($E2EUseObsToken) { 'ON' } else { 'OFF' }
 
 Push-Location $ObsDir
 try {
     $cfg = @(& (Join-Path $PSScriptRoot '..\windows_x64_configure_args.ps1') -ObsDir .)
-    $cfg += @('-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF', "-DOBS_VERSION_OVERRIDE=$ver", "-DSL_BROWSER_E2E_USE_OBS_TOKEN=$e2eTokenOption")
+    $cfg += @('-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF', "-DOBS_VERSION_OVERRIDE=$ver")
     # Passed on the command line rather than patched into CMakePresets.json so that a restored
     # tree and a from-scratch tree configure identically. The override is quoted because
     # PowerShell does not expand variables inside an unquoted token that starts with a dash -

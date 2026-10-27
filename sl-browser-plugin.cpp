@@ -5,14 +5,10 @@
 #include <util\platform.h>
 
 #include <Windows.h>
-#include <userenv.h>
 #include <stdio.h>
 #include <string>
-#include <string_view>
 #include <filesystem>
-#include <algorithm>
 #include <atomic>
-#include <cwchar>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -49,240 +45,90 @@ static bool get_token_user(HANDLE token, std::vector<BYTE> &buffer)
 	return GetTokenInformation(token, TokenUser, buffer.data(), required, &required);
 }
 
-static bool environment_entry_matches(const wchar_t *entry, const wchar_t *name)
-{
-	const size_t name_length = wcslen(name);
-	return _wcsnicmp(entry, name, name_length) == 0 && entry[name_length] == L'=';
-}
+using unique_handle = std::unique_ptr<void, decltype(&CloseHandle)>;
 
-static bool build_browser_environment(HANDLE token, std::vector<wchar_t> &environment)
+static bool launch_browser_process(const std::wstring &process_path, const std::wstring &command_line, const std::wstring &working_dir, STARTUPINFOW &startup_info, DWORD &launch_error)
 {
-	const auto free_obs_environment = [](wchar_t *value) {
-		if (value)
-			FreeEnvironmentStringsW(value);
+	const auto launch_with_obs_token = [&]() {
+		std::wstring mutable_command_line = command_line;
+		const BOOL started = CreateProcessW(process_path.c_str(), mutable_command_line.data(), nullptr, nullptr, FALSE, CREATE_NEW_CONSOLE, nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo);
+		launch_error = started ? ERROR_SUCCESS : GetLastError();
+		return !!started;
 	};
-	std::unique_ptr<wchar_t, decltype(free_obs_environment)> obs_environment(GetEnvironmentStringsW(),
-									    free_obs_environment);
-	if (!obs_environment)
-		return false;
-
-	constexpr wchar_t default_url_name[] = L"SL_PLUGIN_DEFAULT_URL";
-	constexpr wchar_t debug_port_name[] = L"SL_PLUGIN_REMOTE_DEBUGGING_PORT";
-	std::wstring default_url_override;
-	std::wstring debug_port_override;
-	for (const wchar_t *entry = obs_environment.get(); *entry; entry += wcslen(entry) + 1)
-	{
-		if (environment_entry_matches(entry, default_url_name))
-			default_url_override = entry;
-		else if (environment_entry_matches(entry, debug_port_name))
-			debug_port_override = entry;
-	}
-	if (default_url_override.empty() && debug_port_override.empty())
-		return true;
-
-	LPVOID raw_user_environment = nullptr;
-	if (!CreateEnvironmentBlock(&raw_user_environment, token, FALSE))
-	{
-		const DWORD environment_error = GetLastError();
-		obs_environment.reset();
-		SetLastError(environment_error);
-		return false;
-	}
-	std::unique_ptr<void, decltype(&DestroyEnvironmentBlock)> user_environment(raw_user_environment,
-									  DestroyEnvironmentBlock);
-
-	std::vector<std::wstring> entries;
-	for (const wchar_t *entry = static_cast<const wchar_t *>(user_environment.get()); *entry;
-	     entry += wcslen(entry) + 1)
-	{
-		if ((!default_url_override.empty() && environment_entry_matches(entry, default_url_name)) ||
-		    (!debug_port_override.empty() && environment_entry_matches(entry, debug_port_name)))
-			continue;
-		entries.emplace_back(entry);
-	}
-	if (!default_url_override.empty())
-		entries.push_back(default_url_override);
-	if (!debug_port_override.empty())
-		entries.push_back(debug_port_override);
-	auto entry_name = [](const std::wstring &entry) {
-		const size_t separator = entry.find(L'=', entry.front() == L'=' ? 1 : 0);
-		return std::wstring_view(entry).substr(0, separator);
+	const auto fallback = [&](const char *step) {
+		const DWORD error = GetLastError();
+		blog(LOG_WARNING, "[SL_PLUGIN]: %s failed with error %lu; trying OBS token", step, error);
+		return launch_with_obs_token();
 	};
-	std::sort(entries.begin(), entries.end(), [&](const std::wstring &a, const std::wstring &b) {
-		const auto a_name = entry_name(a);
-		const auto b_name = entry_name(b);
-		return CompareStringOrdinal(a_name.data(), static_cast<int>(a_name.size()), b_name.data(),
-					    static_cast<int>(b_name.size()), TRUE) == CSTR_LESS_THAN;
-	});
 
-	for (const auto &entry : entries)
-	{
-		environment.insert(environment.end(), entry.begin(), entry.end());
-		environment.push_back(L'\0');
-	}
-	environment.push_back(L'\0');
-	if (entries.empty())
-		environment.push_back(L'\0');
-	return true;
-}
-
-static bool launch_browser_process(const std::wstring &process_path, std::wstring &command_line,
-				   const std::wstring &working_dir, STARTUPINFOW &startup_info)
-{
-#ifdef SL_BROWSER_E2E_USE_OBS_TOKEN
-	// The CI runner has no standard desktop shell token. Keep its existing
-	// launch behavior so the suites can exercise the rest of the plugin.
-	return CreateProcessW(process_path.c_str(), command_line.data(), nullptr, nullptr, FALSE,
-			      CREATE_NEW_CONSOLE, nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo);
-#endif
-
-	HANDLE process_token = nullptr;
-	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &process_token))
-	{
-		const DWORD token_error = GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: OpenProcessToken failed with error %lu", token_error);
-		SetLastError(token_error);
-		return false;
-	}
+	HANDLE raw_process_token = nullptr;
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw_process_token))
+		return fallback("OpenProcessToken");
+	unique_handle process_token(raw_process_token, CloseHandle);
 
 	TOKEN_ELEVATION elevation{};
 	DWORD returned = 0;
-	if (!GetTokenInformation(process_token, TokenElevation, &elevation, sizeof(elevation), &returned))
-	{
-		const DWORD query_error = GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not query OBS elevation, error %lu", query_error);
-		CloseHandle(process_token);
-		SetLastError(query_error);
-		return false;
-	}
-
+	if (!GetTokenInformation(process_token.get(), TokenElevation, &elevation, sizeof(elevation), &returned))
+		return fallback("Query OBS elevation");
 	if (!elevation.TokenIsElevated)
-	{
-		CloseHandle(process_token);
-		return CreateProcessW(process_path.c_str(), command_line.data(), nullptr, nullptr, FALSE,
-				      CREATE_NEW_CONSOLE, nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo);
-	}
+		return launch_with_obs_token();
 
-	std::vector<BYTE> obs_user;
-	if (!get_token_user(process_token, obs_user))
-	{
-		const DWORD token_error = GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not query OBS's user, error %lu", token_error);
-		CloseHandle(process_token);
-		SetLastError(token_error);
-		return false;
-	}
-	CloseHandle(process_token);
-
-	// UAC's linked token may only be an identification token. Use the desktop shell's
-	// primary token to start the Qt-dependent helper at standard integrity.
 	DWORD shell_pid = 0;
 	const HWND shell_window = GetShellWindow();
 	if (!shell_window || !GetWindowThreadProcessId(shell_window, &shell_pid) || !shell_pid)
 	{
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not find the desktop shell process");
 		SetLastError(ERROR_NOT_FOUND);
-		return false;
+		return fallback("Find desktop shell");
 	}
 
-	DWORD obs_session = 0;
-	DWORD shell_session = 0;
-	if (!ProcessIdToSessionId(GetCurrentProcessId(), &obs_session) ||
-	    !ProcessIdToSessionId(shell_pid, &shell_session) || obs_session != shell_session)
-	{
-		const DWORD session_error = obs_session != shell_session ? ERROR_ACCESS_DENIED : GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Desktop shell is not in OBS's session, error %lu", session_error);
-		SetLastError(session_error);
-		return false;
-	}
+	HANDLE raw_shell_process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, shell_pid);
+	if (!raw_shell_process)
+		return fallback("Open desktop shell");
+	unique_handle shell_process(raw_shell_process, CloseHandle);
 
-	HANDLE shell_process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, shell_pid);
-	if (!shell_process)
-	{
-		const DWORD process_error = GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not open the desktop shell process, error %lu", process_error);
-		SetLastError(process_error);
-		return false;
-	}
+	HANDLE raw_shell_token = nullptr;
+	if (!OpenProcessToken(shell_process.get(), TOKEN_QUERY | TOKEN_DUPLICATE, &raw_shell_token))
+		return fallback("Open desktop shell token");
+	unique_handle shell_token(raw_shell_token, CloseHandle);
 
-	HANDLE shell_token = nullptr;
-	const BOOL opened_shell_token = OpenProcessToken(shell_process, TOKEN_QUERY | TOKEN_DUPLICATE, &shell_token);
-	const DWORD shell_token_error = opened_shell_token ? ERROR_SUCCESS : GetLastError();
-	CloseHandle(shell_process);
-	if (!opened_shell_token)
-	{
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not open the desktop shell token, error %lu", shell_token_error);
-		SetLastError(shell_token_error);
-		return false;
-	}
-
+	std::vector<BYTE> obs_user;
 	std::vector<BYTE> shell_user;
-	if (!get_token_user(shell_token, shell_user))
-	{
-		const DWORD token_error = GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not query the desktop shell's user, error %lu", token_error);
-		CloseHandle(shell_token);
-		SetLastError(token_error);
-		return false;
-	}
+	if (!get_token_user(process_token.get(), obs_user) || !get_token_user(shell_token.get(), shell_user))
+		return fallback("Query token users");
 	const auto *obs_token_user = reinterpret_cast<const TOKEN_USER *>(obs_user.data());
 	const auto *shell_token_user = reinterpret_cast<const TOKEN_USER *>(shell_user.data());
 	if (!EqualSid(obs_token_user->User.Sid, shell_token_user->User.Sid))
 	{
-		blog(LOG_ERROR, "[SL_PLUGIN]: Desktop shell belongs to a different user than OBS");
-		CloseHandle(shell_token);
 		SetLastError(ERROR_ACCESS_DENIED);
-		return false;
+		return fallback("Match desktop shell user");
 	}
 
 	TOKEN_ELEVATION shell_elevation{};
-	if (!GetTokenInformation(shell_token, TokenElevation, &shell_elevation,
-				 sizeof(shell_elevation), &returned) || shell_elevation.TokenIsElevated)
+	if (!GetTokenInformation(shell_token.get(), TokenElevation, &shell_elevation, sizeof(shell_elevation), &returned))
+		return fallback("Query desktop shell elevation");
+	if (shell_elevation.TokenIsElevated)
 	{
-		const DWORD token_error = shell_elevation.TokenIsElevated ? ERROR_ACCESS_DENIED : GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Desktop shell token is not a standard user token, error %lu", token_error);
-		CloseHandle(shell_token);
-		SetLastError(token_error);
-		return false;
+		SetLastError(ERROR_ACCESS_DENIED);
+		return fallback("Require standard desktop shell token");
 	}
 
-	HANDLE browser_token = nullptr;
+	HANDLE raw_browser_token = nullptr;
 	// Match Chromium's access mask for a medium primary token used by CreateProcessWithTokenW.
-	if (!DuplicateTokenEx(shell_token, TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY |
-				       TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID,
-			      nullptr, SecurityImpersonation, TokenPrimary, &browser_token))
-	{
-		const DWORD token_error = GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not duplicate the desktop shell token, error %lu", token_error);
-		CloseHandle(shell_token);
-		SetLastError(token_error);
-		return false;
-	}
-	CloseHandle(shell_token);
-
-	// Keep the shell user's environment and forward only OBS's two browser overrides.
-	std::vector<wchar_t> environment;
-	if (!build_browser_environment(browser_token, environment))
-	{
-		const DWORD environment_error = GetLastError();
-		blog(LOG_ERROR, "[SL_PLUGIN]: Could not prepare the browser environment, error %lu", environment_error);
-		CloseHandle(browser_token);
-		SetLastError(environment_error);
-		return false;
-	}
+	if (!DuplicateTokenEx(shell_token.get(), TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID, nullptr, SecurityImpersonation, TokenPrimary, &raw_browser_token))
+		return fallback("Duplicate desktop shell token");
+	unique_handle browser_token(raw_browser_token, CloseHandle);
 
 	blog(LOG_INFO, "[SL_PLUGIN]: Launching browser with the desktop shell's standard user token");
 	// The desktop shell already loaded this user's profile. LOGON_WITH_PROFILE
 	// requires additional token rights and backup/restore privileges.
-	const DWORD creation_flags = CREATE_NEW_CONSOLE | (environment.empty() ? 0 : CREATE_UNICODE_ENVIRONMENT);
-	const BOOL started = CreateProcessWithTokenW(browser_token, 0,
-						     process_path.c_str(), command_line.data(), creation_flags,
-						     environment.empty() ? nullptr : environment.data(), working_dir.c_str(),
-						     &startup_info, &g_browserProcessInfo);
-	const DWORD launch_error = started ? ERROR_SUCCESS : GetLastError();
-	CloseHandle(browser_token);
-	SetLastError(launch_error);
-	return started;
+	// A null environment inherits OBS's process variables, including browser overrides.
+	std::wstring mutable_command_line = command_line;
+	if (CreateProcessWithTokenW(browser_token.get(), 0, process_path.c_str(), mutable_command_line.data(), CREATE_NEW_CONSOLE, nullptr, working_dir.c_str(), &startup_info, &g_browserProcessInfo))
+	{
+		launch_error = ERROR_SUCCESS;
+		return true;
+	}
+	return fallback("CreateProcessWithTokenW");
 }
 
 OBS_DECLARE_MODULE()
@@ -465,9 +311,13 @@ void obs_module_post_load(void)
 				std::wstring startparams = L"sl-browser " + std::to_wstring(GetCurrentProcessId()) + L" " + std::to_wstring(myListenPort) + L" " + std::to_wstring(targetListenPort);
 				blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load process_path: %ls", process_path.c_str());
 				blog(LOG_ERROR, "[SL_PLUGIN]: obs_module_post_load startparams: %ls", startparams.c_str());
-				browserGood = launch_browser_process(process_path, startparams, obs_binary_dir, si);
+				DWORD launch_error = ERROR_SUCCESS;
+				browserGood = launch_browser_process(process_path, startparams, obs_binary_dir, si, launch_error);
 				if (!browserGood)
-					blog(LOG_ERROR, "[SL_PLUGIN]: Browser process launch failed with error %lu", GetLastError());
+				{
+					blog(LOG_ERROR, "[SL_PLUGIN]: Browser process launch failed with error %lu", launch_error);
+					SetLastError(launch_error);
+				}
 			}
 		}
 		catch (...)

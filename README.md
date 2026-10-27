@@ -4,9 +4,6 @@ Defining SL_PLUGIN_DEFAULT_URL as an env variable will override the default URL 
 
 Remote debugging is off by default. To debug the plugin's page, set SL_PLUGIN_REMOTE_DEBUGGING_PORT to a port from 1024 to 65535 (e.g. `setx SL_PLUGIN_REMOTE_DEBUGGING_PORT 9123`), restart OBS, then open chrome://inspect or http://localhost:9123.
 
-When OBS runs elevated, the plugin forwards `SL_PLUGIN_DEFAULT_URL` and
-`SL_PLUGIN_REMOTE_DEBUGGING_PORT` from OBS's process environment to the standard user browser.
-
 ## Local Build Instructions
 
 1. Build OBS (clone recursive).
@@ -30,17 +27,8 @@ Older OBS installers continue to install the four files into the selected plugin
 The signed ZIP contains the four flat runtime files for the existing update pipeline; it is
 not an OBS installation tree.
 
-When OBS runs as administrator under the desktop user's account on Windows, the plugin
-starts `sl-browser.exe` with the desktop shell's standard user token and uses OBS's
-`bin/64bit` as the working directory. It rejects a shell from another user or session.
-This keeps the browser at standard integrity and lets Windows find the Qt runtime supplied by OBS.
-OBS's bundled `obs-browser` initializes CEF separately. This plugin does not change that
-startup path or OBS's own locale lookup.
-
-The Windows end-to-end runner has no standard desktop shell token. Its test build uses
-`-E2EUseObsToken` to retain the runner's existing elevated helper launch; normal and release
-builds leave this option off. Elevated release behavior needs a manual test on an interactive
-Windows desktop.
+When OBS runs as administrator on Windows, the plugin starts `sl-browser.exe` with the
+desktop user's standard token and OBS's `bin/64bit` working directory when available.
 
 ## Commits and PRs
 

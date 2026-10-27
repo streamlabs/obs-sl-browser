@@ -136,10 +136,6 @@ set_target_properties_obs(sl-browser PROPERTIES FOLDER plugins/sl-browser PREFIX
 
 add_library(sl-browser-plugin MODULE)
 add_library(OBS::sl-browser-plugin ALIAS sl-browser-plugin)
-option(SL_BROWSER_E2E_USE_OBS_TOKEN "Use the OBS token in the Windows E2E runner" OFF)
-if(SL_BROWSER_E2E_USE_OBS_TOKEN)
-  target_compile_definitions(sl-browser-plugin PRIVATE SL_BROWSER_E2E_USE_OBS_TOKEN)
-endif()
 
 target_sources(
   sl-browser-plugin
@@ -160,7 +156,7 @@ target_sources(
 )
 
 target_link_libraries(sl-browser-plugin PRIVATE OBS::libobs OBS::frontend-api)
-target_link_libraries(sl-browser-plugin PRIVATE Advapi32 Userenv)
+target_link_libraries(sl-browser-plugin PRIVATE Advapi32)
 target_link_libraries(sl-browser-plugin PRIVATE Detours::Detours)
 target_link_libraries(sl-browser-plugin PRIVATE ZLIB::ZLIB)
 target_link_libraries(sl-browser-plugin PRIVATE Qt::Widgets)
