@@ -9,7 +9,7 @@ fetch(location.origin + '/report', {
 	body: JSON.stringify({
 		who: new URLSearchParams(location.search).get('label') || 'frame',
 		event: 'PROBE',
-		data: {origin: location.origin, top: window.top === window, slabsGlobal: typeof window.slabsGlobal}
+		data: {origin: location.origin, top: window.top === window, slabsGlobal: typeof window.slabsGlobal, keys: window.slabsGlobal && Object.keys(window.slabsGlobal)}
 	})
 });
 </script>

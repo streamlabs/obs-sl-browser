@@ -1,5 +1,6 @@
 /*
- * slabsGlobal belongs to the top-level page on the configured origin and nothing else.
+ * The full slabsGlobal belongs to the top-level page on the configured origin and nothing else.
+ * Frames on an allowed embed origin get a marker with no functions; the harness allows "other origin".
  *
  * The harness server answers on both 127.0.0.1 and localhost, which are different origins,
  * so "same origin" and "other origin" can both be served from here. Frames report what they
@@ -10,7 +11,7 @@ import { results, until } from "../../harness/suite.mjs";
 
 export default {
 	name: "api-isolation",
-	description: "slabsGlobal is bound only to the top-level page on the configured origin",
+	description: "the api is bound only to the top-level page on the configured origin; embed origins get a marker",
 	timeoutMs: 120000,
 
 	async run({ cdp, observer }) {
@@ -42,12 +43,13 @@ export default {
 			if (p.slabsGlobal !== "undefined") return `slabsGlobal is ${p.slabsGlobal}`;
 		});
 
-		await r.step("a cross-origin iframe has no slabsGlobal", async () => {
-			await embed("cross-origin-frame", otherOrigin);
-			if (!(await observer.waitFor(() => probe("cross-origin-frame"), { timeoutMs: 20000 }))) return "the frame never reported";
-			const p = probe("cross-origin-frame");
+		await r.step("an embed-origin iframe has only the pluginVersion marker", async () => {
+			await embed("embed-origin-frame", otherOrigin);
+			if (!(await observer.waitFor(() => probe("embed-origin-frame"), { timeoutMs: 20000 }))) return "the frame never reported";
+			const p = probe("embed-origin-frame");
 			if (p.origin !== otherOrigin) return `frame ran on ${p.origin}`;
-			if (p.slabsGlobal !== "undefined") return `slabsGlobal is ${p.slabsGlobal}`;
+			if (p.slabsGlobal !== "object") return `slabsGlobal is ${p.slabsGlobal}`;
+			if (JSON.stringify(p.keys) !== JSON.stringify(["pluginVersion"])) return `slabsGlobal has keys ${JSON.stringify(p.keys)}`;
 		});
 
 		await r.step("the main frame still has the api next to the frames", async () => {
@@ -55,7 +57,7 @@ export default {
 			if (v.__missing || v.__timeout || v.error) return `sl_getVersionInfo failed: ${JSON.stringify(v)}`;
 		});
 
-		await r.step("after navigating to another origin slabsGlobal is absent", async () => {
+		await r.step("after navigating to an embed origin slabsGlobal is absent", async () => {
 			await cdp.evaluate(`location.href = ${JSON.stringify(otherOrigin + "/frame.html?label=navigated-main")}`);
 			if (!(await observer.waitFor(() => probe("navigated-main"), { timeoutMs: 20000 }))) return "the page never reported";
 			const p = probe("navigated-main");

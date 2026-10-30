@@ -8,6 +8,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <sstream>
 
 using namespace json11;
 
@@ -48,6 +49,9 @@ void BrowserApp::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_li
 
 	if (!m_apiOrigin.empty())
 		command_line->AppendSwitchWithValue("api_origin", m_apiOrigin);
+
+	if (!m_embedOrigins.empty())
+		command_line->AppendSwitchWithValue("embed_origins", m_embedOrigins);
 }
 
 std::string BrowserApp::OriginOf(const std::string &url)
@@ -112,9 +116,23 @@ bool BrowserApp::OnAlreadyRunningAppRelaunch(CefRefPtr<CefCommandLine>, const Ce
 
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
-	std::string allowedOrigin = CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("api_origin");
+	CefRefPtr<CefCommandLine> commandLine = CefCommandLine::GetGlobalCommandLine();
+	std::string allowedOrigin = commandLine->GetSwitchValue("api_origin");
+	std::string frameOrigin = OriginOf(frame->GetURL());
 
-	if (!frame->IsMain() || allowedOrigin.empty() || OriginOf(frame->GetURL()) != allowedOrigin)
+	bool isApiFrame = frame->IsMain() && !allowedOrigin.empty() && frameOrigin == allowedOrigin;
+
+	bool isEmbedFrame = false;
+	if (!frame->IsMain() && !frameOrigin.empty())
+	{
+		std::stringstream embedOrigins(commandLine->GetSwitchValue("embed_origins").ToString());
+		std::string embedOrigin;
+
+		while (!isEmbedFrame && std::getline(embedOrigins, embedOrigin, ','))
+			isEmbedFrame = embedOrigin == frameOrigin;
+	}
+
+	if (!isApiFrame && !isEmbedFrame)
 		return;
 
 	CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
@@ -122,6 +140,9 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 	CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
 	globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
 	slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
+
+	if (!isApiFrame)
+		return;
 
 	for (auto &itr : JavascriptApi::getPluginFunctionNames())
 		slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
