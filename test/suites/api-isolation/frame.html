@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>probe frame</title>
+<script>
+// Used both as an embedded frame and as a main-frame navigation target on another origin.
+fetch(location.origin + '/report', {
+	method: 'POST',
+	headers: {'content-type': 'application/json'},
+	body: JSON.stringify({
+		who: new URLSearchParams(location.search).get('label') || 'frame',
+		event: 'PROBE',
+		data: {origin: location.origin, top: window.top === window, slabsGlobal: typeof window.slabsGlobal, keys: window.slabsGlobal && Object.keys(window.slabsGlobal)}
+	})
+});
+</script>

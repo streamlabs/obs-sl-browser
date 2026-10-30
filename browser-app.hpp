@@ -15,9 +15,13 @@ class BrowserApp : public CefApp, public CefRenderProcessHandler, public CefBrow
 	int m_callbackIdCounter = 0;
 	std::map<int, std::pair<CefRefPtr<CefV8Value>, CefRefPtr<CefV8Context>>> m_callbackMap;
 	std::recursive_mutex m_callbackMutex;
+	std::string m_apiOrigin;
+	std::string m_embedOrigins;
 
 public:
-	inline BrowserApp() {}
+	inline BrowserApp(const std::string &apiOrigin = {}, const std::string &embedOrigins = {}) : m_apiOrigin(apiOrigin), m_embedOrigins(embedOrigins) {}
+
+	static std::string OriginOf(const std::string &url);
 
 	// Port from SL_PLUGIN_REMOTE_DEBUGGING_PORT, or 0 when unset or invalid.
 	static int getRemoteDebuggingPort();

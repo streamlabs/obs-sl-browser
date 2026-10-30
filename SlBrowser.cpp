@@ -115,6 +115,40 @@ std::string SlBrowser::getDefaultUrl()
 	return "https://obs-plugin.streamlabs.com";
 }
 
+/*static*/
+std::string SlBrowser::getApiOrigin()
+{
+	return BrowserApp::OriginOf(getDefaultUrl());
+}
+
+/*static*/
+std::string SlBrowser::getEmbedOrigins()
+{
+	std::string list = "https://streamlabs.com,https://beta.streamlabs.com";
+
+	char buffer[MAX_PATH];
+	DWORD len = GetEnvironmentVariableA("SL_PLUGIN_EMBED_ORIGINS", buffer, MAX_PATH);
+
+	if (len > 0 && len < MAX_PATH)
+		list = buffer;
+
+	std::string result;
+	std::stringstream stream(list);
+	std::string entry;
+
+	while (std::getline(stream, entry, ','))
+	{
+		std::string origin = BrowserApp::OriginOf(entry);
+
+		if (origin.empty())
+			continue;
+
+		result += (result.empty() ? "" : ",") + origin;
+	}
+
+	return result;
+}
+
 void SlBrowser::CreateCefBrowser(int arg)
 {
 	auto &app = SlBrowser::instance();
@@ -442,7 +476,7 @@ bool SlBrowser::browserInit()
 			std::cout << "Remote debugging disabled" << std::endl;
 	}
 
-	m_app = new BrowserApp();
+	m_app = new BrowserApp(getApiOrigin(), getEmbedOrigins());
 
 	CefExecuteProcess(args, m_app, nullptr);
 

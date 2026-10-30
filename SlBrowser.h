@@ -12,6 +12,8 @@ public:
 
 	static void CreateCefBrowser(int arg);
 	static std::string getDefaultUrl();
+	static std::string getApiOrigin();
+	static std::string getEmbedOrigins();
 
 	bool getSavedHiddenState() const;
 	void saveHiddenState(const bool b) const;

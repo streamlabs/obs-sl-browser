@@ -7,6 +7,9 @@
 
 #include <windows.h>
 
+#include <algorithm>
+#include <sstream>
+
 using namespace json11;
 
 /*static*/
@@ -43,6 +46,34 @@ void BrowserApp::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_li
 {
 	std::string pid = std::to_string(GetCurrentProcessId());
 	command_line->AppendSwitchWithValue("parent_pid", pid);
+
+	if (!m_apiOrigin.empty())
+		command_line->AppendSwitchWithValue("api_origin", m_apiOrigin);
+
+	if (!m_embedOrigins.empty())
+		command_line->AppendSwitchWithValue("embed_origins", m_embedOrigins);
+}
+
+std::string BrowserApp::OriginOf(const std::string &url)
+{
+	CefURLParts parts;
+	if (!CefParseURL(url, parts))
+		return {};
+
+	std::string scheme = CefString(&parts.scheme).ToString();
+	std::string host = CefString(&parts.host).ToString();
+	std::string port = CefString(&parts.port).ToString();
+
+	if (scheme.empty() || host.empty())
+		return {};
+
+	std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+	std::transform(host.begin(), host.end(), host.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+	if ((scheme == "http" && port == "80") || (scheme == "https" && port == "443"))
+		port.clear();
+
+	return scheme + "://" + host + (port.empty() ? "" : ":" + port);
 }
 
 void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefCommandLine> command_line)
@@ -83,13 +114,35 @@ bool BrowserApp::OnAlreadyRunningAppRelaunch(CefRefPtr<CefCommandLine>, const Ce
 	return true;
 }
 
-void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefRefPtr<CefV8Context> context)
+void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
+	CefRefPtr<CefCommandLine> commandLine = CefCommandLine::GetGlobalCommandLine();
+	std::string allowedOrigin = commandLine->GetSwitchValue("api_origin");
+	std::string frameOrigin = OriginOf(frame->GetURL());
+
+	bool isApiFrame = frame->IsMain() && !allowedOrigin.empty() && frameOrigin == allowedOrigin;
+
+	bool isEmbedFrame = false;
+	if (!frame->IsMain() && !frameOrigin.empty())
+	{
+		std::stringstream embedOrigins(commandLine->GetSwitchValue("embed_origins").ToString());
+		std::string embedOrigin;
+
+		while (!isEmbedFrame && std::getline(embedOrigins, embedOrigin, ','))
+			isEmbedFrame = embedOrigin == frameOrigin;
+	}
+
+	if (!isApiFrame && !isEmbedFrame)
+		return;
+
 	CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
 
 	CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
 	globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
 	slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
+
+	if (!isApiFrame)
+		return;
 
 	for (auto &itr : JavascriptApi::getPluginFunctionNames())
 		slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
