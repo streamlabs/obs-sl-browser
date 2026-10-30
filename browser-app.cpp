@@ -7,6 +7,8 @@
 
 #include <windows.h>
 
+#include <algorithm>
+
 using namespace json11;
 
 /*static*/
@@ -43,6 +45,31 @@ void BrowserApp::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_li
 {
 	std::string pid = std::to_string(GetCurrentProcessId());
 	command_line->AppendSwitchWithValue("parent_pid", pid);
+
+	if (!m_apiOrigin.empty())
+		command_line->AppendSwitchWithValue("api_origin", m_apiOrigin);
+}
+
+std::string BrowserApp::OriginOf(const std::string &url)
+{
+	CefURLParts parts;
+	if (!CefParseURL(url, parts))
+		return {};
+
+	std::string scheme = CefString(&parts.scheme).ToString();
+	std::string host = CefString(&parts.host).ToString();
+	std::string port = CefString(&parts.port).ToString();
+
+	if (scheme.empty() || host.empty())
+		return {};
+
+	std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+	std::transform(host.begin(), host.end(), host.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+	if ((scheme == "http" && port == "80") || (scheme == "https" && port == "443"))
+		port.clear();
+
+	return scheme + "://" + host + (port.empty() ? "" : ":" + port);
 }
 
 void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefCommandLine> command_line)
@@ -83,8 +110,13 @@ bool BrowserApp::OnAlreadyRunningAppRelaunch(CefRefPtr<CefCommandLine>, const Ce
 	return true;
 }
 
-void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefRefPtr<CefV8Context> context)
+void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
+	std::string allowedOrigin = CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("api_origin");
+
+	if (!frame->IsMain() || allowedOrigin.empty() || OriginOf(frame->GetURL()) != allowedOrigin)
+		return;
+
 	CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
 
 	CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
