@@ -17,6 +17,7 @@ public:
 	bool send_executeCallback(const int functionId, const std::string &jsonStr);
 	bool send_executeJavascript(const std::string &codeStr);
 	bool send_windowToggleVisibility();
+	bool send_obsEvent(const std::string &json);
 
 private:
 	std::atomic<bool> m_connected{false};

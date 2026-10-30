@@ -9,13 +9,15 @@
  *                SL_PLUGIN_DEFAULT_URL (default "page.html")
  *   collection   optional scene collection .json, installed and selected. {{BASE_URL}} in it
  *                is replaced with the harness server's origin
+ *   profile      optional function (workDir) returning ini sections for the profile's basic.ini
  *   cdp          false if the suite does not need a DevTools attachment (default true)
  *   expectMissing api names the suite calls on purpose that do not exist - so test/check.mjs
  *                does not report them as typos
  *   timeoutMs    how long run() gets before it is abandoned (default 180000)
  *   run(ctx)     async, returns an array of results
  *
- * ctx is { cdp, observer, obs, dir, workDir, say }.
+ * ctx is { cdp, observer, obs, dir, workDir, say, port }, port being the DevTools port, for
+ * attaching to further pages with attachTo() from harness/cdp.mjs.
  */
 
 export const DEFAULTS = { page: "page.html", cdp: true, timeoutMs: 180000, expectMissing: [] };
@@ -41,6 +43,7 @@ export function validate(suite, dirName) {
 	if (suite.collection !== undefined && suite.collection !== null && typeof suite.collection !== "string") {
 		bad("collection", "a string, or absent");
 	}
+	if (suite.profile !== undefined && typeof suite.profile !== "function") bad("profile", "a function, or absent");
 	if (typeof suite.cdp !== "boolean") bad("cdp", "a boolean");
 	if (!Number.isFinite(suite.timeoutMs) || suite.timeoutMs <= 0) bad("timeoutMs", "a positive number of milliseconds");
 	if (!Array.isArray(suite.expectMissing) || suite.expectMissing.some((n) => typeof n !== "string")) {
@@ -99,6 +102,7 @@ export function results() {
 		},
 		/** Wraps a step that may throw, so one broken assertion does not abandon the rest. */
 		async step(name, fn) {
+			console.error(`  ${new Date().toISOString().slice(11, 19)} step: ${name}`);
 			try {
 				const why = await fn();
 				return typeof why === "string" ? this.fail(name, why) : this.pass(name);

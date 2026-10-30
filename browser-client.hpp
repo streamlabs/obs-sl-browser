@@ -2,16 +2,27 @@
 
 #include "cef-headers.hpp"
 
+#include <functional>
+#include <deque>
 #include <map>
+#include <memory>
 #include <mutex>
 
 struct BrowserSource;
+struct BrowserElements;
 
 class BrowserClient : public CefClient, public CefDisplayHandler, public CefLifeSpanHandler, public CefRequestHandler, public CefResourceRequestHandler, public CefContextMenuHandler, public CefRenderHandler, public CefAudioHandler, public CefLoadHandler
 {
 
 public:
 	inline BrowserClient(bool reroute_audio_) : m_reroute_audio(reroute_audio_) {}
+
+	// Must be set before the browser is created
+	void SetIsMain(const bool b) { m_isMain = b; }
+	void SetElements(std::weak_ptr<BrowserElements> elements) { m_elements = std::move(elements); }
+
+	// Runs once on the CEF UI thread, when the browser is gone. Set on that thread too
+	void SetOnBeforeClose(std::function<void()> fn) { m_onBeforeClose = std::move(fn); }
 
 	/* CefClient */
 	CefRefPtr<CefLoadHandler> GetLoadHandler() override;
@@ -27,6 +38,7 @@ public:
 	bool OnConsoleMessage(CefRefPtr<CefBrowser> browser, cef_log_severity_t level, const CefString &message, const CefString &source, int line) override;
 
 	/* CefLifeSpanHandler */
+	bool DoClose(CefRefPtr<CefBrowser> browser) override;
 	bool OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
 #if CHROME_VERSION_BUILD >= 6834
 			   int popup_id,
@@ -34,11 +46,14 @@ public:
 			   const CefString &target_url, const CefString &target_frame_name, cef_window_open_disposition_t target_disposition, bool user_gesture, const CefPopupFeatures &popupFeatures, CefWindowInfo &windowInfo,
 			   CefRefPtr<CefClient> &client, CefBrowserSettings &settings, CefRefPtr<CefDictionaryValue> &extra_info, bool *no_javascript_access) override;
 
+	void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
 	bool OnTooltip(CefRefPtr<CefBrowser> browser, CefString &text) override;
 	bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message) override;
 
 	/* CefRequestHandler */
 	CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool is_navigation, bool is_download, const CefString &request_initiator, bool &disable_default_handling) override;
+
+	bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool user_gesture, bool is_redirect) override;
 
 	/* CefResourceRequestHandler */
 	CefResourceRequestHandler::ReturnValue OnBeforeResourceLoad(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, CefRefPtr<CefCallback> callback) override;
@@ -75,19 +90,66 @@ public:
 	CefRefPtr<CefBrowser> GetMostRecentRenderKnown();
 	CefRefPtr<CefBrowser> PopCallback(const int functionId);
 	void RegisterCallback(const int functionId, CefRefPtr<CefBrowser> browser);
+	void RemoveBrowserFromCallback(CefRefPtr<CefBrowser> browser);
+
+public:
+	static int32_t GetReceiverFuncIdForBrowser(const int32_t browserCefId);
+	static void SendMsgToReceiver(CefRefPtr<CefBrowser> target, const std::string &msg, const int32_t senderUid);
+	static void SendObsEventToReceiver(const std::string &json);
 
 public:
 	static std::string cefListValueToJSONString(CefRefPtr<CefListValue> listValue);
 
 private:
 	void UpdateExtraTexture();
+	static void AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid);
+	static void AssignObsEventReceiverFunc(const int32_t browserCefId, const int32_t funcid);
+	static void DrainObsEvents();
+
 	bool valid() const;
 
 	bool m_reroute_audio = true;
-
+	bool m_isMain = false;
+	std::weak_ptr<BrowserElements> m_elements;
+	std::function<void()> m_onBeforeClose;
 	std::recursive_mutex m_recursiveMutex;
-	std::map<int, CefRefPtr<CefBrowser>> m_callbackDictionary;
+	std::map<int32_t, CefRefPtr<CefBrowser>> m_callbackDictionary;
 
-	CefRefPtr<CefBrowser> m_Browser;
 	CefRefPtr<CefBrowser> m_MostRecentRenderKnowOf = nullptr;
+
+	static std::mutex m_tabReceiverMutex;
+	static std::map<int32_t, int32_t> m_tabReceiverDictionary;
+
+	// Main's slot for events_registerReceiver, apart from its tabs_registerMsgReceiver one
+	static std::mutex m_obsEventReceiverMutex;
+	static int32_t m_obsEventReceiverBrowserId;
+	static int32_t m_obsEventReceiverFuncId;
+	static std::mutex m_obsEventPendingMutex;
+	static std::deque<std::string> m_obsEventPending;
+	static bool m_obsEventDrainScheduled;
+	static bool m_obsEventOverflowed;
+
+private:
+	bool JS_BROWSER_RESIZE_BROWSER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_BROWSER_BRING_FRONT(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_BROWSER_SET_WINDOW_POSITION(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_BROWSER_SET_ALLOW_HIDE_BROWSER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_BROWSER_SET_HIDDEN_STATE(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_DESTROY_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_RESIZE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_LOAD_URL(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_HIDE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_SHOW_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_IS_WINDOW_HIDDEN(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_REGISTER_MSG_RECEIVER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TAB_SEND_STRING_TO_MAIN(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_GET_WINDOW_CEF_IDENTIFIER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_MAIN_SEND_STRING_TO_TAB(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_EXECUTE_JS(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_QUERY_ALL(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_SET_ICON(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_TABS_SET_TITLE(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
+	bool JS_EVENTS_REGISTER_RECEIVER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType);
 };

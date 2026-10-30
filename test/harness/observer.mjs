@@ -176,6 +176,7 @@ export async function startServer({ dir, port = 0, onEvent = () => {} }) {
 			writeFileSync(path, JSON.stringify(events, null, 2));
 		},
 
+		closeAllConnections() { server.closeAllConnections(); },
 		close() {
 			return new Promise((r) => server.close(r));
 		},

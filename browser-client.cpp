@@ -10,6 +10,8 @@
 #include "SlBrowser.h"
 #include "WindowsFunctions.h"
 
+#include <include/base/cef_callback.h>
+#include <include/wrapper/cef_closure_task.h>
 #include <json11/json11.hpp>
 
 using namespace json11;
@@ -65,11 +67,39 @@ CefRefPtr<CefResourceRequestHandler> BrowserClient::GetResourceRequestHandler(Ce
 	return nullptr;
 }
 
+bool BrowserClient::OnBeforeBrowse(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool, bool)
+{
+	// Only a tab's own page is held to the approved origins; its subframes and main's pages are not
+	if (m_isMain || !frame->IsMain())
+		return false;
+
+	const std::string url = request->GetURL();
+
+	return !SlBrowser::isApprovedTabUrl(url);
+}
+
 CefResourceRequestHandler::ReturnValue BrowserClient::OnBeforeResourceLoad(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, CefRefPtr<CefCallback>)
 {
 	return RV_CONTINUE;
 }
 #endif
+
+bool BrowserClient::DoClose(CefRefPtr<CefBrowser>)
+{
+	if (!m_isMain)
+	{
+		if (auto elements = m_elements.lock(); elements && !elements->closed)
+		{
+			// A page requested the close. Handle it before CEF sends WM_CLOSE to Qt's
+			// root window, whose closeEvent ignores the event. The queued cleanup
+			// closes the detached CEF child after the uid is removed.
+			if (SlBrowser::instance().closeTabWindow(elements->uid, elements))
+				return true;
+		}
+	}
+
+	return false;
+}
 
 bool BrowserClient::OnBeforePopup(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>,
 #if CHROME_VERSION_BUILD >= 6834
@@ -163,6 +193,30 @@ void BrowserClient::RegisterCallback(const int functionId, CefRefPtr<CefBrowser>
 	m_MostRecentRenderKnowOf = browser;
 }
 
+void BrowserClient::RemoveBrowserFromCallback(CefRefPtr<CefBrowser> browser)
+{
+	std::lock_guard<std::recursive_mutex> grd(m_recursiveMutex);
+
+	if (m_MostRecentRenderKnowOf != nullptr && m_MostRecentRenderKnowOf->GetIdentifier() == browser->GetIdentifier())
+		m_MostRecentRenderKnowOf = nullptr;
+
+	for (auto itr = m_callbackDictionary.begin(); itr != m_callbackDictionary.end();)
+	{
+		if (itr->second->GetIdentifier() == browser->GetIdentifier())
+			itr = m_callbackDictionary.erase(itr);
+		else
+			++itr;
+	}
+
+	std::lock_guard<std::mutex> receiverGrd(m_tabReceiverMutex);
+	m_tabReceiverDictionary.erase(browser->GetIdentifier());
+
+	std::lock_guard<std::mutex> eventGrd(m_obsEventReceiverMutex);
+
+	if (m_obsEventReceiverBrowserId == browser->GetIdentifier())
+		m_obsEventReceiverFuncId = 0;
+}
+
 CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
 {
 	std::lock_guard<std::recursive_mutex> grd(m_recursiveMutex);
@@ -179,6 +233,150 @@ CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
 	return nullptr;
 }
 
+std::mutex BrowserClient::m_tabReceiverMutex;
+std::map<int32_t, int32_t> BrowserClient::m_tabReceiverDictionary;
+
+void BrowserClient::AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid)
+{
+	std::lock_guard<std::mutex> grd(m_tabReceiverMutex);
+	m_tabReceiverDictionary[browserCefId] = funcid;
+}
+
+// 0 when the browser has no receiver
+int32_t BrowserClient::GetReceiverFuncIdForBrowser(const int32_t browserCefId)
+{
+	std::lock_guard<std::mutex> grd(m_tabReceiverMutex);
+	auto itr = m_tabReceiverDictionary.find(browserCefId);
+	return itr != m_tabReceiverDictionary.end() ? itr->second : 0;
+}
+
+std::mutex BrowserClient::m_obsEventReceiverMutex;
+int32_t BrowserClient::m_obsEventReceiverBrowserId = 0;
+int32_t BrowserClient::m_obsEventReceiverFuncId = 0;
+std::mutex BrowserClient::m_obsEventPendingMutex;
+std::deque<std::string> BrowserClient::m_obsEventPending;
+bool BrowserClient::m_obsEventDrainScheduled = false;
+bool BrowserClient::m_obsEventOverflowed = false;
+
+namespace
+{
+constexpr size_t kMaxPendingObsEvents = 10000;
+constexpr int kObsEventsPerTask = 64;
+}
+
+void BrowserClient::AssignObsEventReceiverFunc(const int32_t browserCefId, const int32_t funcid)
+{
+	std::lock_guard<std::mutex> grd(m_obsEventReceiverMutex);
+	m_obsEventReceiverBrowserId = browserCefId;
+	m_obsEventReceiverFuncId = funcid;
+}
+
+void BrowserClient::SendObsEventToReceiver(const std::string &json)
+{
+	// Receiver registration also runs on CEF UI. Read its ID and send on that
+	// thread so the replacement ACK cannot overtake an event using the old ID.
+	if (!CefCurrentlyOn(TID_UI))
+	{
+		bool schedule = false;
+		{
+			std::lock_guard<std::mutex> grd(m_obsEventPendingMutex);
+			if (m_obsEventPending.size() >= kMaxPendingObsEvents)
+			{
+				if (!m_obsEventOverflowed)
+					printf("sl-proxy: OBS event queue is full, dropping events until CEF catches up\n");
+				m_obsEventOverflowed = true;
+				return;
+			}
+			m_obsEventPending.push_back(json);
+			if (!m_obsEventDrainScheduled)
+			{
+				m_obsEventDrainScheduled = true;
+				schedule = true;
+			}
+		}
+		if (schedule && !CefPostTask(TID_UI, base::BindOnce(&DrainObsEvents)))
+		{
+			std::lock_guard<std::mutex> grd(m_obsEventPendingMutex);
+			m_obsEventPending.clear();
+			m_obsEventDrainScheduled = false;
+			m_obsEventOverflowed = false;
+		}
+		return;
+	}
+
+	int32_t browserId = 0;
+	int32_t funcId = 0;
+
+	{
+		std::lock_guard<std::mutex> grd(m_obsEventReceiverMutex);
+		browserId = m_obsEventReceiverBrowserId;
+		funcId = m_obsEventReceiverFuncId;
+	}
+
+	if (funcId == 0)
+		return;
+
+	const auto main = SlBrowser::instance().m_mainBrowser;
+
+	if (main == nullptr || main->browser == nullptr || main->browser->GetIdentifier() != browserId)
+		return;
+
+	CefRefPtr<CefProcessMessage> processMsg = CefProcessMessage::Create("executeCallback_NoDelete");
+	CefRefPtr<CefListValue> execute_args = processMsg->GetArgumentList();
+	execute_args->SetInt(0, funcId);
+	execute_args->SetString(1, json);
+	execute_args->SetInt(2, 0);
+
+	SendBrowserProcessMessage(main->browser, PID_RENDERER, processMsg);
+}
+
+void BrowserClient::DrainObsEvents()
+{
+	for (int i = 0; i < kObsEventsPerTask; ++i)
+	{
+		std::string json;
+		{
+			std::lock_guard<std::mutex> grd(m_obsEventPendingMutex);
+			if (m_obsEventPending.empty())
+			{
+				m_obsEventDrainScheduled = false;
+				m_obsEventOverflowed = false;
+				return;
+			}
+			json = std::move(m_obsEventPending.front());
+			m_obsEventPending.pop_front();
+		}
+		SendObsEventToReceiver(json);
+	}
+
+	if (!CefPostTask(TID_UI, base::BindOnce(&DrainObsEvents)))
+	{
+		std::lock_guard<std::mutex> grd(m_obsEventPendingMutex);
+		m_obsEventPending.clear();
+		m_obsEventDrainScheduled = false;
+		m_obsEventOverflowed = false;
+	}
+}
+
+void BrowserClient::SendMsgToReceiver(CefRefPtr<CefBrowser> target, const std::string &msg, const int32_t senderUid)
+{
+	if (target == nullptr)
+		return;
+
+	const int32_t funcId = GetReceiverFuncIdForBrowser(target->GetIdentifier());
+
+	if (funcId == 0)
+		return;
+
+	CefRefPtr<CefProcessMessage> processMsg = CefProcessMessage::Create("executeCallback_NoDelete");
+	CefRefPtr<CefListValue> execute_args = processMsg->GetArgumentList();
+	execute_args->SetInt(0, funcId);
+	execute_args->SetString(1, msg);
+	execute_args->SetInt(2, senderUid);
+
+	SendBrowserProcessMessage(target, PID_RENDERER, processMsg);
+}
+
 bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId processId, CefRefPtr<CefProcessMessage> message)
 {
 	const std::string &name = message->GetName();
@@ -189,115 +387,133 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 
 	int funcid = input_args->GetInt(0);
 
-	std::string frameOrigin = BrowserApp::OriginOf(frame->GetURL());
+	// The renderer only binds what its role allows, but a compromised one can send any name
+	const bool allowedForRole = m_isMain ? (JavascriptApi::isPluginFunctionName(name) || JavascriptApi::isBrowserFunctionName(name)) : JavascriptApi::isBrowserTabFunctionName(name);
+	const std::string frameUrl = frame->GetURL();
+	const std::string frameOrigin = BrowserApp::OriginOf(frameUrl);
+	const bool allowedForOrigin = m_isMain ? (!frameOrigin.empty() && frameOrigin == SlBrowser::getApiOrigin()) : SlBrowser::isApprovedTabUrl(frameUrl);
 
-	if (!frame->IsMain() || frameOrigin.empty() || frameOrigin != SlBrowser::getApiOrigin())
+	if (!frame->IsMain() || !allowedForOrigin || !allowedForRole)
 	{
-		printf("Refused api call %s from %s\n", name.c_str(), frame->GetURL().ToString().c_str());
+		printf("Refused api call %s from %s\n", name.c_str(), frameUrl.c_str());
 
-		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
-		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
-		execute_args->SetInt(0, funcid);
-		execute_args->SetString(1, Json(Json::object({{"error", "Not allowed"}})).dump());
-		frame->SendProcessMessage(PID_RENDERER, msg);
+		if (funcid != 0)
+		{
+			CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
+			CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
+			execute_args->SetInt(0, funcid);
+			execute_args->SetString(1, Json(Json::object({{"error", "Not allowed"}})).dump());
+
+			frame->SendProcessMessage(PID_RENDERER, msg);
+		}
+
 		return true;
 	}
 
-	if (JavascriptApi::isBrowserFunctionName(name))
+	if (JavascriptApi::isBrowserFunctionName(name) || JavascriptApi::isBrowserTabFunctionName(name))
 	{
 		std::string jsonOutput = "{}";
 
-		std::vector <CefRefPtr<CefValue>> argsWithoutFunc;
+		std::vector<CefRefPtr<CefValue>> argsWithoutFunc;
 
 		for (size_t l = 1; l < input_args->GetSize(); l++)
 			argsWithoutFunc.push_back(input_args->GetValue(l));
 
-		// Stuff done right here and now to the browser
-		// Put this into a sub function if it gets bigger
-		switch (JavascriptApi::getFunctionId(name))
+		bool retVal = true;
+		std::string internalMsgType = "executeCallback";
+
+		const auto functionId = JavascriptApi::getFunctionId(name);
+		switch (functionId)
 		{
+		case JavascriptApi::JS_MAIN_SEND_STRING_TO_TAB:
+			retVal = JS_MAIN_SEND_STRING_TO_TAB(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS:
+			retVal = JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_REGISTER_MSG_RECEIVER:
+			retVal = JS_TABS_REGISTER_MSG_RECEIVER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TAB_SEND_STRING_TO_MAIN:
+			retVal = JS_TAB_SEND_STRING_TO_MAIN(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
 		case JavascriptApi::JS_BROWSER_RESIZE_BROWSER:
-		{
-			if (argsWithoutFunc.size() < 2)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			int w = argsWithoutFunc[0]->GetInt();
-			int h = argsWithoutFunc[1]->GetInt();
-
-			if (w < 200 || h < 200 || w > 8096 || h > 8096)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			SlBrowser::instance().m_widget->resize(w, h);
+			retVal = JS_BROWSER_RESIZE_BROWSER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
 			break;
-		}
 		case JavascriptApi::JS_BROWSER_BRING_FRONT:
-		{
-			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
-
-			if (::IsIconic(hwnd))
-				::ShowWindow(hwnd, SW_RESTORE);
-
-			WindowsFunctions::ForceForegroundWindow(hwnd);
+			retVal = JS_BROWSER_BRING_FRONT(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
 			break;
-		}
 		case JavascriptApi::JS_BROWSER_SET_WINDOW_POSITION:
-		{
-			if (argsWithoutFunc.size() < 2)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			int x = argsWithoutFunc[0]->GetInt();
-			int y = argsWithoutFunc[1]->GetInt();
-
-			SlBrowser::instance().m_widget->move(x, y);
+			retVal = JS_BROWSER_SET_WINDOW_POSITION(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
 			break;
-		}
 		case JavascriptApi::JS_BROWSER_SET_ALLOW_HIDE_BROWSER:
-		{
-			if (argsWithoutFunc.size() < 1)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			SlBrowser::instance().m_allowHideBrowser = argsWithoutFunc[0]->GetBool();
+			retVal = JS_BROWSER_SET_ALLOW_HIDE_BROWSER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
 			break;
-		}
 		case JavascriptApi::JS_BROWSER_SET_HIDDEN_STATE:
-		{
-			if (argsWithoutFunc.size() < 1)
-			{
-				jsonOutput = Json(Json::object({{"error", "Invalid parameters"}})).dump();
-				break;
-			}
-
-			SlBrowser::instance().m_widget->setHidden(argsWithoutFunc[0]->GetBool());
-			SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_widget->isHidden());
-
-			if (!SlBrowser::instance().m_widget->isHidden())
-			{
-				HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
-				WindowsFunctions::ForceForegroundWindow(hwnd);
-			}
-
+			retVal = JS_BROWSER_SET_HIDDEN_STATE(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_CREATE_WINDOW:
+			retVal = JS_TABS_CREATE_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_DESTROY_WINDOW:
+			retVal = JS_TABS_DESTROY_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_RESIZE_WINDOW:
+			retVal = JS_TABS_RESIZE_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_LOAD_URL:
+			retVal = JS_TABS_LOAD_URL(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_GET_WINDOW_CEF_IDENTIFIER:
+			retVal = JS_TABS_GET_WINDOW_CEF_IDENTIFIER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_EXECUTE_JS:
+			retVal = JS_TABS_EXECUTE_JS(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_QUERY_ALL:
+			retVal = JS_TABS_QUERY_ALL(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_SHOW_WINDOW:
+			retVal = JS_TABS_SHOW_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_HIDE_WINDOW:
+			retVal = JS_TABS_HIDE_WINDOW(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_IS_WINDOW_HIDDEN:
+			retVal = JS_TABS_IS_WINDOW_HIDDEN(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_SET_ICON:
+			retVal = JS_TABS_SET_ICON(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_TABS_SET_TITLE:
+			retVal = JS_TABS_SET_TITLE(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		case JavascriptApi::JS_EVENTS_REGISTER_RECEIVER:
+			retVal = JS_EVENTS_REGISTER_RECEIVER(browser, funcid, argsWithoutFunc, jsonOutput, internalMsgType);
+			break;
+		default:
+			jsonOutput = Json(Json::object({{"error", "Unknown function"}})).dump();
 			break;
 		}
+
+		if (!retVal && funcid > 0 &&
+		    (functionId == JavascriptApi::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS || functionId == JavascriptApi::JS_TABS_REGISTER_MSG_RECEIVER || functionId == JavascriptApi::JS_EVENTS_REGISTER_RECEIVER))
+		{
+			// The renderer keeps the previous receiver until this registration is active.
+			CefRefPtr<CefProcessMessage> ack = CefProcessMessage::Create("receiverRegistered");
+			ack->GetArgumentList()->SetInt(0, funcid);
+			frame->SendProcessMessage(PID_RENDERER, ack);
 		}
 
-		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create("executeCallback");
-		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
-		execute_args->SetInt(0, funcid);
-		execute_args->SetString(1, jsonOutput);
+		if (retVal)
+		{
+			CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create(internalMsgType);
+			CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
+			execute_args->SetInt(0, funcid);
+			execute_args->SetString(1, jsonOutput);
 
-		SendBrowserProcessMessage(browser, PID_RENDERER, msg);
+			SendBrowserProcessMessage(browser, PID_RENDERER, msg);
+		}
 	}
 	else
 	{
@@ -311,7 +527,6 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		}
 	}
 
-
 	return true;
 }
 
@@ -324,6 +539,24 @@ void BrowserClient::GetViewRect(CefRefPtr<CefBrowser>, CefRect &rect)
 	}
 
 	rect.Set(0, 0, 1920, 1080);
+}
+
+void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser)
+{
+	RemoveBrowserFromCallback(browser);
+
+	// If CEF closes a tab outside the normal cleanup path, unregister that exact tab.
+	if (!m_isMain)
+	{
+		if (auto elements = m_elements.lock())
+			SlBrowser::instance().closeTabWindow(elements->uid, elements);
+	}
+
+	auto onBeforeClose = std::move(m_onBeforeClose);
+	m_onBeforeClose = nullptr;
+
+	if (onBeforeClose)
+		onBeforeClose();
 }
 
 bool BrowserClient::OnTooltip(CefRefPtr<CefBrowser>, CefString &text)

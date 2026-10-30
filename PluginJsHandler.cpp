@@ -1,5 +1,6 @@
 #include "PluginJsHandler.h"
 #include "QtGuiModifications.h"
+#include "ObsEvents.h"
 
 // Local
 #include "JavascriptApi.h"
@@ -17,7 +18,10 @@
 
 // Stl
 #include <chrono>
+#include <climits>
+#include <cmath>
 #include <functional>
+#include <limits>
 #include <codecvt>
 #include <filesystem>
 #include <memory>
@@ -46,6 +50,27 @@
 #include <QProcess>
 
 using namespace json11;
+
+namespace
+{
+void setSourceMonitoringEnabled(obs_source_t *source, bool enabled)
+{
+#if LIBOBS_API_MAJOR_VER >= 33
+	obs_source_set_monitoring_enabled(source, enabled);
+#else
+	obs_source_set_monitoring_type(source, enabled ? OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT : OBS_MONITORING_TYPE_NONE);
+#endif
+}
+
+bool sourceMonitoringEnabled(const obs_source_t *source)
+{
+#if LIBOBS_API_MAJOR_VER >= 33
+	return obs_source_get_monitoring_enabled(source);
+#else
+	return obs_source_get_monitoring_type(source) != OBS_MONITORING_TYPE_NONE;
+#endif
+}
+} // namespace
 
 PluginJsHandler::PluginJsHandler() {}
 
@@ -290,6 +315,39 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_GET_SCALE: JS_GET_SCALE(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_SCENE_GET_SOURCES: JS_SCENE_GET_SOURCES(jsonParams, jsonReturnStr); break;	
 		case JavascriptApi::JS_QUERY_ALL_SOURCES: JS_QUERY_ALL_SOURCES(jsonParams, jsonReturnStr); break;		
+		case JavascriptApi::JS_OBS_SCENE_GET_ITEMS: JS_OBS_SCENE_GET_ITEMS(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_SCENEITEM_REMOVE: JS_OBS_SCENEITEM_REMOVE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_SCENEITEM_UPDATE: JS_OBS_SCENEITEM_UPDATE(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_GET_OUTPUT_STATE:
+			JS_OBS_GET_OUTPUT_STATE(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_REPLAY_BUFFER_START:
+			JS_OBS_REPLAY_BUFFER_START(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_REPLAY_BUFFER_STOP:
+			JS_OBS_REPLAY_BUFFER_STOP(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_REPLAY_BUFFER_SAVE:
+			JS_OBS_REPLAY_BUFFER_SAVE(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_HOTKEY_REGISTER_FOR_APP:
+			JS_OBS_HOTKEY_REGISTER_FOR_APP(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_HOTKEY_UNREGISTER_FOR_APP:
+			JS_OBS_HOTKEY_UNREGISTER_FOR_APP(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_QT_GET_THEME:
+			JS_QT_GET_THEME(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_SOURCE_UPDATE:
+			JS_OBS_SOURCE_UPDATE(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_SOURCE_GET_INFO:
+			JS_OBS_SOURCE_GET_INFO(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_GET_AVAILABLE_SOURCE_TYPES:
+			JS_OBS_GET_AVAILABLE_SOURCE_TYPES(jsonParams, jsonReturnStr);
+			break;
 		case JavascriptApi::JS_GET_SOURCE_DIMENSIONS: JS_GET_SOURCE_DIMENSIONS(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_GET_CANVAS_DIMENSIONS: JS_GET_CANVAS_DIMENSIONS(jsonParams,jsonReturnStr); break;
 		case JavascriptApi::JS_GET_CURRENT_SCENE: JS_GET_CURRENT_SCENE(jsonParams,jsonReturnStr); break;
@@ -3777,6 +3835,439 @@ void PluginJsHandler::JS_SCENE_GET_SOURCES(const json11::Json &params, std::stri
 		Qt::BlockingQueuedConnection);
 }
 
+static Json sceneItemToJson(obs_sceneitem_t *item);
+
+static bool collectSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *param)
+{
+	static_cast<std::vector<Json> *>(param)->push_back(sceneItemToJson(item));
+	return true;
+}
+
+static Json sceneItemToJson(obs_sceneitem_t *item)
+{
+	obs_source_t *source = obs_sceneitem_get_source(item);
+
+	vec2 pos, scale;
+	obs_sceneitem_crop crop;
+	obs_sceneitem_get_pos(item, &pos);
+	obs_sceneitem_get_scale(item, &scale);
+	obs_sceneitem_get_crop(item, &crop);
+
+	const bool isGroup = obs_sceneitem_is_group(item);
+	std::vector<Json> children;
+
+	if (isGroup)
+		obs_sceneitem_group_enum_items(item, collectSceneItem, &children);
+
+	const char *name = obs_source_get_name(source);
+	const char *uuid = obs_source_get_uuid(source);
+	const char *id = obs_source_get_id(source);
+
+	return Json::object({
+		{"id", static_cast<int>(obs_sceneitem_get_id(item))},
+		{"sourceName", name ? name : ""},
+		{"sourceUuid", uuid ? uuid : ""},
+		{"sourceId", id ? id : ""},
+		{"visible", obs_sceneitem_visible(item)},
+		{"locked", obs_sceneitem_locked(item)},
+		{"pos", Json::object({{"x", pos.x}, {"y", pos.y}})},
+		{"scale", Json::object({{"x", scale.x}, {"y", scale.y}})},
+		{"rot", obs_sceneitem_get_rot(item)},
+		{"crop", Json::object({{"left", crop.left}, {"top", crop.top}, {"right", crop.right}, {"bottom", crop.bottom}})},
+		{"isGroup", isGroup},
+		{"children", children},
+	});
+}
+
+// Item ids are container-local: pass the group's name to address a group's children. Runs on the UI thread. Fills out_error and returns null when there is no such item
+static obs_sceneitem_t *findSceneItem(const std::string &sceneName, const Json &itemId, OBSSourceAutoRelease &scene, std::string &out_error)
+{
+	scene = obs_get_source_by_name(sceneName.c_str());
+
+	if (!scene)
+		out_error = "Did not find an object with name " + sceneName;
+	else if (!obs_source_is_scene(scene) && !obs_source_is_group(scene))
+		out_error = "The object found is not a scene";
+	else if (!itemId.is_number() || itemId.number_value() != std::floor(itemId.number_value()) || itemId.number_value() < 0 || itemId.number_value() > static_cast<double>(INT_MAX))
+		out_error = "Invalid item id";
+	else if (obs_sceneitem_t *item = obs_scene_find_sceneitem_by_id(obs_group_or_scene_from_source(scene), static_cast<int64_t>(itemId.number_value())))
+		return item;
+	else
+		out_error = "Failed find the item in that scene";
+
+	return nullptr;
+}
+
+void PluginJsHandler::JS_OBS_SCENE_GET_ITEMS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const std::string scene_name = params["param2"].string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene = obs_get_source_by_name(scene_name.c_str());
+
+			if (!scene)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + scene_name}})).dump();
+				return;
+			}
+			else if (!obs_source_is_scene(scene))
+			{
+				out_jsonReturn = Json(Json::object({{"error", "The object found is not a scene"}})).dump();
+				return;
+			}
+
+			std::vector<Json> items;
+			obs_scene_enum_items(obs_scene_from_source(scene), collectSceneItem, &items);
+
+			out_jsonReturn = Json(Json::object({{"items", items}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_SCENEITEM_REMOVE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const std::string scene_name = params["param2"].string_value();
+	const Json itemId = params["param3"];
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, itemId, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene;
+			std::string error;
+
+			if (obs_sceneitem_t *item = findSceneItem(scene_name, itemId, scene, error))
+				obs_sceneitem_remove(item);
+			else
+				out_jsonReturn = Json(Json::object({{"error", error}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_SCENEITEM_UPDATE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const std::string scene_name = params["param2"].string_value();
+	const Json itemId = params["param3"];
+
+	std::string parseError;
+	const Json patch = Json::parse(params["param4"].string_value(), parseError);
+
+	if (!parseError.empty() || !patch.is_object())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid patch"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[scene_name, itemId, patch, &out_jsonReturn]() {
+			OBSSourceAutoRelease scene;
+			std::string error;
+			obs_sceneitem_t *item = findSceneItem(scene_name, itemId, scene, error);
+
+			if (!item)
+			{
+				out_jsonReturn = Json(Json::object({{"error", error}})).dump();
+				return;
+			}
+
+			const Json &transform = patch["transform"].is_object() ? patch["transform"] : patch;
+			const Json &position = transform["position"].is_object() ? transform["position"] : transform["pos"];
+			const Json &rotation = transform["rotation"].is_number() ? transform["rotation"] : transform["rot"];
+			const Json &scaleValue = transform["scale"];
+			const Json &cropValue = transform["crop"];
+
+			// One transform update for every key of the patch
+			obs_sceneitem_defer_update_begin(item);
+
+			if (patch["visible"].is_bool())
+				obs_sceneitem_set_visible(item, patch["visible"].bool_value());
+
+			if (patch["locked"].is_bool())
+				obs_sceneitem_set_locked(item, patch["locked"].bool_value());
+
+			if (position.is_object())
+			{
+				vec2 pos;
+				obs_sceneitem_get_pos(item, &pos);
+
+				if (position["x"].is_number())
+					pos.x = (float)position["x"].number_value();
+				if (position["y"].is_number())
+					pos.y = (float)position["y"].number_value();
+
+				obs_sceneitem_set_pos(item, &pos);
+			}
+
+			if (scaleValue.is_object())
+			{
+				vec2 scale;
+				obs_sceneitem_get_scale(item, &scale);
+
+				if (scaleValue["x"].is_number())
+					scale.x = (float)scaleValue["x"].number_value();
+				if (scaleValue["y"].is_number())
+					scale.y = (float)scaleValue["y"].number_value();
+
+				obs_sceneitem_set_scale(item, &scale);
+			}
+
+			if (rotation.is_number())
+				obs_sceneitem_set_rot(item, (float)rotation.number_value());
+
+			if (cropValue.is_object())
+			{
+				obs_sceneitem_crop crop;
+				obs_sceneitem_get_crop(item, &crop);
+
+				if (cropValue["left"].is_number())
+					crop.left = cropValue["left"].int_value();
+				if (cropValue["top"].is_number())
+					crop.top = cropValue["top"].int_value();
+				if (cropValue["right"].is_number())
+					crop.right = cropValue["right"].int_value();
+				if (cropValue["bottom"].is_number())
+					crop.bottom = cropValue["bottom"].int_value();
+
+				obs_sceneitem_set_crop(item, &crop);
+			}
+
+			obs_sceneitem_defer_update_end(item);
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_GET_OUTPUT_STATE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(mainWindow, [&out_jsonReturn]() { out_jsonReturn = ObsEvents::instance().outputState().dump(); }, Qt::BlockingQueuedConnection);
+}
+
+// start, stop and save all answer once the request is made; the outcome is the outputStateChanged / replayBufferSaved event
+void PluginJsHandler::replayBufferRequest(const char *what, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+	const std::string request = what;
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, request, &out_jsonReturn]() {
+			OBSOutputAutoRelease output = obs_frontend_get_replay_buffer_output();
+			const bool active = obs_frontend_replay_buffer_active();
+
+			if (request == "start" && active)
+				out_jsonReturn = Json(Json::object({{"error", "The replay buffer is already running"}})).dump();
+			else if (request != "start" && !active)
+				out_jsonReturn = Json(Json::object({{"error", "The replay buffer is not running"}})).dump();
+			else if (request == "start" && !output)
+				out_jsonReturn = Json(Json::object({{"error", "The replay buffer is not enabled in the output settings"}})).dump();
+			else
+			{
+				// obs may open a message box, and this call must not wait on it
+				QMetaObject::invokeMethod(
+					mainWindow,
+					[request]() {
+						if (request == "start")
+						{
+							obs_frontend_replay_buffer_start();
+							ObsEvents::instance().settleFailedStart("replayBuffer", obs_frontend_replay_buffer_active());
+						}
+						else if (request == "stop")
+							obs_frontend_replay_buffer_stop();
+						else
+							obs_frontend_replay_buffer_save();
+					},
+					Qt::QueuedConnection);
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_REPLAY_BUFFER_START(const json11::Json &params, std::string &out_jsonReturn)
+{
+	replayBufferRequest("start", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_REPLAY_BUFFER_STOP(const json11::Json &params, std::string &out_jsonReturn)
+{
+	replayBufferRequest("stop", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_REPLAY_BUFFER_SAVE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	replayBufferRequest("save", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_HOTKEY_REGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const std::string app_key = params["param2"].string_value();
+	const std::string name = params["param3"].string_value();
+	const std::string description = params["param4"].string_value();
+
+	std::string parseError;
+	const Json bindings = Json::parse(params["param5"].string_value(), parseError);
+
+	if (!parseError.empty())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid bindings"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(mainWindow, [app_key, name, description, bindings, &out_jsonReturn]() { out_jsonReturn = ObsEvents::instance().registerAppHotkey(app_key, name, description, bindings); }, Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_HOTKEY_UNREGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const std::string app_key = params["param2"].string_value();
+	const bool hasName = params["param3"].is_string();
+	const std::string name = params["param3"].string_value();
+
+	if (app_key.empty() || (!hasName && !params["param3"].is_null()))
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid params"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(mainWindow, [app_key, hasName, name, &out_jsonReturn]() { out_jsonReturn = ObsEvents::instance().unregisterAppHotkeys(app_key, hasName ? &name : nullptr); }, Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_QT_GET_THEME(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(mainWindow, [&out_jsonReturn]() { out_jsonReturn = ObsEvents::theme().dump(); }, Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_SOURCE_UPDATE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const std::string source_name = params["param2"].string_value();
+
+	std::string parseError;
+	const Json patch = Json::parse(params["param3"].string_value(), parseError);
+
+	if (!parseError.empty() || !patch.is_object())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Invalid patch"}})).dump();
+		return;
+	}
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[source_name, patch, &out_jsonReturn]() {
+			OBSSourceAutoRelease source = obs_get_source_by_name(source_name.c_str());
+
+			if (!source)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + source_name}})).dump();
+				return;
+			}
+
+			// Checked all before any is applied
+			std::string error;
+
+			if (!patch["name"].is_null() && (!patch["name"].is_string() || patch["name"].string_value().empty()))
+				error = "Invalid name";
+			else if (patch["name"].is_string() && patch["name"].string_value() != source_name && OBSSourceAutoRelease(obs_get_source_by_name(patch["name"].string_value().c_str())))
+				error = "An object named " + patch["name"].string_value() + " already exists";
+			else if (!patch["muted"].is_null() && !patch["muted"].is_bool())
+				error = "Invalid muted";
+			else if (!patch["volume"].is_null() && (!patch["volume"].is_number() || !std::isfinite(patch["volume"].number_value()) || patch["volume"].number_value() < 0 || patch["volume"].number_value() > (std::numeric_limits<float>::max)()))
+				error = "Invalid volume";
+			else if (patch.object_items().count("monitoringType"))
+				error = "Use monitoringEnabled instead of monitoringType";
+			else if (!patch["monitoringEnabled"].is_null() && !patch["monitoringEnabled"].is_bool())
+				error = "Invalid monitoringEnabled";
+
+			if (!error.empty())
+			{
+				out_jsonReturn = Json(Json::object({{"error", error}})).dump();
+				return;
+			}
+
+			if (patch["muted"].is_bool())
+				obs_source_set_muted(source, patch["muted"].bool_value());
+
+			if (patch["volume"].is_number())
+				obs_source_set_volume(source, static_cast<float>(patch["volume"].number_value()));
+
+			if (patch["monitoringEnabled"].is_bool())
+				setSourceMonitoringEnabled(source, patch["monitoringEnabled"].bool_value());
+
+			if (patch["name"].is_string() && patch["name"].string_value() != source_name)
+				obs_source_set_name(source, patch["name"].string_value().c_str());
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_SOURCE_GET_INFO(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const std::string source_name = params["param2"].string_value();
+
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[source_name, &out_jsonReturn]() {
+			OBSSourceAutoRelease source = obs_get_source_by_name(source_name.c_str());
+
+			if (!source)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find an object with name " + source_name}})).dump();
+				return;
+			}
+
+			const uint32_t flags = obs_source_get_output_flags(source);
+			const char *uuid = obs_source_get_uuid(source);
+
+			out_jsonReturn = Json(Json::object({
+						      {"uuid", uuid ? uuid : ""},
+						      {"flags", Json::object({{"audio", (flags & OBS_SOURCE_AUDIO) != 0}, {"video", (flags & OBS_SOURCE_VIDEO) != 0}, {"async", (flags & OBS_SOURCE_ASYNC) != 0}})},
+						      {"width", static_cast<int>(obs_source_get_width(source))},
+						      {"height", static_cast<int>(obs_source_get_height(source))},
+						      {"muted", obs_source_muted(source)},
+						      {"volume", obs_source_get_volume(source)},
+						      {"monitoringEnabled", sourceMonitoringEnabled(source)},
+					      }))
+						 .dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_GET_AVAILABLE_SOURCE_TYPES(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[&out_jsonReturn]() {
+			std::vector<Json> types;
+			const char *id = nullptr;
+
+			for (size_t idx = 0; obs_enum_input_types(idx, &id); ++idx)
+			{
+				const char *displayName = obs_source_get_display_name(id);
+				types.push_back(Json::object({{"id", id}, {"name", displayName ? displayName : ""}}));
+			}
+
+			out_jsonReturn = Json(types).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
 void PluginJsHandler::JS_RESTART_OBS(const json11::Json& params, std::string& out_jsonReturn)
 {
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
@@ -3837,11 +4328,13 @@ void PluginJsHandler::JS_QUERY_ALL_SOURCES(const json11::Json &params, std::stri
 
 					auto rawName = obs_source_get_name(source);
 					auto rawId = obs_source_get_id(source);
+					auto rawUuid = obs_source_get_uuid(source);
 
 					json11::Json sourceInfo = json11::Json::object({
 						{"name", rawName ? rawName : ""},
 						{"type", static_cast<int>(obs_source_get_type(source))},
 						{"id", rawId ? rawId : ""},
+						{"uuid", rawUuid ? rawUuid : ""},
 					});
 
 					sourcesList->push_back(sourceInfo);
@@ -3883,7 +4376,7 @@ void PluginJsHandler::JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::
 /*static*/
 void PluginJsHandler::handle_obs_frontend_event(obs_frontend_event event, void *data)
 {
-
+	ObsEvents::onFrontendEvent(event, data);
 }
 
 /***
@@ -3923,6 +4416,7 @@ LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
 void PluginJsHandler::onWmClose()
 {
 	stop();
+	ObsEvents::instance().stop();
 	QtGuiModifications::instance().stop();
 	PluginJsHandler::instance().saveSlabsBrowserDocks();
 
