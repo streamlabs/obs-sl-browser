@@ -20,8 +20,10 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 public static class SltWindows {
 	delegate bool EnumProc(IntPtr h, IntPtr l);
+	[StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
 	[DllImport("user32.dll")] static extern bool EnumWindows(EnumProc p, IntPtr l);
 	[DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+	[DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out Rect r);
 	[DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
 	public static List<KeyValuePair<long, string>> All() {
 		var list = new List<KeyValuePair<long, string>>();
@@ -33,6 +35,11 @@ public static class SltWindows {
 		}, IntPtr.Zero);
 		return list;
 	}
+	public static int[] ClientSize(long h) {
+		Rect r;
+		if (!GetClientRect(new IntPtr(h), out r)) return new int[] { 0, 0 };
+		return new int[] { r.Right - r.Left, r.Bottom - r.Top };
+	}
 	public static bool Close(long h) { return PostMessage(new IntPtr(h), 0x0010, IntPtr.Zero, IntPtr.Zero); }
 }
 "@
@@ -42,6 +49,10 @@ if ($Action -eq 'close') {
 	$hit = $all | Where-Object { $_.Value -eq $Title } | Select-Object -First 1
 	if ($hit) { [void][SltWindows]::Close($hit.Key) }
 	ConvertTo-Json -Compress -InputObject @{ closed = [bool]$hit }
+} elseif ($Action -eq 'client-size') {
+	$hit = $all | Where-Object { $_.Value -eq $Title } | Select-Object -First 1
+	$size = if ($hit) { [SltWindows]::ClientSize($hit.Key) } else { @(0, 0) }
+	ConvertTo-Json -Compress -InputObject @{ width = $size[0]; height = $size[1] }
 } else {
 	ConvertTo-Json -Compress -InputObject @($all | ForEach-Object { $_.Value })
 }
@@ -70,4 +81,9 @@ export function windowTitles(workDir) {
 /** Post WM_CLOSE to the first window with exactly this title. True if there was one. */
 export function closeWindow(workDir, title) {
 	return run(workDir, ["close", title]).closed;
+}
+
+/** Native client dimensions, in physical pixels, for a top-level window. */
+export function clientSize(workDir, title) {
+	return run(workDir, ["client-size", title]);
 }

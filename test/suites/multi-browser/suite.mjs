@@ -35,7 +35,7 @@ import { join } from "node:path";
 
 import { results, until } from "../../harness/suite.mjs";
 import { attachTo, listPages } from "../../harness/cdp.mjs";
-import { windowTitles, closeWindow } from "../../harness/windows.mjs";
+import { windowTitles, closeWindow, clientSize } from "../../harness/windows.mjs";
 
 const TABS_NAMES = [
 	"tabs_createWindow", "tabs_destroyWindow", "tabs_resizeWindow", "tabs_loadUrl", "tabs_executeJs",
@@ -144,15 +144,18 @@ export default {
 			await r.step("main starts with a correctly sized viewport", async () => {
 				const near = (value, expected) => Math.abs(value - expected) <= 24;
 				const initial = await cdp.evaluate("window.__initialViewport");
-				if (!initial || !near(initial.w, 1280) || !near(initial.h, 720))
-					return `main first document started at ${initial?.w}x${initial?.h}, expected about 1280x720`;
+				const native = clientSize(workDir, "Streamlabs");
+				const dpr = await cdp.evaluate("window.devicePixelRatio");
+				const expected = { w: native.width / dpr, h: native.height / dpr };
+				if (!initial || !near(initial.w, expected.w) || !near(initial.h, expected.h))
+					return `main first document started at ${initial?.w}x${initial?.h}, native client is ${native.width}x${native.height} at DPR ${dpr}`;
 				const ok = await until(async () => {
 					const size = await mainSize();
-					return near(size.w, 1280) && near(size.h, 720);
+					return near(size.w, expected.w) && near(size.h, expected.h);
 				}, { timeoutMs: 10000, everyMs: 250 });
 				if (!ok) {
 					const size = await mainSize();
-					return `main starts at ${size.w}x${size.h}, expected about 1280x720`;
+					return `main settled at ${size.w}x${size.h}, native client is ${native.width}x${native.height} at DPR ${dpr}`;
 				}
 			});
 
@@ -169,9 +172,10 @@ export default {
 				}, { timeoutMs: 15000 });
 				if (!urls) return `no CDP target for the tab, saw ${(await pageUrls()).join(", ")}`;
 				const size = loads(101).at(-1)?.data;
+				const native = clientSize(workDir, "T101");
 				const near = (value, expected) => Math.abs(value - expected) <= 24;
-				if (!size || !near(size.innerWidth, 1280) || !near(size.innerHeight, 720))
-					return `tab starts at ${size?.innerWidth}x${size?.innerHeight}, expected about 1280x720`;
+				if (!size || !near(size.innerWidth, native.width / size.dpr) || !near(size.innerHeight, native.height / size.dpr))
+					return `tab starts at ${size?.innerWidth}x${size?.innerHeight}, native client is ${native.width}x${native.height} at DPR ${size?.dpr}`;
 			});
 
 			let t101 = null;
@@ -524,7 +528,7 @@ export default {
 			const otherOrigin = observer.origin.replace("127.0.0.1", "localhost");
 			const FRAME_ORIGINS = [["same-origin", observer.origin], ["cross-origin", otherOrigin]];
 			const frameReport = (who, event) => observer.events.find((e) => e.who === who && e.event === event)?.data;
-			const addFrame = (page, who, origin) => page.evaluate(`(() => { const f = document.createElement("iframe"); f.id = ${JSON.stringify(who)}; f.src = ${JSON.stringify(`${origin}/frame.html?who=${who}`)}; document.body.appendChild(f); return true; })()`);
+			const addFrame = (page, who, origin) => page.evaluate(`(() => { const f = document.createElement("iframe"); f.id = ${JSON.stringify(who)}; f.style.cssText = "width:100vw;height:100vh;border:0"; f.src = ${JSON.stringify(`${origin}/frame.html?who=${who}`)}; document.body.appendChild(f); return true; })()`);
 
 			await r.step("an iframe in the main page has only the embed marker when allowed", async () => {
 				for (const [label, origin] of FRAME_ORIGINS) {
@@ -536,6 +540,12 @@ export default {
 					const expectedKeys = label === "cross-origin" ? ["pluginVersion"] : null;
 					if (JSON.stringify(f.slabsGlobalKeys) !== JSON.stringify(expectedKeys)) return `${label}: slabsGlobal keys were ${JSON.stringify(f.slabsGlobalKeys)}`;
 					if (f.slabsTabKeys) return `${label}: the iframe has slabsTab`;
+					if (label === "cross-origin") {
+						const main = await mainSize();
+						const near = (value, expected) => Math.abs(value - expected) <= 24;
+						if (!near(f.initialViewport?.w, main.w) || !near(f.initialViewport?.h, main.h))
+							return `embed first document started at ${f.initialViewport?.w}x${f.initialViewport?.h}, main is ${main.w}x${main.h}`;
+					}
 					await cdp.evaluate(`document.getElementById(${JSON.stringify(who)}).remove()`);
 				}
 				// The top frame is unaffected.
