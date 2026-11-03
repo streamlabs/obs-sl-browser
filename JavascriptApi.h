@@ -104,9 +104,58 @@ public:
 		JS_WRITE_FILE,
 		JS_IS_PROCESS_RUNNING,
 		JS_STOP_PROCESS,
+		JS_TABS_CREATE_WINDOW,
+		JS_TABS_DESTROY_WINDOW,
+		JS_TABS_RESIZE_WINDOW,
+		JS_TABS_LOAD_URL,
+		JS_TABS_EXECUTE_JS,
+		JS_TABS_HIDE_WINDOW,
+		JS_TABS_SHOW_WINDOW,
+		JS_TABS_IS_WINDOW_HIDDEN,
+		JS_TAB_SEND_STRING_TO_MAIN,
+		JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS,
+		JS_MAIN_SEND_STRING_TO_TAB,
+		JS_TABS_REGISTER_MSG_RECEIVER,
+		JS_TABS_GET_WINDOW_CEF_IDENTIFIER,
+		JS_TABS_QUERY_ALL,
+		JS_TABS_SET_ICON,
+		JS_TABS_SET_TITLE,
+		JS_EVENTS_REGISTER_RECEIVER,
+		JS_OBS_SCENE_GET_ITEMS,
+		JS_OBS_SCENEITEM_REMOVE,
+		JS_OBS_SCENEITEM_UPDATE,
+		JS_OBS_GET_OUTPUT_STATE,
+		JS_OBS_REPLAY_BUFFER_START,
+		JS_OBS_REPLAY_BUFFER_STOP,
+		JS_OBS_REPLAY_BUFFER_SAVE,
+		JS_OBS_HOTKEY_REGISTER_FOR_APP,
+		JS_OBS_HOTKEY_UNREGISTER_FOR_APP,
+		JS_QT_GET_THEME,
+		JS_OBS_SOURCE_UPDATE,
+		JS_OBS_SOURCE_GET_INFO,
+		JS_OBS_GET_AVAILABLE_SOURCE_TYPES,
 	};
 
 public:
+	// Sent to the main window's tabs_registerMsgReceiver function when the user closes a tab window
+	static constexpr const char *kTabClosedMessage = "{\"event\":\"tabClosed\"}";
+
+	// The only origins a tab window may load, for tabs_createWindow, tabs_loadUrl and main-frame navigation inside the tab
+	static constexpr const char *kTabAllowedOrigins[] = {"https://platform-cdn.streamlabs.com"};
+
+	// Test only: when set in the environment of the browser process, this one extra origin (scheme://host[:port]) is also allowed
+	static constexpr const char *kTestTabOriginEnvVar = "SL_PLUGIN_TEST_TAB_ORIGIN";
+
+	// Longest contextKey tabs_createWindow takes
+	static constexpr size_t kMaxTabContextKeyBytes = 64;
+
+	// How long a tab waits for its profile before tabs_createWindow answers with an error
+	static constexpr int kTabProfileTimeoutMs = 10000;
+
+	// Test only, read once by the browser process: the first replaces kTabProfileTimeoutMs, the second holds back by that many ms the profiles whose directory starts with kTestTabProfileDelayDirPrefix
+	static constexpr const char *kTestTabProfileTimeoutEnvVar = "SL_PLUGIN_TEST_TAB_PROFILE_TIMEOUT_MS";
+	static constexpr const char *kTestTabProfileDelayEnvVar = "SL_PLUGIN_TEST_TAB_PROFILE_DELAY_MS";
+	static constexpr const char *kTestTabProfileDelayDirPrefix = "app-slt-delay-";
 
 	// Control over the plugin/OBS side
 	static std::map<std::string, JSFuncs> &getPluginFunctionNames()
@@ -212,6 +261,11 @@ public:
 			//		Example arg1 = { "value": "." }
 			{"qt_getCookieValue", JS_QT_GET_COOKIE_VALUE},
 
+			// .(@function(arg1))
+			//	Whether the main window is dark, read from its palette, and the id of the theme obs is set to ("" when it was never chosen)
+			//		Example arg1 = { "isDark": true, "id": "com.obsproject.Yami.Dark" }
+			//	A change is the themeChanged event of events_registerReceiver
+			{"qt_getTheme", JS_QT_GET_THEME},
 
 			/***
 			* Windows
@@ -381,10 +435,77 @@ public:
 			//		Example arg1 = { "source_names": [] }
 			{"obs_scene_get_sources", JS_SCENE_GET_SOURCES},
 
+			// .(@function(arg1), @sceneName)
+			//	Every item of the scene, with the id obs_sceneitem_remove and obs_sceneitem_update take. A group's items are in its 'children'
+			//	Item ids are local to their containing scene or group. For a child, pass its group's sourceName to remove or update, not the scene name used for this listing
+			//		Example arg1 = { "items": [{ "id": 1, "sourceName": ".", "sourceUuid": ".", "sourceId": ".", "visible": true, "locked": false, "pos": { "x": 0.0, "y": 0.0 }, "scale": { "x": 1.0, "y": 1.0 }, "rot": 0.0, "crop": { "left": 0, "top": 0, "right": 0, "bottom": 0 }, "isGroup": false, "children": [] }] }
+			{"obs_scene_get_items", JS_OBS_SCENE_GET_ITEMS},
+
+			// .(@function(arg1), @sceneName, @int_itemId)
+			//	Removes one item from the scene or group named by sceneName. For a child, sceneName is the containing group's sourceName
+			//	The source stays, in any other scene using it and in obs_query_all_sources
+			{"obs_sceneitem_remove", JS_OBS_SCENEITEM_REMOVE},
+
+			// .(@function(arg1), @sceneName, @int_itemId, @patch_jsonStr)
+			//	Applies the keys present in the patch together, as Streamlabs Desktop's updateSceneItem does. For a child, sceneName is the containing group's sourceName
+			//		Example patch = { "visible": true, "locked": false, "transform": { "position": { "x": 0.0, "y": 0.0 }, "scale": { "x": 1.0, "y": 1.0 }, "rotation": 0.0, "crop": { "left": 0, "top": 0, "right": 0, "bottom": 0 } } }
+			//		Every key is optional, as is every key of transform. The flat keys 'pos', 'scale', 'rot' and 'crop' are read when 'transform' is absent
+			{"obs_sceneitem_update", JS_OBS_SCENEITEM_UPDATE},
+
+			// .(@function(arg1), @sourceName, @patch_jsonStr)
+			//	Applies the keys present in the patch. Everything is checked first, so an error means nothing was changed
+			//		Example patch = { "name": ".", "muted": false, "volume": 1.0, "monitoringEnabled": true }
+			//		volume is obs's multiplier, not a deflection. OBS 33 monitoring is enabled/disabled; on OBS 32 true maps to MONITOR_AND_OUTPUT and false to NONE
+			//		A name already in use is an error. A rename is the sourceRenamed event, with no sourceCreated or sourceRemoved
+			//		Example arg1 = {} or { "error": "." }
+			{"obs_source_update", JS_OBS_SOURCE_UPDATE},
+
+			// .(@function(arg1), @sourceName)
+			//		Example arg1 = { "uuid": ".", "flags": { "audio": true, "video": false, "async": false }, "width": 0, "height": 0, "muted": false, "volume": 1.0, "monitoringEnabled": false }
+			{"obs_source_get_info", JS_OBS_SOURCE_GET_INFO},
+
+			// .(@function(arg1))
+			//	The kinds of input that obs_source_create takes
+			//		Example arg1 = [ { "id": "color_source_v3", "name": "Color Source" }, ... ]
+			{"obs_get_available_source_types", JS_OBS_GET_AVAILABLE_SOURCE_TYPES},
+
+			// .(@function(arg1))
+			//	The state of the outputs, as of the last change obs reported. Before the first one an output is "started" or "stopped" with a "time" of ""
+			//		Example arg1 = { "streaming": { "state": ".", "time": ".", "reconnecting": false }, "recording": { "state": ".", "time": ".", "paused": false }, "replayBuffer": { "state": ".", "time": "." }, "virtualcam": { "active": false } }
+			{"obs_get_output_state", JS_OBS_GET_OUTPUT_STATE},
+
+			// .(@function(arg1))
+			//	Starts the replay buffer. The result is an outputStateChanged event for "replayBuffer"
+			//		Example arg1 = {} or { "error": "." }. An error when it is running, or is not enabled in the output settings
+			{"obs_replay_buffer_start", JS_OBS_REPLAY_BUFFER_START},
+
+			// .(@function(arg1))
+			//		Example arg1 = {} or { "error": "." }. An error when it is not running
+			{"obs_replay_buffer_stop", JS_OBS_REPLAY_BUFFER_STOP},
+
+			// .(@function(arg1))
+			//	Saves what the running replay buffer holds. The result is a replayBufferSaved event
+			//		Example arg1 = {} or { "error": "." }. An error when it is not running
+			{"obs_replay_buffer_save", JS_OBS_REPLAY_BUFFER_SAVE},
+
+			// .(@function(arg1), @appKey, @name, @description, @bindings_jsonStr)
+			//	Makes an obs hotkey, listed under Settings > Hotkeys as description, that the user can rebind there. Pressing it is the hotkey event of events_registerReceiver
+			//		Example bindings = [{ "key": "OBS_KEY_A", "shift": false, "control": false, "alt": false, "command": false }]
+			//		Bindings are the defaults, [] for none. A key obs does not know is an error and nothing is made
+			//		The same appKey and name again replaces the earlier one. A rebind made in Settings is not kept across obs restarts, so register on every start
+			//		Example arg1 = { "id": 1 } or { "error": "." }
+			{"obs_hotkey_registerForApp", JS_OBS_HOTKEY_REGISTER_FOR_APP},
+
+			// .(@function(arg1), @appKey, @name)
+			//	Removes that hotkey of the app. Without a name, removes all of the app's hotkeys, which an app should do when it is reloaded or closed
+			//		Hotkeys are not removed when the app's window is destroyed. The page that registered them has to
+			//		Example arg1 = { "removed": 1 }, 0 when there was none
+			{"obs_hotkey_unregisterForApp", JS_OBS_HOTKEY_UNREGISTER_FOR_APP},
+
 			// .(@function(arg1))
 			//	OBS_SOURCE_TYPE_INPUT = 0
 			//	OBS_SOURCE_TYPE_FILTER = 1
-			//		Example arg1 = [ { "name": ".", "type": 0, "id": "." }, ... ]
+			//		Example arg1 = [ { "name": ".", "type": 0, "id": ".", "uuid": "." }, ... ]
 			//
 			//	Tansition/scene are sources yet may not be a part of obs_enum_sources
 			//		OBS_SOURCE_TYPE_TRANSITION = 2
@@ -615,6 +736,117 @@ public:
 			// .(@function(arg1), bool)`
 			//	DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
 			{"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
+
+			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional), initScriptStr (optional), hideOnCloseBOOL (optional), contextKeyStr (optional))
+			//		arg1 is called once the window and its browser exist, so every other tabs_* function can be used from then on. Example arg1 = {} or { "error": "." }
+			//		Until then, hide/show/resize/isHidden/executeJs/loadUrl/getWindowCefId on the uid answer { "error": "not ready" }
+			//		iconpathStr must be an existing .png, .ico, .jpg or .jpeg file inside %APPDATA%\StreamlabsOBS\. Anything else, such as UNC or \\?\ paths, is an error. Empty means the default icon
+			//		contextKeyStr names the tab's cookie and storage profile, kept on disk across restarts and shared by every tab using the same key (at most kMaxTabContextKeyBytes bytes, any characters). Different keys, and main, share nothing
+			//		When omitted or empty the tab gets its own in-memory profile, which is not shared with any other tab or with main and is lost when the tab is destroyed. It never uses main's profile
+			//		url must be https on one of kTabAllowedOrigins (everything else, such as http, file:, data:, javascript: and http://absolute/, is an error), and the tab's main frame can only navigate to those origins. Subframes are not restricted
+			//		initScriptStr is run in the tab's main frame at the start of every document load (including reloads and navigations), after slabsTab is defined and before the page's own scripts. Empty means none
+			//		hideOnCloseBOOL false (default): when the user closes the window it is destroyed and main is sent kTabClosedMessage. true: it is only hidden, and main is not told
+			//		A window destroyed before its browser was made is answered { "error": "the window was closed before it was created" }. An error reply never comes with kTabClosedMessage
+			//		A tab whose profile is not initialized within kTabProfileTimeoutMs is destroyed and answered { "error": "the tab's profile did not initialize in time" }
+			{"tabs_createWindow", JS_TABS_CREATE_WINDOW},
+
+			// .(@function(arg1), uidINT)
+			{"tabs_destroyWindow", JS_TABS_DESTROY_WINDOW},
+
+			// .(@function(arg1), uidINT, width, height)
+			{"tabs_resizeWindow", JS_TABS_RESIZE_WINDOW},
+
+			// .(@function(arg1), uidINT, url)
+			//		url is restricted as for tabs_createWindow
+			{"tabs_loadUrl", JS_TABS_LOAD_URL},
+
+			// .(@function(arg1), uidINT, codeStr)
+			{"tabs_executeJs", JS_TABS_EXECUTE_JS},
+
+			// .(@function(arg1), uidINT)
+			{"tabs_hideWindow", JS_TABS_HIDE_WINDOW},
+
+			// .(@function(arg1), uidINT)
+			{"tabs_showWindow", JS_TABS_SHOW_WINDOW},
+
+			// .(@function(arg1), uidINT)
+			//		Example arg1 = { "result": boolean }
+			{"tabs_getIsWindowHidden", JS_TABS_IS_WINDOW_HIDDEN},
+
+			// .(@function(arg1), uid)
+			//		Example arg1 = { "result": int32 }
+			{"tabs_getWindowCefId", JS_TABS_GET_WINDOW_CEF_IDENTIFIER},
+
+			// .(@function(arg1), uidINT, str)
+			//		Example arg1 = { "error": "." } if the uid is unknown or the tab has not registered a receiver
+			{"tabs_sendStringToTab", JS_MAIN_SEND_STRING_TO_TAB},
+
+			// .(@function(arg1, arg2))
+			//		function is remembered internally and is not called on registration, only when a tab sends a message. It is given args 'string, uid' (The message, and the uid it came from)
+			//		When a tab window is closed by the user, it is destroyed and the function is called with the message kTabClosedMessage and the uid of the closed tab, unless the tab was created with hideOnClose
+			//		Only the main frame of a page can use this and the other tabs_* and tab_* functions; they are not defined in iframes, and calls that reach the browser process from an iframe, or from a browser of the wrong kind, are refused
+			{"tabs_registerMsgReceiver", JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS},
+
+			// .(@function(arg1))
+			//		Example arg1 = [{ "uid": int32, "url": str }, ..], the main window (uid 0) is not listed
+			{"tabs_queryAll", JS_TABS_QUERY_ALL},
+
+			// .(@function(arg1), uidINT, pathStr)
+			//		pathStr is restricted as iconpathStr is for tabs_createWindow
+			{"tabs_setIcon", JS_TABS_SET_ICON},
+
+			// .(@function(arg1), uidINT, titleStr)
+			{"tabs_setTitle", JS_TABS_SET_TITLE},
+
+			/**
+			* Obs events
+			*/
+
+			// .(@function(arg1))
+			//		function is remembered internally and is not called on registration, only when something happens in obs. It is given arg 'string', a json object with an 'event' key
+			//		Registering again replaces the previous function. Only the main frame of a page can register
+			//		Nothing is sent before obs has finished loading, nor while a scene collection is switching. A switch ends with one sceneCollectionChanged, after which the page should re-read what it needs
+			//		Events arrive in order, and one that cannot be delivered is dropped
+			//		Sources and scenes carry a name, which changes on rename, and a uuid, which does not. Private sources (transitions, audio monitors, ...) produce no events
+			//			sourceCreated { "event", "name", "uuid", "id", "isGroup" }
+			//			sourceRemoved { "event", "name", "uuid", "id" }
+			//			sourceRenamed { "event", "uuid", "prevName", "newName", "id" }, scenes included
+			//			sourceUpdated { "event", "name", "uuid" }, at most 4 per second per source, the last change always reported
+			//			sceneCreated, sceneRemoved, sceneSwitched { "event", "name", "uuid" }
+			//			sceneItemAdded, sceneItemRemoved { "event", "scene", "sceneUuid", "itemId", "source", "sourceUuid" }
+			//			sceneItemUpdated { "event", "scene", "sceneUuid", "itemId", "source", "sourceUuid", "reason": "visible" | "locked" | "transform" }
+			//				transform is at most 10 per second per item, the last change always reported, and carries "pos", "scale" and "rot" as of that change
+			//			sceneCollectionChanged { "event", "name" }
+			//		The events below are not held back while obs loads or a scene collection switches
+			//			outputStateChanged { "event", "output": "streaming" | "recording" | "replayBuffer" | "virtualcam", "state", "time" }
+			//				state is "starting" | "started" | "stopping" | "stopped", and a recording also "paused". time is ISO 8601 UTC
+			//				Desktop's live / ending / offline, recording / wrote, and running / offline are these, mapped by the page
+			//			replayBufferSaved { "event", "path" }
+			//			themeChanged { "event", "isDark", "id" }, as qt_getTheme
+			//			hotkey { "event", "appKey", "name", "pressed" }, for a key made with obs_hotkey_registerForApp. One with pressed true, one with pressed false
+			{"events_registerReceiver", JS_EVENTS_REGISTER_RECEIVER},
+		};
+
+		return names;
+	}
+
+	static std::map<std::string, JSFuncs> &getBrowserTabsFunctionNames()
+	{
+		// None of the api function belows are blocking, they return immediatelly, but can accept a function as arg1 thats invoked when work is complete, which should allow await/promise structure
+		static std::map<std::string, JSFuncs> names =
+		{
+			/**
+			* Browser Tabs
+			*/
+
+			// .(@function(arg1), str)
+			//		Example arg1 = { "error": "." } if main has not registered a receiver
+			{"tab_sendStringToMain", JS_TAB_SEND_STRING_TO_MAIN},
+
+			// .(@function(arg1))
+			//		function is remembered internally and is not called on registration, only when main sends a message. It is given arg 'string'
+			{"tab_registerMsgReceiver", JS_TABS_REGISTER_MSG_RECEIVER},
+
 		};
 
 		return names;
@@ -637,6 +869,15 @@ public:
 		return ref.find(str) != ref.end();
 	}
 
+	static bool isBrowserTabFunctionName(const std::string &str)
+	{
+		auto ref = getBrowserTabsFunctionNames();
+		return ref.find(str) != ref.end();
+	}
+
+	// tabs_*, tab_* and events_* drive windows, the app channel and the obs event stream, so only a page's own main frame may call them
+	static bool isMainFrameOnlyFunctionName(const std::string &str) { return str.rfind("tabs_", 0) == 0 || str.rfind("tab_", 0) == 0 || str.rfind("events_", 0) == 0; }
+
 	static JSFuncs getFunctionId(const std::string &funcName)
 	{
 		auto ref = getPluginFunctionNames();
@@ -646,6 +887,12 @@ public:
 			return itr->second;
 
 		ref = getBrowserFunctionNames();
+		itr = ref.find(funcName);
+
+		if (itr != ref.end())
+			return itr->second;
+
+		ref = getBrowserTabsFunctionNames();
 		itr = ref.find(funcName);
 
 		if (itr != ref.end())

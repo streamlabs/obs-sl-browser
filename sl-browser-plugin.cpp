@@ -15,6 +15,7 @@
 
 #include "GrpcPlugin.h"
 #include "PluginJsHandler.h"
+#include "ObsEvents.h"
 #include "WebServer.h"
 #include "ConsoleToggle.h"
 #include "CrashHandler.h"
@@ -222,6 +223,7 @@ void obs_module_post_load(void)
 
 	QtGuiModifications::instance();
 	PluginJsHandler::instance().start();
+	ObsEvents::instance().start();
 
 	obs_frontend_add_event_callback(PluginJsHandler::instance().handle_obs_frontend_event, nullptr);
 	obs_frontend_add_event_callback(QtGuiModifications::instance().handle_obs_frontend_event, nullptr);
@@ -385,6 +387,7 @@ void obs_module_unload(void)
 
 	// JS handler needs to be stopped before Grpc or crash
 	PluginJsHandler::instance().stop();
+	ObsEvents::instance().stop();
 	GrpcPlugin::instance().stop();
 	WebServer::instance().stop();
 }

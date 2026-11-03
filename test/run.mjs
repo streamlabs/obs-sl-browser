@@ -52,7 +52,7 @@ then closes it again.
   --config <name>       build config for that default path (default RelWithDebInfo)
   --observer-port <n>   pin the harness web server's port (default: an ephemeral one)
   --devtools-port <n>   DevTools port to use (default: a free one; 9123 with --no-launch)
-  --no-launch           use an OBS that is already running instead of starting one
+  --no-launch           use an OBS already configured for the pinned --observer-port
   --keep-open           leave OBS running afterwards (the last suite's, if several run)
   --force               overwrite a portable config in the rundir that we did not write
   --json                machine-readable output
@@ -119,6 +119,26 @@ const shutdown = (code) => () => { if (!keepCurrentOpen) current?.stop(); proces
 process.on("SIGINT", shutdown(130));
 process.on("SIGTERM", shutdown(143));
 
+// The suites create and delete profile dirs under %APPDATA%, and the plugin resolves that folder
+// through USERPROFILE, so OBS and the suites get a scratch profile instead of the real one.
+const REAL_APPDATA = process.env.APPDATA;
+// Outside .work: Windows creates unreadable folders here, which break the CI artifact upload
+const SCRATCH_HOME = join(HERE, ".home");
+const SCRATCH_APPDATA = join(SCRATCH_HOME, "AppData", "Roaming");
+if (!has("--no-launch")) {
+	if (REAL_APPDATA && resolve(REAL_APPDATA).toLowerCase() === resolve(SCRATCH_APPDATA).toLowerCase()) {
+		console.error(`${red("Refusing to run:")} the scratch profile is the real one (${REAL_APPDATA}).`);
+		process.exit(1);
+	}
+	// The previous run's CEF processes can still be exiting, and hold files in it
+	rmSync(SCRATCH_HOME, { recursive: true, force: true, maxRetries: 20, retryDelay: 500 });
+	mkdirSync(SCRATCH_APPDATA, { recursive: true });
+	mkdirSync(join(SCRATCH_HOME, "AppData", "Local"), { recursive: true });
+	process.env.USERPROFILE = SCRATCH_HOME;
+	process.env.APPDATA = SCRATCH_APPDATA;
+	process.env.LOCALAPPDATA = join(SCRATCH_HOME, "AppData", "Local");
+}
+
 const exe = resolveObsExe({ repoRoot: REPO, explicit: opt("--obs", null), config: opt("--config", "RelWithDebInfo") });
 
 async function runSuite(name) {
@@ -139,6 +159,10 @@ async function runSuite(name) {
 	try {
 		const suite = await load(name);
 		run.description = suite.description;
+		const observerPort = opt("--observer-port", "0");
+		if (has("--no-launch") && (!/^\d+$/.test(observerPort) || Number(observerPort) < 1 || Number(observerPort) > 65535)) {
+			throw new Error("--no-launch requires a nonzero --observer-port matching the origin in OBS's SL_PLUGIN_DEFAULT_URL at startup.");
+		}
 		PORT = DEVTOOLS_PORT === null
 			? (has("--no-launch") ? 9123 : await freePort())
 			: Number(DEVTOOLS_PORT);
@@ -146,7 +170,7 @@ async function runSuite(name) {
 		rmSync(workDir, { recursive: true, force: true });
 		mkdirSync(workDir, { recursive: true });
 
-		server = await startServer({ dir: suite.dir, port: Number(opt("--observer-port", "0")) });
+		server = await startServer({ dir: suite.dir, port: Number(observerPort) });
 		const pageUrl = server.pageUrl(suite.page);
 
 		if (has("--no-launch")) {
@@ -174,12 +198,20 @@ async function runSuite(name) {
 				rundir: rundirOf(exe),
 				collection: suite.collection ? join(suite.dir, suite.collection) : null,
 				replace: { BASE_URL: server.origin },
+				basic: suite.profile?.(workDir),
 				force: has("--force"),
 			});
 			obs = await launchObs({
 				exe, pageUrl, collection: collectionName, port: PORT, say,
 				onSpawn: (handle) => { current = handle; },
 			});
+			// OBS resolves %APPDATA% through the shell, so check it really took the scratch one before
+			// the suite touches anything.
+			if (!existsSync(join(SCRATCH_APPDATA, "StreamlabsOBS_CEF_Cache"))) {
+				throw new Error(
+					`OBS did not create StreamlabsOBS_CEF_Cache under the scratch profile ${SCRATCH_APPDATA}, ` +
+					`so it is using the real one. Refusing to run the suite.`);
+			}
 		}
 
 		if (suite.cdp) {
@@ -191,7 +223,7 @@ async function runSuite(name) {
 			say(`attached to ${page.url}`);
 		}
 
-		const ctx = { cdp, observer: server, obs, dir: suite.dir, workDir, say };
+		const ctx = { cdp, observer: server, obs, dir: suite.dir, workDir, say, port: PORT };
 		const timeout = new Promise((_, rej) =>
 			setTimeout(() => rej(new Error(`suite exceeded its ${suite.timeoutMs / 1000}s budget`)), suite.timeoutMs));
 
@@ -208,7 +240,11 @@ async function runSuite(name) {
 	} finally {
 		cdp?.close();
 		try { server?.dump(join(workDir, "events.json")); } catch { /* nothing worth failing over */ }
-		await server?.close();
+		if (server) {
+			// A client holding a connection open would keep close() pending forever.
+			await Promise.race([server.close(), sleep(5000)]);
+			server.closeAllConnections();
+		}
 		if (!keepOpen && obs) {
 			obs.stop();
 			// Wait for the port to actually free before the next suite's guard looks at it:

@@ -87,3 +87,4 @@ grpc_dist/
 
 #test harness scratch
 /test/.work/
+/test/.home/

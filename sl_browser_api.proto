@@ -5,6 +5,7 @@ service grpc_plugin_obj {
   rpc com_grpc_js_executeCallback (grpc_js_api_ExecuteCallback) returns (grpc_js_api_Reply) {}
   rpc com_grpc_window_toggleVisibility (grpc_window_toggleVisibility) returns (grpc_empty_Reply) {}
   rpc com_grpc_run_javascriptOnBrowser (grpc_run_javascriptOnBrowser) returns (grpc_empty_Reply) {}
+  rpc com_grpc_obs_event (grpc_obs_event) returns (grpc_empty_Reply) {}
 }
 
 service grpc_proxy_obj {
@@ -12,6 +13,7 @@ service grpc_proxy_obj {
   rpc com_grpc_js_executeCallback (grpc_js_api_ExecuteCallback) returns (grpc_js_api_Reply) {}
   rpc com_grpc_window_toggleVisibility (grpc_window_toggleVisibility) returns (grpc_empty_Reply) {}
   rpc com_grpc_run_javascriptOnBrowser (grpc_run_javascriptOnBrowser) returns (grpc_empty_Reply) {}
+  rpc com_grpc_obs_event (grpc_obs_event) returns (grpc_empty_Reply) {}
 }
 
 // Client->
@@ -34,6 +36,11 @@ message grpc_window_toggleVisibility {
 // Client->
 message grpc_run_javascriptOnBrowser {
 	string str = 1;
+}
+
+// Client->
+message grpc_obs_event {
+	string jsonstr = 1;
 }
 
 // Server->

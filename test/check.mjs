@@ -141,7 +141,7 @@ for (const name of suiteNames) {
 
 /* ---------------------------------------- 3. do the api calls name real api --- */
 
-// getPluginFunctionNames() and getBrowserFunctionNames() are both {"name", JS_ENUM} tables.
+// getPluginFunctionNames(), getBrowserFunctionNames() and getBrowserTabsFunctionNames() are all {"name", JS_ENUM} tables.
 function apiNames() {
 	if (!existsSync(API_HEADER)) { note(rel(API_HEADER), "not found - cannot check api names"); return null; }
 	const src = readFileSync(API_HEADER, "utf8");
@@ -151,11 +151,23 @@ function apiNames() {
 }
 
 // How a suite reaches the api: cdp.call("x"), __slt.call('x'), or slabsGlobal.x(...) from a page.
+// Tab windows get slabsTab instead, reached as cdp.callOn("slabsTab", "x") or slabsTab.x(...).
 const CALL_PATTERNS = [
-	/\b(?:cdp|ctx\.cdp)\.call\(\s*["'`]([A-Za-z0-9_]+)["'`]/g,
+	/\b(?:cdp|ctx\.cdp|\w*[cC]dp\w*)\.call\(\s*["'`]([A-Za-z0-9_]+)["'`]/g,
 	/\b__slt\.call\(\s*["'`]([A-Za-z0-9_]+)["'`]/g,
 	/\bslabsGlobal\s*\.\s*([A-Za-z0-9_]+)\s*\(/g,
 	/\bslabsGlobal\s*\[\s*["'`]([A-Za-z0-9_]+)["'`]\s*\]/g,
+	/\bslabsTab\s*\.\s*([A-Za-z0-9_]+)\s*\(/g,
+	/\bslabsTab\s*\[\s*["'`]([A-Za-z0-9_]+)["'`]\s*\]/g,
+	/\.(?:callOn|listen)\(\s*["'`](?:slabsTab|slabsGlobal)["'`]\s*,\s*["'`]([A-Za-z0-9_]+)["'`]/g,
+];
+
+// A tab window gets no slabsGlobal, so a tab_* name called through it, or a tabs_* name called
+// through slabsTab, can only ever answer "missing". Matched by prefix: tab_ vs tabs_.
+const ROUTED_PATTERNS = [
+	{ re: /\.(?:callOn|listen)\(\s*["'`]slabsTab["'`]\s*,\s*["'`]([A-Za-z0-9_]+)["'`]/g, global: "slabsTab", ok: (n) => n.startsWith("tab_") },
+	{ re: /\.(?:callOn|listen)\(\s*["'`]slabsGlobal["'`]\s*,\s*["'`]([A-Za-z0-9_]+)["'`]/g, global: "slabsGlobal", ok: (n) => !n.startsWith("tab_") },
+	{ re: /\bslabsTab\s*\.\s*([A-Za-z0-9_]+)\s*\(/g, global: "slabsTab", ok: (n) => n.startsWith("tab_") },
 ];
 
 // Not api calls: properties the plugin puts on slabsGlobal, and the helpers' own surface.
@@ -177,6 +189,11 @@ if (known) {
 			for (const name of found) {
 				if (known.has(name) || exempt.has(name)) continue;
 				note(rel(f), `calls "${name}", which is not in JavascriptApi.h`);
+			}
+			for (const { re, global, ok } of ROUTED_PATTERNS) {
+				for (const m of src.matchAll(re)) {
+					if (!ok(m[1]) && !exempt.has(m[1])) note(rel(f), `calls "${m[1]}" through ${global}, which does not carry it`);
+				}
 			}
 		}
 	}
