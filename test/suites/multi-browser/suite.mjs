@@ -29,7 +29,7 @@
  * The harness places tab windows offscreen during the run.
  */
 
-import { writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
@@ -112,6 +112,8 @@ export default {
 		// Icons are only taken from under %APPDATA%\StreamlabsOBS\, which is where the app store downloads them.
 		const appData = process.env.APPDATA;
 		const iconRoot = join(appData, "StreamlabsOBS");
+		const savedWindowStatePath = join(iconRoot, "window_state.txt");
+		const originalWindowState = existsSync(savedWindowStatePath) ? readFileSync(savedWindowStatePath) : null;
 		const iconDirPath = join(iconRoot, `slt-icons-${Date.now()}`);
 		const outsidePath = join(appData, `slt-icon-outside-${Date.now()}.png`);
 		mkdirSync(iconDirPath, { recursive: true });
@@ -172,10 +174,11 @@ export default {
 				}, { timeoutMs: 15000 });
 				if (!urls) return `no CDP target for the tab, saw ${(await pageUrls()).join(", ")}`;
 				const size = loads(101).at(-1)?.data;
+				const initial = size?.initialViewport;
 				const native = clientSize(workDir, "T101");
 				const near = (value, expected) => Math.abs(value - expected) <= 24;
-				if (!size || !near(size.innerWidth, native.width / size.dpr) || !near(size.innerHeight, native.height / size.dpr))
-					return `tab starts at ${size?.innerWidth}x${size?.innerHeight}, native client is ${native.width}x${native.height} at DPR ${size?.dpr}`;
+				if (!initial || !near(initial.w, native.width / initial.dpr) || !near(initial.h, native.height / initial.dpr))
+					return `tab first document started at ${initial?.w}x${initial?.h}, native client is ${native.width}x${native.height} at DPR ${initial?.dpr}`;
 			});
 
 			let t101 = null;
@@ -1358,7 +1361,28 @@ export default {
 			// Whatever a failed step left open must not outlive the suite.
 			for (const uid of created) await cdp.call("tabs_destroyWindow", uid).catch(() => {});
 			for (const c of tabCdp.values()) c.close();
-			if (mainWasHidden) await cdp.call("tabs_hideWindow", 0).catch(() => {});
+			await r.step("the main window's saved visibility is restored", async () => {
+				try {
+					const setAndWait = async (hidden) => {
+						const response = await cdp.call("browser_setHiddenState", hidden);
+						if (isError(response) || response.__timeout) return `set visibility to ${hidden}: ${JSON.stringify(response)}`;
+						const expected = hidden ? "1" : "0";
+						const persisted = await until(() => {
+							try { return existsSync(savedWindowStatePath) && readFileSync(savedWindowStatePath, "utf8").trim() === expected; }
+							catch { return false; }
+						}, { timeoutMs: 5000, everyMs: 50 });
+						return persisted ? null : `saved visibility did not become ${expected}`;
+					};
+					// The API replies before Qt writes the file; first observe a different value.
+					const intermediate = await setAndWait(!mainWasHidden);
+					if (intermediate) return intermediate;
+					const restored = await setAndWait(mainWasHidden);
+					if (restored) return restored;
+				} finally {
+					if (originalWindowState === null) rmSync(savedWindowStatePath, { force: true });
+					else writeFileSync(savedWindowStatePath, originalWindowState);
+				}
+			});
 			// Best effort: a junction is removed as a link, so its target is untouched.
 			try { rmSync(iconDirPath, { recursive: true, force: true }); rmSync(outsidePath, { force: true }); removeTestProfiles(); } catch { /* still in use */ }
 		}

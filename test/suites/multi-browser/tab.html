@@ -4,6 +4,7 @@
 <body style="background:#201030;color:#c9f;font:13px monospace;margin:8px">
 <h3 id="who"></h3>
 <div id="log"></div>
+<script>window.__initialViewport = {w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio};</script>
 <script src="/_harness/inpage.js"></script>
 <script>
 // Which tab this is comes from the url, because a tab has no other way to learn its uid.
@@ -33,6 +34,7 @@ function state() {
 		innerWidth: window.innerWidth,
 		innerHeight: window.innerHeight,
 		dpr: window.devicePixelRatio,
+		initialViewport: window.__initialViewport,
 		hasSlabsGlobal: typeof window.slabsGlobal !== 'undefined',
 		slabsTabKeys: typeof window.slabsTab === 'object' ? Object.keys(window.slabsTab).sort() : null,
 		initAtStart: INIT_AT_START,

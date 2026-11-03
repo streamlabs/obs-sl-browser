@@ -24,6 +24,7 @@ public static class SltWindows {
 	[DllImport("user32.dll")] static extern bool EnumWindows(EnumProc p, IntPtr l);
 	[DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
 	[DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out Rect r);
+	[DllImport("user32.dll", SetLastError = true)] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
 	[DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
 	public static List<KeyValuePair<long, string>> All() {
 		var list = new List<KeyValuePair<long, string>>();
@@ -36,9 +37,17 @@ public static class SltWindows {
 		return list;
 	}
 	public static int[] ClientSize(long h) {
-		Rect r;
-		if (!GetClientRect(new IntPtr(h), out r)) return new int[] { 0, 0 };
-		return new int[] { r.Right - r.Left, r.Bottom - r.Top };
+		// A DPI-unaware PowerShell caller would receive virtualized logical pixels.
+		IntPtr previous = SetThreadDpiAwarenessContext(new IntPtr(-4));
+		if (previous == IntPtr.Zero) throw new Exception("cannot set per-monitor DPI awareness: " + Marshal.GetLastWin32Error());
+		try {
+			Rect r;
+			if (!GetClientRect(new IntPtr(h), out r)) return new int[] { 0, 0 };
+			return new int[] { r.Right - r.Left, r.Bottom - r.Top };
+		} finally {
+			if (SetThreadDpiAwarenessContext(previous) == IntPtr.Zero)
+				throw new Exception("cannot restore DPI awareness: " + Marshal.GetLastWin32Error());
+		}
 	}
 	public static bool Close(long h) { return PostMessage(new IntPtr(h), 0x0010, IntPtr.Zero, IntPtr.Zero); }
 }
