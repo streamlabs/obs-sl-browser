@@ -65,7 +65,7 @@ export default {
 		const items = async (scene) => (await cdp.call("obs_scene_get_items", scene)).items;
 		const sources = async () => cdp.call("obs_query_all_sources");
 
-		await r.step("the main page and its subframe see the event API after #87", async () => {
+		await r.step("the main page can register for events, and a subframe cannot", async () => {
 			const names = await cdp.evaluate("__slt.names()");
 			if (!names.includes("events_registerReceiver")) return "events_registerReceiver is not exposed";
 
@@ -76,7 +76,7 @@ export default {
 			const frame = observer.events.find((e) => e.who === "events-frame").data;
 
 			if (frame.isTop) return "the report came from the top frame";
-			if (!frame.keys?.includes("events_registerReceiver")) return "the iframe is missing events_registerReceiver";
+			if (frame.keys) return "the iframe has slabsGlobal";
 		});
 
 		const registered = await cdp.listen("slabsGlobal", "events_registerReceiver");
