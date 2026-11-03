@@ -145,7 +145,11 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 
 	// Read from the environment here because this also runs in the helper processes, which inherit it.
 	if (int port = getRemoteDebuggingPort())
-		command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:" + std::to_string(port));
+	{
+		// CEF advertises the appspot frontend in /json/list.
+		const std::string localOrigins = "http://localhost:" + std::to_string(port) + ",http://127.0.0.1:" + std::to_string(port);
+		command_line->AppendSwitchWithValue("remote-allow-origins", localOrigins + ",https://chrome-devtools-frontend.appspot.com");
+	}
 }
 
 BrowserApp::Role BrowserApp::roleOf(CefRefPtr<CefBrowser> browser)

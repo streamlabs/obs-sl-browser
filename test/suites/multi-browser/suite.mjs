@@ -34,7 +34,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
 import { results, until } from "../../harness/suite.mjs";
-import { attachTo, listPages } from "../../harness/cdp.mjs";
+import { attachTo, listPages, upgradeStatus } from "../../harness/cdp.mjs";
 import { windowTitles, closeWindow } from "../../harness/windows.mjs";
 
 const TABS_NAMES = [
@@ -153,6 +153,17 @@ export default {
 					return u.some((x) => x.includes("tab.html?uid=101")) ? u : null;
 				}, { timeoutMs: 15000 });
 				if (!urls) return `no CDP target for the tab, saw ${(await pageUrls()).join(", ")}`;
+			});
+
+			await r.step("Chrome DevTools frontends can attach to the tab target", async () => {
+				const target = (await listPages(port)).find((p) => p.url.includes("tab.html?uid=101"));
+				if (!target) return "tab target is missing";
+				if (!target.devtoolsFrontendUrl) return "tab target has no DevTools frontend URL";
+				const frontendOrigin = new URL(target.devtoolsFrontendUrl, `http://127.0.0.1:${port}`).origin;
+				for (const origin of [`http://127.0.0.1:${port}`, frontendOrigin]) {
+					const status = await upgradeStatus(target.webSocketDebuggerUrl, origin);
+					if (status !== 101) return `${origin} got HTTP ${status}, expected 101`;
+				}
 			});
 
 			let t101 = null;
