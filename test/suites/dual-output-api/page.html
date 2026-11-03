@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dual Output API tests</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 22px 24px 60px;
+    background: #15181d; color: #e8eaee;
+    font: 14px/1.6 "Segoe UI", system-ui, sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: #838c9a; font-size: 13px; margin: 0 0 18px; }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    background: #45c4d8; color: #0d1013; border: 0;
+    border-radius: 6px; padding: 8px 16px;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  button.ghost { background: transparent; color: #a8b0bd; border: 1px solid #2e343e; }
+  .bar { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
+  #summary { font-weight: 600; font-variant-numeric: tabular-nums; }
+  ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+  li { display: grid; grid-template-columns: 62px 1fr; gap: 12px; padding: 7px 10px; background: #1c2027; border-radius: 4px; }
+  li .tag { font-weight: 700; font-size: 11px; letter-spacing: .08em; padding-top: 2px; }
+  .pass .tag { color: #4ec9a0; }
+  .fail .tag { color: #f2777a; }
+  .info .tag { color: #838c9a; }
+  .why { display: block; color: #f2a5a7; font-size: 12.5px; margin-top: 2px; word-break: break-word; }
+  .info .why { color: #a8b0bd; }
+  code { font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; }
+  .warn { border: 1px solid #5c4620; background: #2e2415; color: #e0a64a; padding: 10px 12px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>Dual Output API tests</h1>
+<p class="sub">Exercises the vertical-canvas JS API against the running plugin. Creates temporary scenes prefixed <code>__slt_</code> and removes them afterwards. The same suite runs headless via <code>node test/run.mjs dual-output-api</code>.</p>
+
+<div class="warn" id="env" hidden></div>
+
+<div class="bar">
+  <button id="run">Run tests</button>
+  <button id="cleanup" class="ghost">Clean up only</button>
+  <span id="summary"></span>
+</div>
+
+<ol id="results"></ol>
+
+<script src="/_harness/inpage.js"></script>
+<script src="tests.js"></script>
+<script>
+"use strict";
+
+var resultsEl = document.getElementById("results");
+var summaryEl = document.getElementById("summary");
+var runBtn = document.getElementById("run");
+var cleanupBtn = document.getElementById("cleanup");
+
+function row(r) {
+  var li = document.createElement("li");
+  li.className = r.status;
+
+  var tag = document.createElement("span");
+  tag.className = "tag";
+  tag.textContent = r.status === "info" ? "····" : r.status.toUpperCase();
+
+  var body = document.createElement("span");
+  body.textContent = r.name;
+
+  if (r.why) {
+    var w = document.createElement("span");
+    w.className = "why";
+    w.textContent = r.why;
+    body.appendChild(w);
+  }
+
+  li.appendChild(tag);
+  li.appendChild(body);
+  resultsEl.appendChild(li);
+}
+
+runBtn.addEventListener("click", function () {
+  runBtn.disabled = cleanupBtn.disabled = true;
+  resultsEl.textContent = "";
+  summaryEl.style.color = "";
+  summaryEl.textContent = "running...";
+
+  // Rows land as each test finishes rather than all at the end.
+  __slDualTests.run(row).then(function (s) {
+    summaryEl.textContent = s.pass + " passed, " + s.fail + " failed";
+    summaryEl.style.color = s.fail ? "#f2777a" : "#4ec9a0";
+    runBtn.disabled = cleanupBtn.disabled = false;
+  });
+});
+
+cleanupBtn.addEventListener("click", function () {
+  // Both controls, not just this one: cleanup deletes scenes and restores settings, so a run
+  // started underneath it would interleave with that and could be restored over.
+  runBtn.disabled = cleanupBtn.disabled = true;
+  __slDualTests.cleanup().then(function (r) {
+    var what = r.removed.length ? "removed: " + r.removed.join(", ") : "nothing to remove";
+    row(r.problems.length
+      ? { status: "fail", name: "cleanup", why: r.problems.join("; ") + " (" + what + ")" }
+      : { status: "info", name: "cleanup", why: what });
+    runBtn.disabled = cleanupBtn.disabled = false;
+  });
+});
+
+if (!__slDualTests.available()) {
+  var env = document.getElementById("env");
+  env.hidden = false;
+  env.textContent = "window.slabsGlobal is not present. This page only works inside the Streamlabs browser window, "
+    + "which injects the api. Launch OBS with SL_PLUGIN_DEFAULT_URL pointing at this file.";
+  runBtn.disabled = cleanupBtn.disabled = true;
+}
+</script>
+</body>
+</html>
