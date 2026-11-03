@@ -8,6 +8,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
+import { createServer } from "node:net";
 
 /** Blocks the thread. Needed in teardown, which runs from signal handlers and cannot await. */
 export const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -61,6 +62,18 @@ export function assertObsExe(exe) {
 	}
 }
 
+/** A port nothing is listening on right now. Racy by nature, but only against other processes. */
+export function freePort() {
+	return new Promise((resolve, reject) => {
+		const s = createServer();
+		s.once("error", reject);
+		s.listen(0, "127.0.0.1", () => {
+			const { port } = s.address();
+			s.close(() => resolve(port));
+		});
+	});
+}
+
 export async function devtoolsUp(port) {
 	try {
 		const r = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1200) });
@@ -96,7 +109,7 @@ export async function launchObs({ exe, pageUrl, collection, port, timeoutMs = 12
 	try {
 		child = spawn(exe, args, {
 			cwd: dirname(exe), // OBS resolves data\, obs-plugins\ and its portable config relative to cwd
-			env: { ...process.env, SL_PLUGIN_DEFAULT_URL: pageUrl },
+			env: { ...process.env, SL_PLUGIN_DEFAULT_URL: pageUrl, SL_PLUGIN_REMOTE_DEBUGGING_PORT: String(port) },
 			detached: true,
 			stdio: "ignore",
 		});

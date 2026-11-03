@@ -74,8 +74,6 @@ target_sources(
           browser-app.hpp
           browser-client.cpp
           browser-client.hpp
-          browser-scheme.cpp
-          browser-scheme.hpp
           browser-version.h
           cef-headers.hpp
           deps/json11/json11.cpp
@@ -158,6 +156,7 @@ target_sources(
 )
 
 target_link_libraries(sl-browser-plugin PRIVATE OBS::libobs OBS::frontend-api)
+target_link_libraries(sl-browser-plugin PRIVATE Advapi32)
 target_link_libraries(sl-browser-plugin PRIVATE Detours::Detours)
 target_link_libraries(sl-browser-plugin PRIVATE ZLIB::ZLIB)
 target_link_libraries(sl-browser-plugin PRIVATE Qt::Widgets)

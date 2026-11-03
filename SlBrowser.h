@@ -42,7 +42,7 @@ private:
 	SlBrowser();
 	~SlBrowser();
 
-	void browserInit();
+	bool browserInit();
 	void browserShutdown();
 	void browserManagerThread();
 
