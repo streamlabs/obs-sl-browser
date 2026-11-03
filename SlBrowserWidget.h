@@ -13,10 +13,13 @@ public:
 	SlBrowserWidget();
 
 	void setElements(std::weak_ptr<BrowserElements> elements) { m_elements = elements; }
+	void syncBrowserSize();
+	void scheduleBrowserSizeSync();
 
 protected:
 	void closeEvent(QCloseEvent *event) override;
 	void resizeEvent(QResizeEvent *event) override;
+	void changeEvent(QEvent *event) override;
 
 	void showEvent(QShowEvent *event) override;
 	void hideEvent(QHideEvent *event) override;
@@ -24,4 +27,5 @@ protected:
 
 private:
 	std::weak_ptr<BrowserElements> m_elements;
+	bool m_browserSizeSyncScheduled = false;
 };

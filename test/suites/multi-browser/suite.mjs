@@ -141,6 +141,21 @@ export default {
 				if ((await cdp.evaluate("typeof window.slabsTab")) !== "undefined") return "slabsTab is defined on the main window";
 			});
 
+			await r.step("main starts with a correctly sized viewport", async () => {
+				const near = (value, expected) => Math.abs(value - expected) <= 24;
+				const initial = await cdp.evaluate("window.__initialViewport");
+				if (!initial || !near(initial.w, 1280) || !near(initial.h, 720))
+					return `main first document started at ${initial?.w}x${initial?.h}, expected about 1280x720`;
+				const ok = await until(async () => {
+					const size = await mainSize();
+					return near(size.w, 1280) && near(size.h, 720);
+				}, { timeoutMs: 10000, everyMs: 250 });
+				if (!ok) {
+					const size = await mainSize();
+					return `main starts at ${size.w}x${size.h}, expected about 1280x720`;
+				}
+			});
+
 			/* ------------------------------------------------------------- create --- */
 
 			await r.step("tabs_createWindow(101) opens a window that loads its page", async () => {
@@ -153,6 +168,10 @@ export default {
 					return u.some((x) => x.includes("tab.html?uid=101")) ? u : null;
 				}, { timeoutMs: 15000 });
 				if (!urls) return `no CDP target for the tab, saw ${(await pageUrls()).join(", ")}`;
+				const size = loads(101).at(-1)?.data;
+				const near = (value, expected) => Math.abs(value - expected) <= 24;
+				if (!size || !near(size.innerWidth, 1280) || !near(size.innerHeight, 720))
+					return `tab starts at ${size?.innerWidth}x${size?.innerHeight}, expected about 1280x720`;
 			});
 
 			let t101 = null;
@@ -362,6 +381,18 @@ export default {
 				if (s.initAtStart !== 1) return `the page saw init count ${s.initAtStart} when its own script started, expected 1`;
 				if (s.initSawSlabsTab !== "object") return `slabsTab was ${s.initSawSlabsTab} when the script ran`;
 				if (s.hasSlabsGlobal) return "the tab reported slabsGlobal";
+			});
+
+			await r.step("hiding and showing a tab does not rerun its initScript", async () => {
+				const t = await attach(120);
+				const before = await t.evaluate("({ count: window.__slInit, timeOrigin: performance.timeOrigin })");
+				const loadCount = loads(120).length;
+				if (isError(await cdp.call("tabs_hideWindow", 120))) return "hide errored";
+				if (isError(await cdp.call("tabs_showWindow", 120))) return "show errored";
+				await settle(500);
+				const after = await t.evaluate("({ count: window.__slInit, timeOrigin: performance.timeOrigin })");
+				if (before.count !== 1 || after.count !== 1) return `initScript count changed from ${before.count} to ${after.count}`;
+				if (after.timeOrigin !== before.timeOrigin || loads(120).length !== loadCount) return "hide/show reloaded the tab document";
 			});
 
 			await r.step("the initScript runs again after a reload, after tabs_loadUrl, and after the page navigates itself", async () => {
@@ -1261,6 +1292,28 @@ export default {
 			});
 
 			/* ------------------------------------------------------ main's own browser api --- */
+
+			await r.step("main viewport follows a resize while hidden and then shown", async () => {
+				const hide = await cdp.call("browser_setHiddenState", true);
+				if (isError(hide) || hide.__timeout) return `hide: ${JSON.stringify(hide)}`;
+				let show;
+				try {
+					const resize = await cdp.call("browser_resizeBrowser", 960, 640);
+					if (isError(resize) || resize.__timeout) return `resize: ${JSON.stringify(resize)}`;
+				} finally {
+					show = await cdp.call("browser_setHiddenState", false);
+				}
+				if (isError(show) || show.__timeout) return `show: ${JSON.stringify(show)}`;
+				const near = (value, expected) => Math.abs(value - expected) <= 24;
+				const ok = await until(async () => {
+					const size = await mainSize();
+					return near(size.w, 960) && near(size.h, 640);
+				}, { timeoutMs: 10000, everyMs: 250 });
+				if (!ok) {
+					const size = await mainSize();
+					return `main is ${size.w}x${size.h}, expected about 960x640 after reveal`;
+				}
+			});
 
 			await r.step("browser_resizeBrowser still resizes the main window, within its bounds", async () => {
 				if (!isError(await cdp.call("browser_resizeBrowser", 100, 100))) return "100x100 did not error";

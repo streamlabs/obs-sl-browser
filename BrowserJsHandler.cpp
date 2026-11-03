@@ -43,19 +43,33 @@ bool BrowserClient::JS_BROWSER_RESIZE_BROWSER(CefRefPtr<CefBrowser> &browser, in
 		return true;
 	}
 
-	SlBrowser::instance().m_mainBrowser->widget->resize(w, h);
+	auto elements = SlBrowser::instance().m_mainBrowser;
+	QMetaObject::invokeMethod(
+		qApp,
+		[elements, w, h]() {
+			if (!elements->closed && elements->widget)
+				elements->widget->resize(w, h);
+		},
+		Qt::QueuedConnection);
 
 	return true;
 }
 
 bool BrowserClient::JS_BROWSER_BRING_FRONT(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
-	HWND hwnd = HWND(SlBrowser::instance().m_mainBrowser->widget->winId());
+	auto elements = SlBrowser::instance().m_mainBrowser;
+	QMetaObject::invokeMethod(
+		qApp,
+		[elements]() {
+			if (elements->closed || !elements->widget)
+				return;
 
-	if (::IsIconic(hwnd))
-		::ShowWindow(hwnd, SW_RESTORE);
-
-	WindowsFunctions::ForceForegroundWindow(hwnd);
+			HWND hwnd = HWND(elements->widget->winId());
+			if (::IsIconic(hwnd))
+				::ShowWindow(hwnd, SW_RESTORE);
+			WindowsFunctions::ForceForegroundWindow(hwnd);
+		},
+		Qt::QueuedConnection);
 
 	return true;
 }
@@ -71,7 +85,14 @@ bool BrowserClient::JS_BROWSER_SET_WINDOW_POSITION(CefRefPtr<CefBrowser> &browse
 	int32_t x = argsWithoutFunc[0]->GetInt();
 	int32_t y = argsWithoutFunc[1]->GetInt();
 
-	SlBrowser::instance().m_mainBrowser->widget->move(x, y);
+	auto elements = SlBrowser::instance().m_mainBrowser;
+	QMetaObject::invokeMethod(
+		qApp,
+		[elements, x, y]() {
+			if (!elements->closed && elements->widget)
+				elements->widget->move(x, y);
+		},
+		Qt::QueuedConnection);
 
 	return true;
 }
@@ -97,14 +118,34 @@ bool BrowserClient::JS_BROWSER_SET_HIDDEN_STATE(CefRefPtr<CefBrowser> &browser, 
 		return true;
 	}
 
-	SlBrowser::instance().m_mainBrowser->widget->setHidden(argsWithoutFunc[0]->GetBool());
-	SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_mainBrowser->widget->isHidden());
-
-	if (!SlBrowser::instance().m_mainBrowser->widget->isHidden())
+	const bool hidden = argsWithoutFunc[0]->GetBool();
+	auto elements = SlBrowser::instance().m_mainBrowser;
 	{
-		HWND hwnd = HWND(SlBrowser::instance().m_mainBrowser->widget->winId());
-		WindowsFunctions::ForceForegroundWindow(hwnd);
+		std::lock_guard<std::mutex> lock(elements->hiddenStateMutex);
+		++elements->pendingHiddenOperations;
+		elements->hidden = hidden;
 	}
+	QMetaObject::invokeMethod(
+		qApp,
+		[elements, hidden]() {
+			if (elements->closed || !elements->widget)
+			{
+				std::lock_guard<std::mutex> lock(elements->hiddenStateMutex);
+				--elements->pendingHiddenOperations;
+				return;
+			}
+
+			elements->widget->setHidden(hidden);
+			SlBrowser::instance().saveHiddenState(elements->widget->isHidden());
+			if (!elements->widget->isHidden())
+			{
+				HWND hwnd = HWND(elements->widget->winId());
+				WindowsFunctions::ForceForegroundWindow(hwnd);
+			}
+			std::lock_guard<std::mutex> lock(elements->hiddenStateMutex);
+			--elements->pendingHiddenOperations;
+		},
+		Qt::QueuedConnection);
 
 	return true;
 }
