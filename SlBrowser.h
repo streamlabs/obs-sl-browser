@@ -71,6 +71,8 @@ public:
 public:
 	void run(int argc, char *argv[]);
 	static std::string getDefaultUrl();
+	static std::string getApiOrigin();
+	static std::string getEmbedOrigins();
 	static bool isApprovedTabUrl(const std::string &url);
 	static std::string tabContextDirName(const std::string &key);
 	std::string resolveTabIconPath(const std::string &path, std::wstring &resolved) const;

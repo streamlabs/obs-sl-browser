@@ -18,7 +18,7 @@
  *   init script an initScript is in place before the page runs, on every document load.
  *   allow-list  a tab only loads, and only navigates to, approved origins; icons only come from
  *               under %APPDATA%\StreamlabsOBS.
- *   iframes     main-window subframes inherit slabsGlobal after #87; tab subframes get neither global.
+ *   iframes     a main-window embed frame gets only the pluginVersion marker; tab frames get neither global.
  *   cookies     a tab shares cookies with no one but tabs created with the same key.
  *
  * Tab pages are served from the harness, which launchObs makes an approved origin through
@@ -495,15 +495,15 @@ export default {
 			const frameReport = (who, event) => observer.events.find((e) => e.who === who && e.event === event)?.data;
 			const addFrame = (page, who, origin) => page.evaluate(`(() => { const f = document.createElement("iframe"); f.id = ${JSON.stringify(who)}; f.src = ${JSON.stringify(`${origin}/frame.html?who=${who}`)}; document.body.appendChild(f); return true; })()`);
 
-			await r.step("an iframe in the main page has slabsGlobal but no slabsTab", async () => {
+			await r.step("an iframe in the main page has only the embed marker when allowed", async () => {
 				for (const [label, origin] of FRAME_ORIGINS) {
 					const who = `main-${label}-frame`;
 					await addFrame(cdp, who, origin);
 					if (!(await observer.waitFor((evs) => evs.some((e) => e.who === who && e.event === "FRAME"), { timeoutMs: 30000 }))) return `${label}: the iframe never reported`;
 					const f = frameReport(who, "FRAME");
 					if (f.isTop) return `${label}: the report came from the top frame`;
-					const missing = ["pluginVersion", "sl_getVersionInfo", "tabs_createWindow"].filter((name) => !f.slabsGlobalKeys?.includes(name));
-					if (missing.length) return `${label}: slabsGlobal is missing ${missing.join(", ")}`;
+					const expectedKeys = label === "cross-origin" ? ["pluginVersion"] : null;
+					if (JSON.stringify(f.slabsGlobalKeys) !== JSON.stringify(expectedKeys)) return `${label}: slabsGlobal keys were ${JSON.stringify(f.slabsGlobalKeys)}`;
 					if (f.slabsTabKeys) return `${label}: the iframe has slabsTab`;
 					await cdp.evaluate(`document.getElementById(${JSON.stringify(who)}).remove()`);
 				}
@@ -1179,7 +1179,7 @@ export default {
 				if (wrong.length) return `${wrong.length} of ${spam.length} messages carried uid ${wrong[0][1]}, first ${JSON.stringify(wrong[0])}`;
 			});
 
-			await r.step("main keeps slabsGlobal across origins after the #87 revert", async () => {
+			await r.step("main exposes slabsGlobal only on the configured origin across navigation", async () => {
 				const home = await cdp.evaluate("location.href");
 				const away = `${observer.origin.replace("127.0.0.1", "localhost")}/page.html`;
 				const onPage = (href) => until(async () => {
@@ -1189,12 +1189,13 @@ export default {
 					} catch { return null; }
 				}, { timeoutMs: 20000, everyMs: 250 });
 
-				for (const [name, href] of [["the other origin", away], ["the original page", home]]) {
+				for (const [name, href, expectApi] of [["the other origin", away, false], ["the original page", home, true]]) {
 					await cdp.evaluate(`location.href = ${JSON.stringify(href)}`).catch(() => {});
 					const s = await onPage(href);
 					if (!s) return `${name} never loaded`;
-					if (s.g !== "object") return `slabsGlobal is ${s.g} on ${name}`;
+					if (s.g !== (expectApi ? "object" : "undefined")) return `slabsGlobal is ${s.g} on ${name}`;
 					if (s.t !== "undefined") return `slabsTab is ${s.t} on ${name}`;
+					if (!expectApi) continue;
 					const names = await cdp.evaluate("__slt.names()");
 					const missing = TABS_NAMES.filter((n) => !names.includes(n));
 					if (missing.length) return `on ${name}, missing on slabsGlobal: ${missing.join(", ")}`;

@@ -7,6 +7,9 @@
 
 #include <windows.h>
 
+#include <algorithm>
+#include <sstream>
+
 using namespace json11;
 
 /*static*/
@@ -43,6 +46,34 @@ void BrowserApp::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_li
 {
 	std::string pid = std::to_string(GetCurrentProcessId());
 	command_line->AppendSwitchWithValue("parent_pid", pid);
+
+	if (!m_apiOrigin.empty())
+		command_line->AppendSwitchWithValue("api_origin", m_apiOrigin);
+
+	if (!m_embedOrigins.empty())
+		command_line->AppendSwitchWithValue("embed_origins", m_embedOrigins);
+}
+
+std::string BrowserApp::OriginOf(const std::string &url)
+{
+	CefURLParts parts;
+	if (!CefParseURL(url, parts))
+		return {};
+
+	std::string scheme = CefString(&parts.scheme).ToString();
+	std::string host = CefString(&parts.host).ToString();
+	std::string port = CefString(&parts.port).ToString();
+
+	if (scheme.empty() || host.empty())
+		return {};
+
+	std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+	std::transform(host.begin(), host.end(), host.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+	if ((scheme == "http" && port == "80") || (scheme == "https" && port == "443"))
+		port.clear();
+
+	return scheme + "://" + host + (port.empty() ? "" : ":" + port);
 }
 
 /*static*/
@@ -189,10 +220,31 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 
 	if (role == Role::Main)
 	{
+		CefRefPtr<CefCommandLine> commandLine = CefCommandLine::GetGlobalCommandLine();
+		const std::string allowedOrigin = commandLine->GetSwitchValue("api_origin");
+		const std::string frameOrigin = OriginOf(frame->GetURL());
+		const bool isApiFrame = frame->IsMain() && !allowedOrigin.empty() && frameOrigin == allowedOrigin;
+
+		bool isEmbedFrame = false;
+		if (!frame->IsMain() && !frameOrigin.empty())
+		{
+			std::stringstream embedOrigins(commandLine->GetSwitchValue("embed_origins").ToString());
+			std::string embedOrigin;
+
+			while (!isEmbedFrame && std::getline(embedOrigins, embedOrigin, ','))
+				isEmbedFrame = embedOrigin == frameOrigin;
+		}
+
+		if (!isApiFrame && !isEmbedFrame)
+			return;
+
 		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
 		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
 		globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
 		slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		if (!isApiFrame)
+			return;
 
 		for (auto &itr : JavascriptApi::getPluginFunctionNames())
 			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
@@ -200,13 +252,10 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 		for (auto &itr : JavascriptApi::getBrowserFunctionNames())
 			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
 
-		if (frame->IsMain())
-		{
-			// A page that closes its own window leaves main half closed. Hiding it goes through browser_setHiddenState
-			CefRefPtr<CefV8Value> retval;
-			CefRefPtr<CefV8Exception> exception;
-			context->Eval("window.close = function close() {};", frame->GetURL(), 0, retval, exception);
-		}
+		// A page that closes its own window leaves main half closed. Hiding it goes through browser_setHiddenState
+		CefRefPtr<CefV8Value> retval;
+		CefRefPtr<CefV8Exception> exception;
+		context->Eval("window.close = function close() {};", frame->GetURL(), 0, retval, exception);
 	}
 	else if (role == Role::Tab && frame->IsMain() && isApprovedTabUrl(frame->GetURL()))
 	{
@@ -319,8 +368,9 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 	const std::string funcName = name.ToString();
 	const Role role = roleOf(browser);
 	const bool allowedForBrowser = role == Role::Main ? (JavascriptApi::isPluginFunctionName(funcName) || JavascriptApi::isBrowserFunctionName(funcName)) : (role == Role::Tab && JavascriptApi::isBrowserTabFunctionName(funcName));
-	const bool allowedForTab = role != Role::Tab || (current->GetFrame()->IsMain() && isApprovedTabUrl(current->GetFrame()->GetURL()));
-	const bool allowed = allowedForBrowser && allowedForTab;
+	const std::string allowedOrigin = CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("api_origin");
+	const bool allowedForFrame = role == Role::Main ? (current->GetFrame()->IsMain() && !allowedOrigin.empty() && OriginOf(current->GetFrame()->GetURL()) == allowedOrigin) : (role == Role::Tab && current->GetFrame()->IsMain() && isApprovedTabUrl(current->GetFrame()->GetURL()));
+	const bool allowed = allowedForBrowser && allowedForFrame;
 
 	if (allowed)
 	{

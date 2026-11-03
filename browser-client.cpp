@@ -390,9 +390,9 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 	// The renderer only binds what its role allows, but a compromised one can send any name
 	const bool allowedForRole = m_isMain ? (JavascriptApi::isPluginFunctionName(name) || JavascriptApi::isBrowserFunctionName(name)) : JavascriptApi::isBrowserTabFunctionName(name);
 	const std::string frameUrl = frame->GetURL();
-	const bool allowedForTab = m_isMain || (frame->IsMain() && SlBrowser::isApprovedTabUrl(frameUrl));
+	const bool allowedForFrame = m_isMain ? (frame->IsMain() && !SlBrowser::getApiOrigin().empty() && BrowserApp::OriginOf(frameUrl) == SlBrowser::getApiOrigin()) : (frame->IsMain() && SlBrowser::isApprovedTabUrl(frameUrl));
 
-	if (!allowedForTab || !allowedForRole)
+	if (!allowedForFrame || !allowedForRole)
 	{
 		printf("Refused api call %s from %s\n", name.c_str(), frameUrl.c_str());
 
