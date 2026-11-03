@@ -399,6 +399,21 @@ export default {
 				if (after.timeOrigin !== before.timeOrigin || loads(120).length !== loadCount) return "hide/show reloaded the tab document";
 			});
 
+			await r.step("an HTTP redirect runs initScript once in the final document", async () => {
+				const uid = 124;
+				const script = "(() => { const k = '__slRedirectInit'; const n = Number(sessionStorage.getItem(k) || 0) + 1; sessionStorage.setItem(k, String(n)); window.__slInit = n; })()";
+				const res = await cdp.call("tabs_createWindow", uid, `${observer.origin}/redirect-tab?uid=${uid}`, "T124", "", script);
+				if (res.__missing || isError(res) || res.__timeout) return `create redirect tab: ${JSON.stringify(res)}`;
+				created.add(uid);
+				const loaded = await observer.waitFor((evs) => evs.some((e) => e.who === `tab${uid}` && e.event === "LOADED"), { timeoutMs: 30000 });
+				if (!loaded) return "redirected tab never loaded";
+				const state = loads(uid).at(-1)?.data;
+				if (state?.href !== tabUrl(uid) || state.initAtStart !== 1)
+					return `redirect ended at ${state?.href} with init count ${state?.initAtStart}, expected one run on ${tabUrl(uid)}`;
+				await cdp.call("tabs_destroyWindow", uid);
+				created.delete(uid);
+			});
+
 			await r.step("the initScript runs again after a reload, after tabs_loadUrl, and after the page navigates itself", async () => {
 				const loadsBefore = () => loads(120).length;
 				const next = (n) => observer.waitFor(() => loads(120).length >= n, { timeoutMs: 30000 });
