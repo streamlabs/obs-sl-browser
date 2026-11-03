@@ -72,7 +72,6 @@ public:
 	void run(int argc, char *argv[]);
 	static std::string getDefaultUrl();
 	static bool isApprovedTabUrl(const std::string &url);
-	static std::string getApiOrigin();
 	static std::string tabContextDirName(const std::string &key);
 	std::string resolveTabIconPath(const std::string &path, std::wstring &resolved) const;
 	std::string createTabWindow(const int32_t uid, const std::string &url, TabWindowOptions options);

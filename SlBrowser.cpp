@@ -129,12 +129,6 @@ std::string SlBrowser::getDefaultUrl()
 }
 
 /*static*/
-std::string SlBrowser::getApiOrigin()
-{
-	return BrowserApp::OriginOf(getDefaultUrl());
-}
-
-/*static*/
 bool SlBrowser::isApprovedTabUrl(const std::string &url)
 {
 	return BrowserApp::isApprovedTabUrl(url);
@@ -823,7 +817,7 @@ bool SlBrowser::browserInit()
 			std::cout << "Remote debugging disabled" << std::endl;
 	}
 
-	m_app = new BrowserApp(getApiOrigin());
+	m_app = new BrowserApp();
 
 	CefExecuteProcess(args, m_app, nullptr);
 

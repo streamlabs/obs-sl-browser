@@ -7,8 +7,6 @@
 
 #include <windows.h>
 
-#include <algorithm>
-
 using namespace json11;
 
 /*static*/
@@ -45,31 +43,6 @@ void BrowserApp::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_li
 {
 	std::string pid = std::to_string(GetCurrentProcessId());
 	command_line->AppendSwitchWithValue("parent_pid", pid);
-
-	if (!m_apiOrigin.empty())
-		command_line->AppendSwitchWithValue("api_origin", m_apiOrigin);
-}
-
-std::string BrowserApp::OriginOf(const std::string &url)
-{
-	CefURLParts parts;
-	if (!CefParseURL(url, parts))
-		return {};
-
-	std::string scheme = CefString(&parts.scheme).ToString();
-	std::string host = CefString(&parts.host).ToString();
-	std::string port = CefString(&parts.port).ToString();
-
-	if (scheme.empty() || host.empty())
-		return {};
-
-	std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-	std::transform(host.begin(), host.end(), host.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-
-	if ((scheme == "http" && port == "80") || (scheme == "https" && port == "443"))
-		port.clear();
-
-	return scheme + "://" + host + (port.empty() ? "" : ":" + port);
 }
 
 /*static*/
@@ -212,17 +185,10 @@ void BrowserApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
 
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
-	if (!frame->IsMain())
-		return;
-
 	const Role role = roleOf(browser);
 
 	if (role == Role::Main)
 	{
-		const std::string allowedOrigin = CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("api_origin");
-		if (allowedOrigin.empty() || OriginOf(frame->GetURL()) != allowedOrigin)
-			return;
-
 		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
 		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
 		globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
@@ -234,12 +200,15 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 		for (auto &itr : JavascriptApi::getBrowserFunctionNames())
 			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
 
-		// A page that closes its own window leaves main half closed. Hiding it goes through browser_setHiddenState
-		CefRefPtr<CefV8Value> retval;
-		CefRefPtr<CefV8Exception> exception;
-		context->Eval("window.close = function close() {};", frame->GetURL(), 0, retval, exception);
+		if (frame->IsMain())
+		{
+			// A page that closes its own window leaves main half closed. Hiding it goes through browser_setHiddenState
+			CefRefPtr<CefV8Value> retval;
+			CefRefPtr<CefV8Exception> exception;
+			context->Eval("window.close = function close() {};", frame->GetURL(), 0, retval, exception);
+		}
 	}
-	else if (role == Role::Tab && isApprovedTabUrl(frame->GetURL()))
+	else if (role == Role::Tab && frame->IsMain() && isApprovedTabUrl(frame->GetURL()))
 	{
 		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
 		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
@@ -350,9 +319,8 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 	const std::string funcName = name.ToString();
 	const Role role = roleOf(browser);
 	const bool allowedForBrowser = role == Role::Main ? (JavascriptApi::isPluginFunctionName(funcName) || JavascriptApi::isBrowserFunctionName(funcName)) : (role == Role::Tab && JavascriptApi::isBrowserTabFunctionName(funcName));
-	const std::string allowedOrigin = CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("api_origin");
-	const bool allowedForOrigin = role == Role::Main ? (!allowedOrigin.empty() && OriginOf(current->GetFrame()->GetURL()) == allowedOrigin) : (role == Role::Tab && isApprovedTabUrl(current->GetFrame()->GetURL()));
-	const bool allowed = allowedForBrowser && current->GetFrame()->IsMain() && allowedForOrigin;
+	const bool allowedForTab = role != Role::Tab || (current->GetFrame()->IsMain() && isApprovedTabUrl(current->GetFrame()->GetURL()));
+	const bool allowed = allowedForBrowser && allowedForTab;
 
 	if (allowed)
 	{

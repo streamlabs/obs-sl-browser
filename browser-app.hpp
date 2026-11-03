@@ -50,12 +50,9 @@ class BrowserApp : public CefApp, public CefRenderProcessHandler, public CefBrow
 
 	std::mutex m_browserInfoMutex;
 	std::map<int, BrowserInfo> m_browserInfos;
-	std::string m_apiOrigin;
-
 public:
-	inline BrowserApp(const std::string &apiOrigin = {}) : m_apiOrigin(apiOrigin) {}
+	inline BrowserApp() {}
 
-	static std::string OriginOf(const std::string &url);
 	static bool isApprovedTabUrl(const std::string &url);
 
 	// Port from SL_PLUGIN_REMOTE_DEBUGGING_PORT, or 0 when unset or invalid.
