@@ -214,7 +214,7 @@ void BrowserClient::RemoveBrowserFromCallback(CefRefPtr<CefBrowser> browser)
 	std::lock_guard<std::mutex> eventGrd(m_obsEventReceiverMutex);
 
 	if (m_obsEventReceiverBrowserId == browser->GetIdentifier())
-		m_obsEventReceiverFuncId = 0;
+		m_obsEventReceiver = {};
 }
 
 CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
@@ -234,25 +234,30 @@ CefRefPtr<CefBrowser> BrowserClient::PopCallback(const int functionId)
 }
 
 std::mutex BrowserClient::m_tabReceiverMutex;
-std::map<int32_t, int32_t> BrowserClient::m_tabReceiverDictionary;
+std::map<int32_t, BrowserClient::Receiver> BrowserClient::m_tabReceiverDictionary;
 
-void BrowserClient::AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid)
+void BrowserClient::AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid, const std::string &token)
 {
 	std::lock_guard<std::mutex> grd(m_tabReceiverMutex);
-	m_tabReceiverDictionary[browserCefId] = funcid;
+	m_tabReceiverDictionary[browserCefId] = {funcid, token};
+}
+
+BrowserClient::Receiver BrowserClient::GetMsgReceiver(const int32_t browserCefId)
+{
+	std::lock_guard<std::mutex> grd(m_tabReceiverMutex);
+	auto itr = m_tabReceiverDictionary.find(browserCefId);
+	return itr != m_tabReceiverDictionary.end() ? itr->second : Receiver{};
 }
 
 // 0 when the browser has no receiver
 int32_t BrowserClient::GetReceiverFuncIdForBrowser(const int32_t browserCefId)
 {
-	std::lock_guard<std::mutex> grd(m_tabReceiverMutex);
-	auto itr = m_tabReceiverDictionary.find(browserCefId);
-	return itr != m_tabReceiverDictionary.end() ? itr->second : 0;
+	return GetMsgReceiver(browserCefId).funcId;
 }
 
 std::mutex BrowserClient::m_obsEventReceiverMutex;
 int32_t BrowserClient::m_obsEventReceiverBrowserId = 0;
-int32_t BrowserClient::m_obsEventReceiverFuncId = 0;
+BrowserClient::Receiver BrowserClient::m_obsEventReceiver;
 std::mutex BrowserClient::m_obsEventPendingMutex;
 std::deque<std::string> BrowserClient::m_obsEventPending;
 bool BrowserClient::m_obsEventDrainScheduled = false;
@@ -264,11 +269,11 @@ constexpr size_t kMaxPendingObsEvents = 10000;
 constexpr int kObsEventsPerTask = 64;
 }
 
-void BrowserClient::AssignObsEventReceiverFunc(const int32_t browserCefId, const int32_t funcid)
+void BrowserClient::AssignObsEventReceiverFunc(const int32_t browserCefId, const int32_t funcid, const std::string &token)
 {
 	std::lock_guard<std::mutex> grd(m_obsEventReceiverMutex);
 	m_obsEventReceiverBrowserId = browserCefId;
-	m_obsEventReceiverFuncId = funcid;
+	m_obsEventReceiver = {funcid, token};
 }
 
 void BrowserClient::SendObsEventToReceiver(const std::string &json)
@@ -305,15 +310,15 @@ void BrowserClient::SendObsEventToReceiver(const std::string &json)
 	}
 
 	int32_t browserId = 0;
-	int32_t funcId = 0;
+	Receiver receiver;
 
 	{
 		std::lock_guard<std::mutex> grd(m_obsEventReceiverMutex);
 		browserId = m_obsEventReceiverBrowserId;
-		funcId = m_obsEventReceiverFuncId;
+		receiver = m_obsEventReceiver;
 	}
 
-	if (funcId == 0)
+	if (receiver.funcId == 0)
 		return;
 
 	const auto main = SlBrowser::instance().m_mainBrowser;
@@ -323,9 +328,10 @@ void BrowserClient::SendObsEventToReceiver(const std::string &json)
 
 	CefRefPtr<CefProcessMessage> processMsg = CefProcessMessage::Create("executeCallback_NoDelete");
 	CefRefPtr<CefListValue> execute_args = processMsg->GetArgumentList();
-	execute_args->SetInt(0, funcId);
+	execute_args->SetInt(0, receiver.funcId);
 	execute_args->SetString(1, json);
 	execute_args->SetInt(2, 0);
+	execute_args->SetString(3, receiver.token);
 
 	SendBrowserProcessMessage(main->browser, PID_RENDERER, processMsg);
 }
@@ -363,16 +369,17 @@ void BrowserClient::SendMsgToReceiver(CefRefPtr<CefBrowser> target, const std::s
 	if (target == nullptr)
 		return;
 
-	const int32_t funcId = GetReceiverFuncIdForBrowser(target->GetIdentifier());
+	const Receiver receiver = GetMsgReceiver(target->GetIdentifier());
 
-	if (funcId == 0)
+	if (receiver.funcId == 0)
 		return;
 
 	CefRefPtr<CefProcessMessage> processMsg = CefProcessMessage::Create("executeCallback_NoDelete");
 	CefRefPtr<CefListValue> execute_args = processMsg->GetArgumentList();
-	execute_args->SetInt(0, funcId);
+	execute_args->SetInt(0, receiver.funcId);
 	execute_args->SetString(1, msg);
 	execute_args->SetInt(2, senderUid);
+	execute_args->SetString(3, receiver.token);
 
 	SendBrowserProcessMessage(target, PID_RENDERER, processMsg);
 }
@@ -381,6 +388,24 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 {
 	const std::string &name = message->GetName();
 	CefRefPtr<CefListValue> input_args = message->GetArgumentList();
+	if (name == "releaseReceiver" && processId == PID_RENDERER)
+	{
+		const int id = input_args->GetInt(0);
+		const std::string token = input_args->GetString(1).ToString();
+		const int browserId = browser->GetIdentifier();
+		{
+			std::lock_guard<std::mutex> grd(m_tabReceiverMutex);
+			auto itr = m_tabReceiverDictionary.find(browserId);
+			if (itr != m_tabReceiverDictionary.end() && itr->second.funcId == id && itr->second.token == token)
+				m_tabReceiverDictionary.erase(itr);
+		}
+		{
+			std::lock_guard<std::mutex> grd(m_obsEventReceiverMutex);
+			if (m_obsEventReceiverBrowserId == browserId && m_obsEventReceiver.funcId == id && m_obsEventReceiver.token == token)
+				m_obsEventReceiver = {};
+		}
+		return true;
+	}
 
 	if (!valid())
 		return false;
@@ -501,6 +526,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 			// The renderer keeps the previous receiver until this registration is active.
 			CefRefPtr<CefProcessMessage> ack = CefProcessMessage::Create("receiverRegistered");
 			ack->GetArgumentList()->SetInt(0, funcid);
+			ack->GetArgumentList()->SetString(1, input_args->GetString(1));
 			frame->SendProcessMessage(PID_RENDERER, ack);
 		}
 
@@ -633,15 +659,24 @@ bool BrowserClient::GetAudioParameters(CefRefPtr<CefBrowser> browser, CefAudioPa
 
 void BrowserClient::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type)
 {
-	SlBrowser::instance().setMainLoadingInProgress(true);
+	if (m_isMain && frame->IsMain())
+		SlBrowser::instance().setMainLoadingInProgress(true);
 }
 
 void BrowserClient::OnLoadEnd(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, int httpStatusCode)
 {
+	if (!m_isMain || !frame->IsMain())
+		return;
+
 	if (httpStatusCode == 200)
 		SlBrowser::instance().setMainPageSuccess(true);
 
 	SlBrowser::instance().setMainLoadingInProgress(false);
+}
+
+void BrowserClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser, TerminationStatus, int, const CefString &)
+{
+	RemoveBrowserFromCallback(browser);
 }
 
 void BrowserClient::OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode, const CefString &errorText, const CefString &failedUrl)

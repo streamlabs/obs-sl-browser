@@ -108,6 +108,8 @@ private:
 	std::atomic<bool> m_loaded = false;
 	std::atomic<bool> m_switching = false;
 
+	// Serializes source callback snapshots with their queue changes; acquire before m_mtx.
+	std::mutex m_sourceEventMtx;
 	std::mutex m_mtx;
 	std::condition_variable m_cv;
 	std::deque<std::string> m_queue;

@@ -402,7 +402,12 @@ bool BrowserClient::JS_TABS_GET_WINDOW_CEF_IDENTIFIER(CefRefPtr<CefBrowser> &bro
 
 bool BrowserClient::JS_TABS_REGISTER_MSG_RECEIVER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
-	AssignMsgReceiverFunc(browser->GetIdentifier(), funcId);
+	if (funcId <= 0 || argsWithoutFunc.empty() || argsWithoutFunc[0]->GetType() != VTYPE_STRING || argsWithoutFunc[0]->GetString().empty())
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid receiver"}})).dump();
+		return true;
+	}
+	AssignMsgReceiverFunc(browser->GetIdentifier(), funcId, argsWithoutFunc[0]->GetString().ToString());
 
 	// No reply: the callback is only invoked with messages
 	return false;
@@ -410,6 +415,11 @@ bool BrowserClient::JS_TABS_REGISTER_MSG_RECEIVER(CefRefPtr<CefBrowser> &browser
 
 bool BrowserClient::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
+	if (funcId <= 0 || argsWithoutFunc.empty() || argsWithoutFunc[0]->GetType() != VTYPE_STRING || argsWithoutFunc[0]->GetString().empty())
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid receiver"}})).dump();
+		return true;
+	}
 	std::shared_ptr<BrowserElements> ptr = SlBrowser::instance().getBrowserElements(0);
 
 	if (ptr == nullptr || ptr->browser == nullptr)
@@ -418,7 +428,7 @@ bool BrowserClient::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS(CefRefPtr<CefBrowser
 		return true;
 	}
 
-	AssignMsgReceiverFunc(ptr->browser->GetIdentifier(), funcId);
+	AssignMsgReceiverFunc(ptr->browser->GetIdentifier(), funcId, argsWithoutFunc[0]->GetString().ToString());
 
 	// No reply: the callback is only invoked with messages
 	return false;
@@ -426,8 +436,13 @@ bool BrowserClient::JS_MAIN_REGISTER_MSG_RECEIVER_FROM_TABS(CefRefPtr<CefBrowser
 
 bool BrowserClient::JS_EVENTS_REGISTER_RECEIVER(CefRefPtr<CefBrowser> &browser, int32_t &funcId, const std::vector<CefRefPtr<CefValue>> &argsWithoutFunc, std::string &jsonOutput, std::string &internalMsgType)
 {
+	if (funcId <= 0 || argsWithoutFunc.empty() || argsWithoutFunc[0]->GetType() != VTYPE_STRING || argsWithoutFunc[0]->GetString().empty())
+	{
+		jsonOutput = Json(Json::object({{"error", "Invalid receiver"}})).dump();
+		return true;
+	}
 	// Replaces the previous receiver, so a reloaded page does not hear every event twice
-	AssignObsEventReceiverFunc(browser->GetIdentifier(), funcId);
+	AssignObsEventReceiverFunc(browser->GetIdentifier(), funcId, argsWithoutFunc[0]->GetString().ToString());
 
 	// No reply: the callback is only invoked with events
 	return false;
@@ -444,7 +459,7 @@ bool BrowserClient::JS_TAB_SEND_STRING_TO_MAIN(CefRefPtr<CefBrowser> &browser, i
 	// The client's own tab survives registry removal until its CEF browser has closed.
 	// Check that instance instead of using a negative uid as a missing-tab sentinel.
 	auto elements = m_elements.lock();
-	if (!elements || elements->closed || !elements->ready || !elements->browser || elements->browser->GetIdentifier() != browser->GetIdentifier())
+	if (!elements || elements->closed || !elements->browser || elements->browser->GetIdentifier() != browser->GetIdentifier())
 	{
 		jsonOutput = Json(Json::object({{"error", "tab is closing"}})).dump();
 		return true;

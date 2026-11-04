@@ -703,42 +703,68 @@ void ObsEvents::onSourceCreate(void *data, calldata_t *params)
 void ObsEvents::onSourceRemove(void *data, calldata_t *params)
 {
 	auto *self = static_cast<ObsEvents *>(data);
+	std::lock_guard<std::mutex> sourceGrd(self->m_sourceEventMtx);
 	obs_source_t *source = sourceFrom(params);
 	const Kind kind = classify(source);
 
 	if (kind == Kind::Ignore)
 		return;
 
-	self->dropCoalesced("u:" + str(obs_source_get_uuid(source)));
+	const std::string uuid = str(obs_source_get_uuid(source));
+	const bool send = self->enabled();
+	std::string json;
 
-	if (!self->enabled())
-		return;
-
-	if (kind == Kind::Scene)
+	if (send && kind == Kind::Scene)
 	{
-		self->push(Json(Json::object({{"event", "sceneRemoved"}, {"name", str(obs_source_get_name(source))}, {"uuid", str(obs_source_get_uuid(source))}})).dump());
-		return;
+		json = Json(Json::object({{"event", "sceneRemoved"}, {"name", str(obs_source_get_name(source))}, {"uuid", uuid}})).dump();
+	}
+	else if (send)
+	{
+		json = Json(Json::object({{"event", "sourceRemoved"}, {"name", str(obs_source_get_name(source))}, {"uuid", uuid}, {"id", str(obs_source_get_id(source))}})).dump();
 	}
 
-	self->push(Json(Json::object({{"event", "sourceRemoved"}, {"name", str(obs_source_get_name(source))}, {"uuid", str(obs_source_get_uuid(source))}, {"id", str(obs_source_get_id(source))}})).dump());
+	{
+		std::lock_guard<std::mutex> grd(self->m_mtx);
+		self->m_coalesced.erase("u:" + uuid);
+		if (send)
+			self->enqueueLocked(json);
+	}
+
+	if (send)
+		self->m_cv.notify_one();
 }
 
 /*static*/
 void ObsEvents::onSourceRename(void *data, calldata_t *params)
 {
 	auto *self = static_cast<ObsEvents *>(data);
+	std::lock_guard<std::mutex> sourceGrd(self->m_sourceEventMtx);
 	obs_source_t *source = sourceFrom(params);
 
 	if (classify(source) == Kind::Ignore || !self->enabled())
 		return;
 
-	self->push(Json(Json::object({{"event", "sourceRenamed"}, {"uuid", str(obs_source_get_uuid(source))}, {"prevName", str(calldata_string(params, "prev_name"))}, {"newName", str(calldata_string(params, "new_name"))}, {"id", str(obs_source_get_id(source))}})).dump());
+	const std::string uuid = str(obs_source_get_uuid(source));
+	const std::string newName = str(calldata_string(params, "new_name"));
+	std::string json = Json(Json::object({{"event", "sourceRenamed"}, {"uuid", uuid}, {"prevName", str(calldata_string(params, "prev_name"))}, {"newName", newName}, {"id", str(obs_source_get_id(source))}})).dump();
+
+	{
+		std::lock_guard<std::mutex> grd(self->m_mtx);
+		auto itr = self->m_coalesced.find("u:" + uuid);
+		// Updates already in m_queue precede the rename; the delayed update follows it.
+		if (itr != self->m_coalesced.end() && itr->second.pending)
+			itr->second.payload = Json(Json::object({{"event", "sourceUpdated"}, {"name", newName}, {"uuid", uuid}})).dump();
+		self->enqueueLocked(json);
+	}
+
+	self->m_cv.notify_one();
 }
 
 /*static*/
 void ObsEvents::onSourceUpdate(void *data, calldata_t *params)
 {
 	auto *self = static_cast<ObsEvents *>(data);
+	std::lock_guard<std::mutex> sourceGrd(self->m_sourceEventMtx);
 	obs_source_t *source = sourceFrom(params);
 
 	if (classify(source) != Kind::Source || !self->enabled())

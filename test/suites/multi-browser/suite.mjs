@@ -615,6 +615,23 @@ export default {
 				if (mainInbox.length || tabInbox.length) return `main inbox ${JSON.stringify(mainInbox)}, tab inbox ${JSON.stringify(tabInbox)}`;
 			});
 
+			await r.step("an initScript can send to main before tabs_createWindow replies", async () => {
+				const startup = `slabsTab.tab_sendStringToMain(function(json) {
+					fetch(location.origin + '/report', {method: 'POST', headers: {'content-type': 'application/json'},
+						body: JSON.stringify({who: 'tab124', event: 'STARTUP_SEND_RESULT', data: JSON.parse(json)})});
+				}, 'startup-from-init');`;
+				const made = await createTab(124, "T124", "", ["", startup]);
+				if (isError(made)) return made.error;
+				const reported = await observer.waitFor((evs) => evs.some((e) => e.who === "tab124" && e.event === "STARTUP_SEND_RESULT"), { timeoutMs: 10000 });
+				const result = observer.events.find((e) => e.who === "tab124" && e.event === "STARTUP_SEND_RESULT");
+				if (!reported || !result || isError(result.data)) return `startup send result ${JSON.stringify(result?.data)}`;
+				const delivered = await until(async () => (await cdp.inbox()).find((m) => m[0] === "startup-from-init"), { timeoutMs: 10000 });
+				if (!delivered || delivered[1] !== 124) return `main received ${JSON.stringify(delivered)}`;
+				await cdp.evaluate("window.__sltInbox.length = 0");
+				await cdp.call("tabs_destroyWindow", 124);
+				created.delete(124);
+		});
+
 			await r.step("tab to main: arrives once with the sender uid, and the sender's callback fires", async () => {
 				const res = await t101.callOn("slabsTab", "tab_sendStringToMain", TRICKY);
 				if (res.__timeout) return "the sender's callback never fired";
@@ -657,6 +674,37 @@ export default {
 				const inbox = await t101.inbox();
 				if (inbox.length !== 1) return `the tab received ${inbox.length} messages: ${JSON.stringify(inbox)}`;
 				if (inbox[0].length !== 1 || inbox[0][0] !== TRICKY) return `got ${JSON.stringify(inbox[0])}, expected ${JSON.stringify([TRICKY])}`;
+			});
+
+			await r.step("reloading a tab clears its old message receiver", async () => {
+				const made = await createTab(125, "T125");
+				if (isError(made)) return made.error;
+				const oldPage = await attach(125);
+				if ((await oldPage.listen("slabsTab", "tab_registerMsgReceiver")).__missing) return "tab_registerMsgReceiver is not exposed";
+				if (isError(await cdp.call("tabs_sendStringToTab", 125, "before-reload"))) return "old receiver did not register";
+				const first = await until(async () => (await oldPage.inbox()).find((m) => m[0] === "before-reload"), { timeoutMs: 10000 });
+				if (!first) return "old receiver never received a message";
+				if (isError(await cdp.call("tabs_loadUrl", 125, tabUrl(125, "&nav=7")))) return "reload failed";
+				const loaded = await observer.waitFor((evs) => evs.some((e) => e.who === "tab125" && e.event === "LOADED" && e.data?.nav === "7"), { timeoutMs: 30000 });
+				if (!loaded) return "the new document did not load";
+				const noReceiver = await until(async () => {
+					const sent = await cdp.call("tabs_sendStringToTab", 125, "after-reload");
+					return isError(sent) ? sent : null;
+				}, { timeoutMs: 10000, everyMs: 250 });
+				if (!noReceiver) return "browser kept the old receiver after the document was released";
+				oldPage.close();
+				tabCdp.delete(125);
+				const newPage = await attachTo(port, "tab.html?uid=125&nav=7");
+				tabCdp.set(125, newPage);
+				if ((await newPage.listen("slabsTab", "tab_registerMsgReceiver")).__missing) return "new page could not register";
+				const sent = await cdp.call("tabs_sendStringToTab", 125, "after-reregister");
+				if (isError(sent)) return `send after re-register: ${sent.error}`;
+				const received = await until(async () => (await newPage.inbox()).find((m) => m[0] === "after-reregister"), { timeoutMs: 10000 });
+				if (!received) return "new receiver did not get the message";
+				await cdp.call("tabs_destroyWindow", 125);
+				created.delete(125);
+				newPage.close();
+				tabCdp.delete(125);
 			});
 
 			let t102 = null;

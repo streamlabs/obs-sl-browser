@@ -26,6 +26,7 @@ class BrowserApp : public CefApp, public CefRenderProcessHandler, public CefBrow
 		CefRefPtr<CefV8Context> context;
 		int browserId;
 		ReceiverKind receiverKind;
+		std::string receiverToken;
 	};
 
 	std::map<int, CallbackInfo> m_callbackMap;

@@ -51,6 +51,7 @@ public:
 	bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message) override;
 
 	/* CefRequestHandler */
+	void OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser, TerminationStatus status, int error_code, const CefString &error_string) override;
 	CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool is_navigation, bool is_download, const CefString &request_initiator, bool &disable_default_handling) override;
 
 	bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool user_gesture, bool is_redirect) override;
@@ -101,9 +102,15 @@ public:
 	static std::string cefListValueToJSONString(CefRefPtr<CefListValue> listValue);
 
 private:
+	struct Receiver
+	{
+		int32_t funcId = 0;
+		std::string token;
+	};
+	static Receiver GetMsgReceiver(const int32_t browserCefId);
 	void UpdateExtraTexture();
-	static void AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid);
-	static void AssignObsEventReceiverFunc(const int32_t browserCefId, const int32_t funcid);
+	static void AssignMsgReceiverFunc(const int32_t browserCefId, const int32_t funcid, const std::string &token);
+	static void AssignObsEventReceiverFunc(const int32_t browserCefId, const int32_t funcid, const std::string &token);
 	static void DrainObsEvents();
 
 	bool valid() const;
@@ -118,12 +125,12 @@ private:
 	CefRefPtr<CefBrowser> m_MostRecentRenderKnowOf = nullptr;
 
 	static std::mutex m_tabReceiverMutex;
-	static std::map<int32_t, int32_t> m_tabReceiverDictionary;
+	static std::map<int32_t, Receiver> m_tabReceiverDictionary;
 
 	// Main's slot for events_registerReceiver, apart from its tabs_registerMsgReceiver one
 	static std::mutex m_obsEventReceiverMutex;
 	static int32_t m_obsEventReceiverBrowserId;
-	static int32_t m_obsEventReceiverFuncId;
+	static Receiver m_obsEventReceiver;
 	static std::mutex m_obsEventPendingMutex;
 	static std::deque<std::string> m_obsEventPending;
 	static bool m_obsEventDrainScheduled;
