@@ -29,13 +29,13 @@
  * The harness places tab windows offscreen during the run.
  */
 
-import { writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
 import { results, until } from "../../harness/suite.mjs";
 import { attachTo, listPages, upgradeStatus } from "../../harness/cdp.mjs";
-import { windowTitles, closeWindow } from "../../harness/windows.mjs";
+import { windowTitles, closeWindow, clientSize } from "../../harness/windows.mjs";
 
 const TABS_NAMES = [
 	"tabs_createWindow", "tabs_destroyWindow", "tabs_resizeWindow", "tabs_loadUrl", "tabs_executeJs",
@@ -112,6 +112,8 @@ export default {
 		// Icons are only taken from under %APPDATA%\StreamlabsOBS\, which is where the app store downloads them.
 		const appData = process.env.APPDATA;
 		const iconRoot = join(appData, "StreamlabsOBS");
+		const savedWindowStatePath = join(iconRoot, "window_state.txt");
+		const originalWindowState = existsSync(savedWindowStatePath) ? readFileSync(savedWindowStatePath) : null;
 		const iconDirPath = join(iconRoot, `slt-icons-${Date.now()}`);
 		const outsidePath = join(appData, `slt-icon-outside-${Date.now()}.png`);
 		mkdirSync(iconDirPath, { recursive: true });
@@ -141,6 +143,24 @@ export default {
 				if ((await cdp.evaluate("typeof window.slabsTab")) !== "undefined") return "slabsTab is defined on the main window";
 			});
 
+			await r.step("main starts with a correctly sized viewport", async () => {
+				const near = (value, expected) => Math.abs(value - expected) <= 24;
+				const initial = await cdp.evaluate("window.__initialViewport");
+				const native = clientSize(workDir, "Streamlabs");
+				const dpr = await cdp.evaluate("window.devicePixelRatio");
+				const expected = { w: native.width / dpr, h: native.height / dpr };
+				if (!initial || !near(initial.w, expected.w) || !near(initial.h, expected.h))
+					return `main first document started at ${initial?.w}x${initial?.h}, native client is ${native.width}x${native.height} at DPR ${dpr}`;
+				const ok = await until(async () => {
+					const size = await mainSize();
+					return near(size.w, expected.w) && near(size.h, expected.h);
+				}, { timeoutMs: 10000, everyMs: 250 });
+				if (!ok) {
+					const size = await mainSize();
+					return `main settled at ${size.w}x${size.h}, native client is ${native.width}x${native.height} at DPR ${dpr}`;
+				}
+			});
+
 			/* ------------------------------------------------------------- create --- */
 
 			await r.step("tabs_createWindow(101) opens a window that loads its page", async () => {
@@ -153,6 +173,12 @@ export default {
 					return u.some((x) => x.includes("tab.html?uid=101")) ? u : null;
 				}, { timeoutMs: 15000 });
 				if (!urls) return `no CDP target for the tab, saw ${(await pageUrls()).join(", ")}`;
+				const size = loads(101).at(-1)?.data;
+				const initial = size?.initialViewport;
+				const native = clientSize(workDir, "T101");
+				const near = (value, expected) => Math.abs(value - expected) <= 24;
+				if (!initial || !near(initial.w, native.width / initial.dpr) || !near(initial.h, native.height / initial.dpr))
+					return `tab first document started at ${initial?.w}x${initial?.h}, native client is ${native.width}x${native.height} at DPR ${initial?.dpr}`;
 			});
 
 			await r.step("Chrome DevTools frontends can attach to the tab target", async () => {
@@ -375,6 +401,33 @@ export default {
 				if (s.hasSlabsGlobal) return "the tab reported slabsGlobal";
 			});
 
+			await r.step("hiding and showing a tab does not rerun its initScript", async () => {
+				const t = await attach(120);
+				const before = await t.evaluate("({ count: window.__slInit, timeOrigin: performance.timeOrigin })");
+				const loadCount = loads(120).length;
+				if (isError(await cdp.call("tabs_hideWindow", 120))) return "hide errored";
+				if (isError(await cdp.call("tabs_showWindow", 120))) return "show errored";
+				await settle(500);
+				const after = await t.evaluate("({ count: window.__slInit, timeOrigin: performance.timeOrigin })");
+				if (before.count !== 1 || after.count !== 1) return `initScript count changed from ${before.count} to ${after.count}`;
+				if (after.timeOrigin !== before.timeOrigin || loads(120).length !== loadCount) return "hide/show reloaded the tab document";
+			});
+
+			await r.step("an HTTP redirect runs initScript once in the final document", async () => {
+				const uid = 124;
+				const script = "(() => { const k = '__slRedirectInit'; const n = Number(sessionStorage.getItem(k) || 0) + 1; sessionStorage.setItem(k, String(n)); window.__slInit = n; })()";
+				const res = await cdp.call("tabs_createWindow", uid, `${observer.origin}/redirect-tab?uid=${uid}`, "T124", "", script);
+				if (res.__missing || isError(res) || res.__timeout) return `create redirect tab: ${JSON.stringify(res)}`;
+				created.add(uid);
+				const loaded = await observer.waitFor((evs) => evs.some((e) => e.who === `tab${uid}` && e.event === "LOADED"), { timeoutMs: 30000 });
+				if (!loaded) return "redirected tab never loaded";
+				const state = loads(uid).at(-1)?.data;
+				if (state?.href !== tabUrl(uid) || state.initAtStart !== 1)
+					return `redirect ended at ${state?.href} with init count ${state?.initAtStart}, expected one run on ${tabUrl(uid)}`;
+				await cdp.call("tabs_destroyWindow", uid);
+				created.delete(uid);
+			});
+
 			await r.step("the initScript runs again after a reload, after tabs_loadUrl, and after the page navigates itself", async () => {
 				const loadsBefore = () => loads(120).length;
 				const next = (n) => observer.waitFor(() => loads(120).length >= n, { timeoutMs: 30000 });
@@ -504,7 +557,7 @@ export default {
 			const otherOrigin = observer.origin.replace("127.0.0.1", "localhost");
 			const FRAME_ORIGINS = [["same-origin", observer.origin], ["cross-origin", otherOrigin]];
 			const frameReport = (who, event) => observer.events.find((e) => e.who === who && e.event === event)?.data;
-			const addFrame = (page, who, origin) => page.evaluate(`(() => { const f = document.createElement("iframe"); f.id = ${JSON.stringify(who)}; f.src = ${JSON.stringify(`${origin}/frame.html?who=${who}`)}; document.body.appendChild(f); return true; })()`);
+			const addFrame = (page, who, origin) => page.evaluate(`(() => { const f = document.createElement("iframe"); f.id = ${JSON.stringify(who)}; f.style.cssText = "width:100vw;height:100vh;border:0"; f.src = ${JSON.stringify(`${origin}/frame.html?who=${who}`)}; document.body.appendChild(f); return true; })()`);
 
 			await r.step("an iframe in the main page has only the embed marker when allowed", async () => {
 				for (const [label, origin] of FRAME_ORIGINS) {
@@ -516,6 +569,12 @@ export default {
 					const expectedKeys = label === "cross-origin" ? ["pluginVersion"] : null;
 					if (JSON.stringify(f.slabsGlobalKeys) !== JSON.stringify(expectedKeys)) return `${label}: slabsGlobal keys were ${JSON.stringify(f.slabsGlobalKeys)}`;
 					if (f.slabsTabKeys) return `${label}: the iframe has slabsTab`;
+					if (label === "cross-origin") {
+						const main = await mainSize();
+						const near = (value, expected) => Math.abs(value - expected) <= 24;
+						if (!near(f.initialViewport?.w, main.w) || !near(f.initialViewport?.h, main.h))
+							return `embed first document started at ${f.initialViewport?.w}x${f.initialViewport?.h}, main is ${main.w}x${main.h}`;
+					}
 					await cdp.evaluate(`document.getElementById(${JSON.stringify(who)}).remove()`);
 				}
 				// The top frame is unaffected.
@@ -626,6 +685,23 @@ export default {
 				if (mainInbox.length || tabInbox.length) return `main inbox ${JSON.stringify(mainInbox)}, tab inbox ${JSON.stringify(tabInbox)}`;
 			});
 
+			await r.step("an initScript can send to main before tabs_createWindow replies", async () => {
+				const startup = `slabsTab.tab_sendStringToMain(function(json) {
+					fetch(location.origin + '/report', {method: 'POST', headers: {'content-type': 'application/json'},
+						body: JSON.stringify({who: 'tab124', event: 'STARTUP_SEND_RESULT', data: JSON.parse(json)})});
+				}, 'startup-from-init');`;
+				const made = await createTab(124, "T124", "", ["", startup]);
+				if (isError(made)) return made.error;
+				const reported = await observer.waitFor((evs) => evs.some((e) => e.who === "tab124" && e.event === "STARTUP_SEND_RESULT"), { timeoutMs: 10000 });
+				const result = observer.events.find((e) => e.who === "tab124" && e.event === "STARTUP_SEND_RESULT");
+				if (!reported || !result || isError(result.data)) return `startup send result ${JSON.stringify(result?.data)}`;
+				const delivered = await until(async () => (await cdp.inbox()).find((m) => m[0] === "startup-from-init"), { timeoutMs: 10000 });
+				if (!delivered || delivered[1] !== 124) return `main received ${JSON.stringify(delivered)}`;
+				await cdp.evaluate("window.__sltInbox.length = 0");
+				await cdp.call("tabs_destroyWindow", 124);
+				created.delete(124);
+		});
+
 			await r.step("tab to main: arrives once with the sender uid, and the sender's callback fires", async () => {
 				const res = await t101.callOn("slabsTab", "tab_sendStringToMain", TRICKY);
 				if (res.__timeout) return "the sender's callback never fired";
@@ -668,6 +744,37 @@ export default {
 				const inbox = await t101.inbox();
 				if (inbox.length !== 1) return `the tab received ${inbox.length} messages: ${JSON.stringify(inbox)}`;
 				if (inbox[0].length !== 1 || inbox[0][0] !== TRICKY) return `got ${JSON.stringify(inbox[0])}, expected ${JSON.stringify([TRICKY])}`;
+			});
+
+			await r.step("reloading a tab clears its old message receiver", async () => {
+				const made = await createTab(125, "T125");
+				if (isError(made)) return made.error;
+				const oldPage = await attach(125);
+				if ((await oldPage.listen("slabsTab", "tab_registerMsgReceiver")).__missing) return "tab_registerMsgReceiver is not exposed";
+				if (isError(await cdp.call("tabs_sendStringToTab", 125, "before-reload"))) return "old receiver did not register";
+				const first = await until(async () => (await oldPage.inbox()).find((m) => m[0] === "before-reload"), { timeoutMs: 10000 });
+				if (!first) return "old receiver never received a message";
+				if (isError(await cdp.call("tabs_loadUrl", 125, tabUrl(125, "&nav=7")))) return "reload failed";
+				const loaded = await observer.waitFor((evs) => evs.some((e) => e.who === "tab125" && e.event === "LOADED" && e.data?.nav === "7"), { timeoutMs: 30000 });
+				if (!loaded) return "the new document did not load";
+				const noReceiver = await until(async () => {
+					const sent = await cdp.call("tabs_sendStringToTab", 125, "after-reload");
+					return isError(sent) ? sent : null;
+				}, { timeoutMs: 10000, everyMs: 250 });
+				if (!noReceiver) return "browser kept the old receiver after the document was released";
+				oldPage.close();
+				tabCdp.delete(125);
+				const newPage = await attachTo(port, "tab.html?uid=125&nav=7");
+				tabCdp.set(125, newPage);
+				if ((await newPage.listen("slabsTab", "tab_registerMsgReceiver")).__missing) return "new page could not register";
+				const sent = await cdp.call("tabs_sendStringToTab", 125, "after-reregister");
+				if (isError(sent)) return `send after re-register: ${sent.error}`;
+				const received = await until(async () => (await newPage.inbox()).find((m) => m[0] === "after-reregister"), { timeoutMs: 10000 });
+				if (!received) return "new receiver did not get the message";
+				await cdp.call("tabs_destroyWindow", 125);
+				created.delete(125);
+				newPage.close();
+				tabCdp.delete(125);
 			});
 
 			let t102 = null;
@@ -1273,6 +1380,28 @@ export default {
 
 			/* ------------------------------------------------------ main's own browser api --- */
 
+			await r.step("main viewport follows a resize while hidden and then shown", async () => {
+				const hide = await cdp.call("browser_setHiddenState", true);
+				if (isError(hide) || hide.__timeout) return `hide: ${JSON.stringify(hide)}`;
+				let show;
+				try {
+					const resize = await cdp.call("browser_resizeBrowser", 960, 640);
+					if (isError(resize) || resize.__timeout) return `resize: ${JSON.stringify(resize)}`;
+				} finally {
+					show = await cdp.call("browser_setHiddenState", false);
+				}
+				if (isError(show) || show.__timeout) return `show: ${JSON.stringify(show)}`;
+				const near = (value, expected) => Math.abs(value - expected) <= 24;
+				const ok = await until(async () => {
+					const size = await mainSize();
+					return near(size.w, 960) && near(size.h, 640);
+				}, { timeoutMs: 10000, everyMs: 250 });
+				if (!ok) {
+					const size = await mainSize();
+					return `main is ${size.w}x${size.h}, expected about 960x640 after reveal`;
+				}
+			});
+
 			await r.step("browser_resizeBrowser still resizes the main window, within its bounds", async () => {
 				if (!isError(await cdp.call("browser_resizeBrowser", 100, 100))) return "100x100 did not error";
 				const res = await cdp.call("browser_resizeBrowser", 1000, 700);
@@ -1291,7 +1420,28 @@ export default {
 			// Whatever a failed step left open must not outlive the suite.
 			for (const uid of created) await cdp.call("tabs_destroyWindow", uid).catch(() => {});
 			for (const c of tabCdp.values()) c.close();
-			if (mainWasHidden) await cdp.call("tabs_hideWindow", 0).catch(() => {});
+			await r.step("the main window's saved visibility is restored", async () => {
+				try {
+					const setAndWait = async (hidden) => {
+						const response = await cdp.call("browser_setHiddenState", hidden);
+						if (isError(response) || response.__timeout) return `set visibility to ${hidden}: ${JSON.stringify(response)}`;
+						const expected = hidden ? "1" : "0";
+						const persisted = await until(() => {
+							try { return existsSync(savedWindowStatePath) && readFileSync(savedWindowStatePath, "utf8").trim() === expected; }
+							catch { return false; }
+						}, { timeoutMs: 5000, everyMs: 50 });
+						return persisted ? null : `saved visibility did not become ${expected}`;
+					};
+					// The API replies before Qt writes the file; first observe a different value.
+					const intermediate = await setAndWait(!mainWasHidden);
+					if (intermediate) return intermediate;
+					const restored = await setAndWait(mainWasHidden);
+					if (restored) return restored;
+				} finally {
+					if (originalWindowState === null) rmSync(savedWindowStatePath, { force: true });
+					else writeFileSync(savedWindowStatePath, originalWindowState);
+				}
+			});
 			// Best effort: a junction is removed as a link, so its target is untouched.
 			try { rmSync(iconDirPath, { recursive: true, force: true }); rmSync(outsidePath, { force: true }); removeTestProfiles(); } catch { /* still in use */ }
 		}

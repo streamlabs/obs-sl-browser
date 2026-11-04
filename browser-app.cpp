@@ -8,9 +8,24 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <iomanip>
+#include <random>
 #include <sstream>
 
 using namespace json11;
+
+namespace
+{
+std::string newReceiverToken()
+{
+	std::random_device random;
+	std::ostringstream token;
+	token << std::hex << std::setfill('0');
+	for (int i = 0; i < 4; ++i)
+		token << std::setw(8) << random();
+	return token.str();
+}
+} // namespace
 
 /*static*/
 int BrowserApp::getRemoteDebuggingPort()
@@ -291,15 +306,29 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 	}
 }
 
-void BrowserApp::OnContextReleased(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefV8Context> context)
+void BrowserApp::OnContextReleased(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
-	std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
-	for (auto itr = m_callbackMap.begin(); itr != m_callbackMap.end();)
+	std::vector<std::pair<int, std::string>> releasedReceivers;
 	{
-		if (itr->second.context->IsSame(context))
-			itr = m_callbackMap.erase(itr);
-		else
-			++itr;
+		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
+		for (auto itr = m_callbackMap.begin(); itr != m_callbackMap.end();)
+		{
+			if (itr->second.context->IsSame(context))
+			{
+				if (itr->second.receiverKind != ReceiverKind::None)
+					releasedReceivers.emplace_back(itr->first, itr->second.receiverToken);
+				itr = m_callbackMap.erase(itr);
+			}
+			else
+				++itr;
+		}
+	}
+	for (const auto &[id, token] : releasedReceivers)
+	{
+		CefRefPtr<CefProcessMessage> cleanup = CefProcessMessage::Create("releaseReceiver");
+		cleanup->GetArgumentList()->SetInt(0, id);
+		cleanup->GetArgumentList()->SetString(1, token);
+		frame->SendProcessMessage(PID_BROWSER, cleanup);
 	}
 }
 
@@ -315,7 +344,7 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
 
 		auto itr = m_callbackMap.find(callbackID);
-		if (itr != m_callbackMap.end() && itr->second.browserId == browser->GetIdentifier())
+		if (itr != m_callbackMap.end() && itr->second.browserId == browser->GetIdentifier() && (message->GetName() != "executeCallback_NoDelete" || itr->second.receiverToken == arguments->GetString(3).ToString()))
 		{
 			CefRefPtr<CefV8Value> function = itr->second.function;
 			CefRefPtr<CefV8Context> context = itr->second.context;
@@ -342,7 +371,7 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 		const int callbackID = message->GetArgumentList()->GetInt(0);
 		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
 		auto current = m_callbackMap.find(callbackID);
-		if (current != m_callbackMap.end() && current->second.browserId == browser->GetIdentifier() && current->second.receiverKind != ReceiverKind::None)
+		if (current != m_callbackMap.end() && current->second.browserId == browser->GetIdentifier() && current->second.receiverKind != ReceiverKind::None && current->second.receiverToken == message->GetArgumentList()->GetString(1).ToString())
 		{
 			const ReceiverKind kind = current->second.receiverKind;
 			for (auto itr = m_callbackMap.begin(); itr != m_callbackMap.end();)
@@ -381,13 +410,14 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 		int callBackId = 0;
 		const int browserId = browser->GetIdentifier();
 		const ReceiverKind receiverKind = funcName == "events_registerReceiver" ? ReceiverKind::ObsEvents : (funcName == "tabs_registerMsgReceiver" || funcName == "tab_registerMsgReceiver" ? ReceiverKind::Messages : ReceiverKind::None);
+		const std::string receiverToken = receiverKind != ReceiverKind::None ? newReceiverToken() : std::string();
 		const bool hasCallback = !arguments.empty() && arguments[0]->IsFunction();
 
 		if (hasCallback)
 		{
 			std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
 			callBackId = ++m_callbackIdCounter;
-			m_callbackMap.emplace(callBackId, CallbackInfo{arguments[0], current, browserId, receiverKind});
+			m_callbackMap.emplace(callBackId, CallbackInfo{arguments[0], current, browserId, receiverKind, receiverToken});
 		}
 
 		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create(name);
@@ -412,6 +442,8 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 			else if (arguments[l]->IsDouble())
 				args->SetDouble(pos, arguments[l]->GetDoubleValue());
 		}
+		if (receiverKind != ReceiverKind::None)
+			args->SetString(1, receiverToken);
 
 		SendBrowserProcessMessage(browser, PID_BROWSER, msg);
 	}

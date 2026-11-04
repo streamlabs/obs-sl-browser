@@ -283,20 +283,35 @@ export default {
 			if (e.name !== "EvScene2" || !e.uuid) return `payload ${JSON.stringify(e)}`;
 		});
 
-		await r.step("obs_source_update rename: one sourceRenamed, no created or removed", async () => {
+		await r.step("a pending sourceUpdated follows sourceRenamed with the new name", async () => {
 			await cdp.call("obs_source_create", "color_source_v3", "EvRename", COLOR, "{}");
 			await sleep(SETTLE_MS);
 
 			const before = (await sources()).find((s) => s.name === "EvRename");
-			let reply;
-			const why = await happens(async () => (reply = await cdp.call("obs_source_update", "EvRename", JSON.stringify({ name: "EvRenamed" }))), { sourceRenamed: 1 });
+			if (!before?.uuid) return "EvRename is not listed with a uuid";
 
-			if (reply?.error) return reply.error;
+			await clear();
+			const firstReply = await cdp.call("obs_source_set_settings_json", "EvRename", JSON.stringify({ width: 110 }));
+			if (firstReply?.error || firstReply?.__missing || firstReply?.__timeout) return `first update: ${JSON.stringify(firstReply)}`;
+			const firstSeen = await until(async () => (await events()).some((e) => e.event === "sourceUpdated" && e.name === "EvRename"), { timeoutMs: 10000, everyMs: 25 });
+			if (!firstSeen) return "the first sourceUpdated was not delivered";
+
+			// The second update follows the first within its rate limit, then rename updates its pending payload.
+			const secondReply = await cdp.call("obs_source_set_settings_json", "EvRename", JSON.stringify({ width: 120 }));
+			if (secondReply?.error || secondReply?.__missing || secondReply?.__timeout) return `second update: ${JSON.stringify(secondReply)}`;
+			const renameReply = await cdp.call("obs_source_update", "EvRename", JSON.stringify({ name: "EvRenamed" }));
+			if (renameReply?.error || renameReply?.__missing || renameReply?.__timeout) return `rename: ${JSON.stringify(renameReply)}`;
+			await sleep(SETTLE_MS);
+
+			const evs = await events();
+			const why = exactly(evs, { sourceUpdated: 2, sourceRenamed: 1 });
 			if (why) return why;
 
-			const e = (await events())[0];
+			const [first, e, trailing] = evs;
 
 			if (e.prevName !== "EvRename" || e.newName !== "EvRenamed" || e.uuid !== before?.uuid || e.id !== "color_source_v3") return `payload ${JSON.stringify(e)}`;
+			if (first.event !== "sourceUpdated" || first.name !== "EvRename" || first.uuid !== before.uuid) return `first update ${JSON.stringify(first)}`;
+			if (trailing.event !== "sourceUpdated" || trailing.name !== "EvRenamed" || trailing.uuid !== before.uuid) return `trailing update ${JSON.stringify(trailing)}`;
 			if (!(await sources()).some((s) => s.name === "EvRenamed" && s.uuid === before.uuid)) return "the renamed source is not listed under its new name";
 		});
 
@@ -337,7 +352,7 @@ export default {
 			if (info.uuid !== entry.uuid) return `uuid ${info.uuid}, listed ${entry.uuid}`;
 			if (info.muted !== true || info.volume !== 0.5 || info.monitoringEnabled !== true) return JSON.stringify(info);
 			if (info.flags?.video !== true || info.flags?.audio !== false || info.flags?.async !== false) return `flags ${JSON.stringify(info.flags)}`;
-			if (info.width !== 100 || info.height !== 100) return `size ${info.width}x${info.height}`;
+			if (info.width !== 120 || info.height !== 100) return `size ${info.width}x${info.height}`;
 			if (typeof (await cdp.call("obs_source_get_info", "NoSuchSource")).error !== "string") return "no error for an unknown source";
 
 			const off = await cdp.call("obs_source_update", "EvRenamed", JSON.stringify({ monitoringEnabled: false }));
