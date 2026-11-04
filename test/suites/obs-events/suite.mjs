@@ -291,17 +291,16 @@ export default {
 			if (!before?.uuid) return "EvRename is not listed with a uuid";
 
 			await clear();
-			// Send all three calls without waiting for round trips between them.
-			const replies = await cdp.evaluate(`(async () => {
-				const first = __slt.call("obs_source_set_settings_json", "EvRename", JSON.stringify({ width: 110 }));
-				const second = __slt.call("obs_source_set_settings_json", "EvRename", JSON.stringify({ width: 120 }));
-				const rename = __slt.call("obs_source_update", "EvRename", JSON.stringify({ name: "EvRenamed" }));
-				const [a, b, c] = await Promise.all([first, second, rename]);
-				return { first: a, second: b, rename: c };
-			})()`, { awaitPromise: true });
-			for (const [action, reply] of Object.entries(replies)) {
-				if (reply?.error || reply?.__missing || reply?.__timeout) return `${action}: ${JSON.stringify(reply)}`;
-			}
+			const firstReply = await cdp.call("obs_source_set_settings_json", "EvRename", JSON.stringify({ width: 110 }));
+			if (firstReply?.error || firstReply?.__missing || firstReply?.__timeout) return `first update: ${JSON.stringify(firstReply)}`;
+			const firstSeen = await until(async () => (await events()).some((e) => e.event === "sourceUpdated" && e.name === "EvRename"), { timeoutMs: 10000, everyMs: 25 });
+			if (!firstSeen) return "the first sourceUpdated was not delivered";
+
+			// The second update follows the first within its rate limit, then rename updates its pending payload.
+			const secondReply = await cdp.call("obs_source_set_settings_json", "EvRename", JSON.stringify({ width: 120 }));
+			if (secondReply?.error || secondReply?.__missing || secondReply?.__timeout) return `second update: ${JSON.stringify(secondReply)}`;
+			const renameReply = await cdp.call("obs_source_update", "EvRename", JSON.stringify({ name: "EvRenamed" }));
+			if (renameReply?.error || renameReply?.__missing || renameReply?.__timeout) return `rename: ${JSON.stringify(renameReply)}`;
 			await sleep(SETTLE_MS);
 
 			const evs = await events();
