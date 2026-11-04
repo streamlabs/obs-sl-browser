@@ -494,10 +494,12 @@ void SlBrowser::attachCefBrowser(std::shared_ptr<BrowserElements> browserElement
 			}
 
 			auto *widget = browserElements->widget;
-			const qreal scaleFactor = widget->devicePixelRatioF();
-			const int width = static_cast<int>(widget->width() * scaleFactor);
-			const int height = static_cast<int>(widget->height() * scaleFactor);
 			const CefWindowHandle parentWindow = (CefWindowHandle)widget->winId();
+			RECT clientRect = {};
+			const bool hasClientRect = ::GetClientRect((HWND)parentWindow, &clientRect) && clientRect.right > clientRect.left && clientRect.bottom > clientRect.top;
+			const qreal scaleFactor = widget->devicePixelRatioF();
+			const int width = hasClientRect ? clientRect.right - clientRect.left : static_cast<int>(widget->width() * scaleFactor);
+			const int height = hasClientRect ? clientRect.bottom - clientRect.top : static_cast<int>(widget->height() * scaleFactor);
 			CefPostTask(TID_UI, base::BindOnce(&attachCefBrowserWithWindow, browserElements, url, startHidden, keepOnTop, request_context, parentWindow, width, height));
 		},
 		Qt::QueuedConnection);
@@ -558,7 +560,15 @@ void SlBrowser::attachCefBrowserWithWindow(std::shared_ptr<BrowserElements> brow
 				}
 
 				// The main widget was shown before it had elements to report to.
-				browserElements->hidden = widget->isHidden();
+				// Keep a newer visibility request made while the page was loading.
+				{
+					std::lock_guard<std::mutex> lock(browserElements->hiddenStateMutex);
+					if (!browserElements->pendingHiddenOperations)
+						browserElements->hidden = widget->isHidden();
+				}
+				// Apply the settled native client size before tabs_createWindow can answer ready.
+				widget->syncBrowserSize();
+				widget->scheduleBrowserSizeSync();
 			}
 
 			CefPostTask(TID_UI, base::BindOnce(&finishBrowserCreation, browserElements));

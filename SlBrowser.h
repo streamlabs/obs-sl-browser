@@ -8,6 +8,7 @@
 #include <atomic>
 #include <functional>
 #include <map>
+#include <mutex>
 
 // What a tab window is made with, beyond its uid and url
 struct TabWindowOptions
@@ -38,6 +39,9 @@ struct BrowserElements
 
 	// Mirrors widget->isHidden() so it can be read from any thread
 	std::atomic<bool> hidden = true;
+	// Keep older Qt visibility events from overwriting a newer queued main-window request
+	std::mutex hiddenStateMutex;
+	int pendingHiddenOperations = 0;
 
 	// Set before the browser is made, and only for the main window
 	bool isMain = false;
@@ -98,7 +102,7 @@ public:
 	std::string popLastError();
 
 public:
-	bool m_allowHideBrowser = true;
+	std::atomic<bool> m_allowHideBrowser = true;
 	int32_t m_obs64_PIDt = 0;
 	std::atomic<bool> m_cefInit = false;
 	CefRefPtr<BrowserApp> m_app = nullptr;

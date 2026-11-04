@@ -98,6 +98,13 @@ export async function startServer({ dir, port = 0, onEvent = () => {} }) {
 
 		// Handy when poking at a run by hand; suites read ctx.observer.events instead.
 		if (url.pathname === "/events") return send(200, TYPES[".json"], JSON.stringify(events, null, 2));
+		if (url.pathname === "/redirect-tab") {
+			const uid = url.searchParams.get("uid");
+			if (!/^\d+$/.test(uid || "")) return send(400, "text/plain", "invalid uid");
+			res.writeHead(302, { Location: `/tab.html?uid=${uid}`, "Cache-Control": "no-store" });
+			res.end();
+			return;
+		}
 
 		// /_harness/* exposes the shared in-page helpers to a page that drives itself.
 		const file = url.pathname.startsWith("/_harness/")
