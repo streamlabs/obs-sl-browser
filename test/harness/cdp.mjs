@@ -106,11 +106,17 @@ export class Cdp {
 		});
 	}
 
-	/** Returns the value, or throws with whatever the page threw. */
-	async evaluate(expression, { awaitPromise = false } = {}) {
+	/** A raw protocol command, for what the helpers below do not cover. */
+	command(method, params = {}) {
+		return this.#send(method, params);
+	}
+
+	/** Returns the value, or throws with whatever the page threw. contextId picks a world other than the page's. */
+	async evaluate(expression, { awaitPromise = false, contextId } = {}) {
 		const r = await this.#send("Runtime.evaluate", {
 			expression,
 			awaitPromise,
+			...(contextId ? { contextId } : {}),
 			returnByValue: true,
 			allowUnsafeEvalBlockedByCSP: true,
 		});

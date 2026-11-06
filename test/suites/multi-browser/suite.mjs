@@ -402,6 +402,28 @@ export default {
 				if (after.timeOrigin !== before.timeOrigin || loads(120).length !== loadCount) return "hide/show reloaded the tab document";
 			});
 
+			// DevTools and other CDP clients add isolated worlds to a loaded page. Each one reports the frame to
+			// OnContextCreated, and a rerun there used to take over the tab's message receiver.
+			await r.step("an isolated world gets neither the api nor the initScript, on a tab or on main", async () => {
+				const isolatedWorld = async (client) => {
+					await client.command("Page.enable");
+					const { frameTree } = await client.command("Page.getFrameTree");
+					const { executionContextId } = await client.command("Page.createIsolatedWorld", { frameId: frameTree.frame.id, worldName: "slt-isolated" });
+					return executionContextId;
+				};
+
+				const t = tabCdp.get(120) || (await attach(120));
+				const inTab = await t.evaluate("({ tab: typeof window.slabsTab, init: typeof window.__slInit })", { contextId: await isolatedWorld(t) });
+				if (inTab.tab !== "undefined") return `an isolated world on the tab got slabsTab (${inTab.tab})`;
+				if (inTab.init !== "undefined") return "the initScript ran in an isolated world";
+
+				const page = await t.evaluate("({ tab: typeof window.slabsTab, count: window.__slInit })");
+				if (page.tab !== "object" || page.count !== 1) return `the tab page's own world changed: ${JSON.stringify(page)}`;
+
+				const onMain = await cdp.evaluate("typeof window.slabsGlobal", { contextId: await isolatedWorld(cdp) });
+				if (onMain !== "undefined") return `an isolated world on main got slabsGlobal (${onMain})`;
+			});
+
 			await r.step("an HTTP redirect runs initScript once in the final document", async () => {
 				const uid = 124;
 				const script = "(() => { const k = '__slRedirectInit'; const n = Number(sessionStorage.getItem(k) || 0) + 1; sessionStorage.setItem(k, String(n)); window.__slInit = n; })()";
