@@ -20,6 +20,7 @@ struct TabWindowOptions
 
 	std::string initScript;
 	bool hideOnClose = false;
+	bool startHidden = false;
 	std::string contextDir;
 
 	// Called on the CEF UI thread once the browser exists, or has failed to

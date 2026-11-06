@@ -737,7 +737,7 @@ public:
 			//	DEV NOTE: THIS FUNCTION MUST NEVER BE RENAMED !!
 			{"browser_setHiddenState", JS_BROWSER_SET_HIDDEN_STATE},
 
-			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional), initScriptStr (optional), hideOnCloseBOOL (optional), contextKeyStr (optional))
+			// .(@function(arg1), uidINT, url, titleStr (optional), iconpathStr (optional), initScriptStr (optional), hideOnCloseBOOL (optional), contextKeyStr (optional), startHiddenBOOL (optional))
 			//		arg1 is called once the window and its browser exist, so every other tabs_* function can be used from then on. Example arg1 = {} or { "error": "." }
 			//		Until then, hide/show/resize/isHidden/executeJs/loadUrl/getWindowCefId on the uid answer { "error": "not ready" }
 			//		iconpathStr must be an existing .png, .ico, .jpg or .jpeg file inside %APPDATA%\StreamlabsOBS\. Anything else, such as UNC or \\?\ paths, is an error. Empty means the default icon
@@ -746,6 +746,7 @@ public:
 			//		url must be https on one of kTabAllowedOrigins (everything else, such as http, file:, data:, javascript: and http://absolute/, is an error), and the tab's main frame can only navigate to those origins. Subframes are not restricted
 			//		initScriptStr is run in the tab's main frame at the start of every document load (including reloads and navigations), after slabsTab is defined and before the page's own scripts. Empty means none
 			//		hideOnCloseBOOL false (default): when the user closes the window it is destroyed and main is sent kTabClosedMessage. true: it is only hidden, and main is not told
+			//		startHiddenBOOL true: the window is never shown, not even on the taskbar, until tabs_showWindow; its page loads and runs as usual. false (default): it opens shown
 			//		A window destroyed before its browser was made is answered { "error": "the window was closed before it was created" }. An error reply never comes with kTabClosedMessage
 			//		A tab whose profile is not initialized within kTabProfileTimeoutMs is destroyed and answered { "error": "the tab's profile did not initialize in time" }
 			{"tabs_createWindow", JS_TABS_CREATE_WINDOW},
