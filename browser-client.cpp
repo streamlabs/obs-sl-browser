@@ -9,6 +9,7 @@
 #include "JavascriptApi.h"
 #include "SlBrowser.h"
 #include "WindowsFunctions.h"
+#include "DiagLog.h"
 
 #include <include/base/cef_callback.h>
 #include <include/wrapper/cef_closure_task.h>
@@ -19,6 +20,19 @@ using namespace json11;
 inline bool BrowserClient::valid() const
 {
 	return true;
+}
+
+std::string BrowserClient::diagTag(CefRefPtr<CefBrowser> browser) const
+{
+	std::string tag = m_isMain ? "main" : "tab";
+
+	if (!m_isMain)
+	{
+		auto elements = m_elements.lock();
+		tag += " uid=" + (elements ? std::to_string(elements->uid) : std::string("?"));
+	}
+
+	return tag + " cef=" + (browser ? std::to_string(browser->GetIdentifier()) : std::string("?"));
 }
 
 CefRefPtr<CefLoadHandler> BrowserClient::GetLoadHandler()
@@ -67,15 +81,19 @@ CefRefPtr<CefResourceRequestHandler> BrowserClient::GetResourceRequestHandler(Ce
 	return nullptr;
 }
 
-bool BrowserClient::OnBeforeBrowse(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool, bool)
+bool BrowserClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool user_gesture, bool is_redirect)
 {
 	// Only a tab's own page is held to the approved origins; its subframes and main's pages are not
 	if (m_isMain || !frame->IsMain())
 		return false;
 
 	const std::string url = request->GetURL();
+	const bool blocked = !SlBrowser::isApprovedTabUrl(url);
 
-	return !SlBrowser::isApprovedTabUrl(url);
+	SL_DIAG << "browser: OnBeforeBrowse " << diagTag(browser) << " url=" << SlDiag::url(url) << " from=" << SlDiag::url(frame->GetURL()) << " transition=0x" << std::hex << request->GetTransitionType() << std::dec << " user_gesture=" << user_gesture << " is_redirect=" << is_redirect
+		<< (blocked ? " BLOCKED" : "");
+
+	return blocked;
 }
 
 CefResourceRequestHandler::ReturnValue BrowserClient::OnBeforeResourceLoad(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>, CefRefPtr<CefCallback>)
@@ -84,8 +102,25 @@ CefResourceRequestHandler::ReturnValue BrowserClient::OnBeforeResourceLoad(CefRe
 }
 #endif
 
-bool BrowserClient::DoClose(CefRefPtr<CefBrowser>)
+void BrowserClient::OnAfterCreated(CefRefPtr<CefBrowser> browser)
 {
+	std::string initScript;
+	if (auto elements = m_elements.lock())
+		initScript = elements->initScript;
+
+	SL_DIAG << "browser: OnAfterCreated " << diagTag(browser) << " url=" << SlDiag::url(browser->GetMainFrame() ? browser->GetMainFrame()->GetURL().ToString() : std::string()) << " initScript " << (initScript.empty() ? std::string("none") : SlDiag::script(initScript));
+}
+
+void BrowserClient::OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, const CefString &url)
+{
+	if (!m_isMain && frame->IsMain())
+		SL_DIAG << "browser: OnAddressChange " << diagTag(browser) << " url=" << SlDiag::url(url);
+}
+
+bool BrowserClient::DoClose(CefRefPtr<CefBrowser> browser)
+{
+	SL_DIAG << "browser: DoClose " << diagTag(browser);
+
 	if (!m_isMain)
 	{
 		if (auto elements = m_elements.lock(); elements && !elements->closed)
@@ -101,12 +136,14 @@ bool BrowserClient::DoClose(CefRefPtr<CefBrowser>)
 	return false;
 }
 
-bool BrowserClient::OnBeforePopup(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>,
+bool BrowserClient::OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>,
 #if CHROME_VERSION_BUILD >= 6834
 				  int,
 #endif
-				  const CefString &, const CefString &, cef_window_open_disposition_t, bool, const CefPopupFeatures &, CefWindowInfo &, CefRefPtr<CefClient> &, CefBrowserSettings &, CefRefPtr<CefDictionaryValue> &, bool *)
+				  const CefString &target_url, const CefString &, cef_window_open_disposition_t disposition, bool user_gesture, const CefPopupFeatures &, CefWindowInfo &, CefRefPtr<CefClient> &, CefBrowserSettings &, CefRefPtr<CefDictionaryValue> &, bool *)
 {
+	SL_DIAG << "browser: OnBeforePopup BLOCKED " << diagTag(browser) << " target=" << SlDiag::url(target_url) << " disposition=" << disposition << " user_gesture=" << user_gesture;
+
 	/* block popups */
 	return true;
 }
@@ -393,6 +430,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		const int id = input_args->GetInt(0);
 		const std::string token = input_args->GetString(1).ToString();
 		const int browserId = browser->GetIdentifier();
+		SL_DIAG << "browser: releaseReceiver " << diagTag(browser) << " funcId=" << id << " token=" << token.substr(0, 8);
 		{
 			std::lock_guard<std::mutex> grd(m_tabReceiverMutex);
 			auto itr = m_tabReceiverDictionary.find(browserId);
@@ -420,6 +458,7 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 	if (!allowedForFrame || !allowedForRole)
 	{
 		printf("Refused api call %s from %s\n", name.c_str(), frameUrl.c_str());
+		SL_DIAG << "browser: REFUSED api call " << name << " " << diagTag(browser) << " frameMain=" << frame->IsMain() << " frame=" << SlDiag::url(frameUrl);
 
 		if (funcid != 0)
 		{
@@ -447,6 +486,10 @@ bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefR
 		std::string internalMsgType = "executeCallback";
 
 		const auto functionId = JavascriptApi::getFunctionId(name);
+
+		// Message traffic is too chatty; everything else that touches tabs is traced
+		if (name.rfind("tab", 0) == 0 && functionId != JavascriptApi::JS_TAB_SEND_STRING_TO_MAIN && functionId != JavascriptApi::JS_MAIN_SEND_STRING_TO_TAB)
+			SL_DIAG << "browser: api " << name << " from " << diagTag(browser) << " funcId=" << funcid << " frame=" << SlDiag::url(frameUrl);
 		switch (functionId)
 		{
 		case JavascriptApi::JS_MAIN_SEND_STRING_TO_TAB:
@@ -568,6 +611,7 @@ void BrowserClient::GetViewRect(CefRefPtr<CefBrowser>, CefRect &rect)
 
 void BrowserClient::OnBeforeClose(CefRefPtr<CefBrowser> browser)
 {
+	SL_DIAG << "browser: OnBeforeClose " << diagTag(browser);
 	RemoveBrowserFromCallback(browser);
 
 	// If CEF closes a tab outside the normal cleanup path, unregister that exact tab.
@@ -659,12 +703,18 @@ bool BrowserClient::GetAudioParameters(CefRefPtr<CefBrowser> browser, CefAudioPa
 
 void BrowserClient::OnLoadStart(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, TransitionType transition_type)
 {
+	if (frame->IsMain())
+		SL_DIAG << "browser: OnLoadStart " << diagTag(browser) << " url=" << SlDiag::url(frame->GetURL()) << " transition=0x" << std::hex << transition_type << std::dec;
+
 	if (m_isMain && frame->IsMain())
 		SlBrowser::instance().setMainLoadingInProgress(true);
 }
 
-void BrowserClient::OnLoadEnd(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, int httpStatusCode)
+void BrowserClient::OnLoadEnd(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int httpStatusCode)
 {
+	if (frame->IsMain())
+		SL_DIAG << "browser: OnLoadEnd " << diagTag(browser) << " url=" << SlDiag::url(frame->GetURL()) << " status=" << httpStatusCode;
+
 	if (!m_isMain || !frame->IsMain())
 		return;
 
@@ -674,17 +724,24 @@ void BrowserClient::OnLoadEnd(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, 
 	SlBrowser::instance().setMainLoadingInProgress(false);
 }
 
-void BrowserClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser, TerminationStatus, int, const CefString &)
+void BrowserClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser, TerminationStatus status, int error_code, const CefString &error_string)
 {
+	SL_DIAG << "browser: OnRenderProcessTerminated " << diagTag(browser) << " status=" << status << " error_code=" << error_code << " error=" << error_string.ToString();
 	RemoveBrowserFromCallback(browser);
 }
 
 void BrowserClient::OnLoadError(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, ErrorCode errorCode, const CefString &errorText, const CefString &failedUrl)
 {
-
+	if (frame->IsMain())
+		SL_DIAG << "browser: OnLoadError " << diagTag(browser) << " url=" << SlDiag::url(failedUrl) << " code=" << errorCode << " text=" << errorText.ToString();
 }
 
-bool BrowserClient::OnConsoleMessage(CefRefPtr<CefBrowser>, cef_log_severity_t level, const CefString &message, const CefString &source, int line)
+bool BrowserClient::OnConsoleMessage(CefRefPtr<CefBrowser> browser, cef_log_severity_t level, const CefString &message, const CefString &source, int line)
 {
-	return false;
+	if (m_isMain || level < LOGSEVERITY_WARNING)
+		return false;
+
+	// Replaces CEF's own console line for tabs, which would carry app tokens unredacted
+	SL_DIAG << "console " << diagTag(browser) << " level=" << level << " " << SlDiag::url(source) << ":" << line << " " << SlDiag::redactTokens(message.ToString()).substr(0, 1500);
+	return true;
 }

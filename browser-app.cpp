@@ -2,6 +2,7 @@
 #include "browser-app.hpp"
 #include "browser-version.h"
 #include "JavascriptApi.h"
+#include "DiagLog.h"
 
 #include <json11/json11.hpp>
 
@@ -201,6 +202,12 @@ void BrowserApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDi
 
 	if (extra_info->HasKey("initScript"))
 		info.initScript = extra_info->GetString("initScript");
+
+	SL_DIAG << "renderer: OnBrowserCreated cef=" << browser->GetIdentifier() << " role="
+		<< (info.role == Role::Main  ? "main"
+		    : info.role == Role::Tab ? "tab"
+					     : "none")
+		<< " instances=" << info.instances << " initScript " << (info.initScript.empty() ? std::string("none") : SlDiag::script(info.initScript));
 }
 
 void BrowserApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
@@ -219,6 +226,8 @@ void BrowserApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
 		}
 	}
 
+	SL_DIAG << "renderer: OnBrowserDestroyed cef=" << browserId << " lastInstance=" << lastInstance;
+
 	// Cross-origin navigation may create the replacement browser before destroying the old one.
 	if (lastInstance)
 	{
@@ -236,6 +245,9 @@ void BrowserApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
 	const Role role = roleOf(browser);
+
+	if (role != Role::Main)
+		SL_DIAG << "renderer: OnContextCreated cef=" << browser->GetIdentifier() << " role=" << (role == Role::Tab ? "tab" : "none") << " frameMain=" << frame->IsMain() << " url=" << SlDiag::url(frame->GetURL()) << " approved=" << isApprovedTabUrl(frame->GetURL());
 
 	if (role == Role::Main)
 	{
@@ -301,13 +313,22 @@ void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFr
 		{
 			CefRefPtr<CefV8Value> retval;
 			CefRefPtr<CefV8Exception> exception;
-			context->Eval(initScript, frame->GetURL(), 0, retval, exception);
+			const bool ok = context->Eval(initScript, frame->GetURL(), 0, retval, exception);
+			SL_DIAG << "renderer: initScript evaluated cef=" << browser->GetIdentifier() << " url=" << SlDiag::url(frame->GetURL()) << " " << SlDiag::script(initScript) << (ok ? " ok" : " THREW")
+				<< (exception ? " exception=\"" + exception->GetMessage().ToString() + "\" line=" + std::to_string(exception->GetLineNumber()) : std::string());
+		}
+		else
+		{
+			SL_DIAG << "renderer: no initScript for cef=" << browser->GetIdentifier() << " url=" << SlDiag::url(frame->GetURL());
 		}
 	}
 }
 
-void BrowserApp::OnContextReleased(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
+void BrowserApp::OnContextReleased(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
+	if (roleOf(browser) != Role::Main && frame->IsMain())
+		SL_DIAG << "renderer: OnContextReleased cef=" << browser->GetIdentifier() << " url=" << SlDiag::url(frame->GetURL());
+
 	std::vector<std::pair<int, std::string>> releasedReceivers;
 	{
 		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
@@ -386,6 +407,7 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 	else if (message->GetName() == "executeJavascript")
 	{
 		CefRefPtr<CefListValue> arguments = message->GetArgumentList();
+		SL_DIAG << "renderer: executeJavascript message cef=" << browser->GetIdentifier() << " role=" << (roleOf(browser) == Role::Tab ? "tab" : "main") << " " << SlDiag::script(arguments->GetString(0).ToString());
 		browser->GetMainFrame()->ExecuteJavaScript(arguments->GetString(0), browser->GetMainFrame()->GetURL(), 0);
 	}
 

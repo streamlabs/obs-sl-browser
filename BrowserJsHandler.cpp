@@ -11,6 +11,7 @@
 #include "JavascriptApi.h"
 #include "SlBrowser.h"
 #include "WindowsFunctions.h"
+#include "DiagLog.h"
 
 #include <json11/json11.hpp>
 
@@ -223,10 +224,14 @@ bool BrowserClient::JS_TABS_CREATE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_
 		};
 	}
 
+	SL_DIAG << "browser: tabs_createWindow uid=" << uid << " url=" << SlDiag::url(url) << " initScript " << (options.initScript.empty() ? std::string("none") : SlDiag::script(options.initScript)) << " hideOnClose=" << options.hideOnClose
+		<< " contextDir=" << (options.contextDir.empty() ? std::string("none") : SlDiag::hash(options.contextDir));
+
 	std::string err = SlBrowser::instance().createTabWindow(uid, url, std::move(options));
 
 	if (!err.empty())
 	{
+		SL_DIAG << "browser: tabs_createWindow uid=" << uid << " FAILED " << err;
 		jsonOutput = Json(Json::object({{"error", err}})).dump();
 		return true;
 	}
@@ -244,6 +249,7 @@ bool BrowserClient::JS_TABS_DESTROY_WINDOW(CefRefPtr<CefBrowser> &browser, int32
 
 	int32_t uid = argsWithoutFunc[0]->GetInt();
 	std::string err = SlBrowser::instance().queueDestroyCefBrowser(uid);
+	SL_DIAG << "browser: tabs_destroyWindow uid=" << uid << (err.empty() ? std::string(" ok") : " FAILED " + err);
 
 	if (!err.empty())
 		jsonOutput = Json(Json::object({{"error", err}})).dump();
@@ -278,6 +284,8 @@ bool BrowserClient::JS_TABS_LOAD_URL(CefRefPtr<CefBrowser> &browser, int32_t &fu
 
 	if (replyIfNotReady(elementsPtr, jsonOutput))
 		return true;
+
+	SL_DIAG << "browser: tabs_loadUrl uid=" << uid << " url=" << SlDiag::url(url);
 
 	if (auto mainFramePtr = elementsPtr->browser->GetMainFrame())
 		mainFramePtr->LoadURL(url);
@@ -340,6 +348,8 @@ bool BrowserClient::JS_TABS_HIDE_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t 
 	if (replyIfNotReady(elementsPtr, jsonOutput))
 		return true;
 
+	SL_DIAG << "browser: tabs_hideWindow uid=" << uid;
+
 	// Set now so a read right after this call sees it; the widget's events keep it right afterwards
 	elementsPtr->hidden = true;
 
@@ -368,6 +378,8 @@ bool BrowserClient::JS_TABS_SHOW_WINDOW(CefRefPtr<CefBrowser> &browser, int32_t 
 
 	if (replyIfNotReady(elementsPtr, jsonOutput))
 		return true;
+
+	SL_DIAG << "browser: tabs_showWindow uid=" << uid;
 
 	elementsPtr->hidden = false;
 
@@ -448,6 +460,8 @@ bool BrowserClient::JS_TABS_REGISTER_MSG_RECEIVER(CefRefPtr<CefBrowser> &browser
 		jsonOutput = Json(Json::object({{"error", "Invalid receiver"}})).dump();
 		return true;
 	}
+	// Every pipe-client run that is not guarded registers again, so this counts runs per document
+	SL_DIAG << "browser: tab_registerMsgReceiver " << diagTag(browser) << " funcId=" << funcId << " replaces=" << GetReceiverFuncIdForBrowser(browser->GetIdentifier()) << " frame=" << SlDiag::url(browser->GetMainFrame() ? browser->GetMainFrame()->GetURL().ToString() : std::string());
 	AssignMsgReceiverFunc(browser->GetIdentifier(), funcId, argsWithoutFunc[0]->GetString().ToString());
 
 	// No reply: the callback is only invoked with messages
@@ -671,7 +685,13 @@ bool BrowserClient::JS_TABS_EXECUTE_JS(CefRefPtr<CefBrowser> &browser, int32_t &
 	std::string code = argsWithoutFunc[1]->GetString();
 
 	if (replyIfNotReady(ptr, jsonOutput))
+	{
+		SL_DIAG << "browser: tabs_executeJs uid=" << uid << " NOT READY, dropped " << SlDiag::script(code);
 		return true;
+	}
+
+	SL_DIAG << "browser: tabs_executeJs uid=" << uid << " cef=" << ptr->browser->GetIdentifier() << " " << SlDiag::script(code) << " sameAsInitScript=" << (!code.empty() && code == ptr->initScript)
+		<< " into=" << SlDiag::url(ptr->browser->GetMainFrame() ? ptr->browser->GetMainFrame()->GetURL().ToString() : std::string());
 
 	if (auto fr = ptr->browser->GetMainFrame())
 		fr->ExecuteJavaScript(code, fr->GetURL(), 0);
@@ -701,6 +721,11 @@ bool BrowserClient::JS_TABS_QUERY_ALL(CefRefPtr<CefBrowser> &browser, int32_t &f
 			}
 		}
 	}
+
+	std::string listed;
+	for (const auto &item : jsonArray)
+		listed += " " + std::to_string(item["uid"].int_value()) + "=" + SlDiag::url(item["url"].string_value());
+	SL_DIAG << "browser: tabs_queryAll ->" << (listed.empty() ? std::string(" (none)") : listed);
 
 	jsonOutput = Json(jsonArray).dump();
 	return true;

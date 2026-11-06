@@ -32,6 +32,7 @@
 #include <include/cef_version_info.h>
 #endif
 #include "ConsoleToggle.h"
+#include "DiagLog.h"
 
 #include <include/base/cef_callback.h>
 #include <include/base/cef_logging.h>
@@ -216,6 +217,7 @@ void finishBrowserCreation(std::shared_ptr<BrowserElements> elements)
 	}
 
 	elements->ready = true;
+	SL_DIAG << "browser: tab ready uid=" << elements->uid << " cef=" << (elements->browser ? elements->browser->GetIdentifier() : -1);
 	replyCreated(elements, "");
 }
 
@@ -234,6 +236,7 @@ void onProfileTimeout(std::weak_ptr<BrowserElements> weak)
 	if (!elements || elements->closed || elements->browser)
 		return;
 
+	SL_DIAG << "browser: tab profile TIMEOUT uid=" << elements->uid << " contextDir=" << SlDiag::hash(elements->contextDir);
 	replyCreated(elements, "the tab's profile did not initialize in time");
 	SlBrowser::instance().queueDestroyCefBrowser(elements->uid, elements);
 }
@@ -401,6 +404,14 @@ std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url
 	if (uid == 0)
 		return "uid 0 is the main browser";
 
+	{
+		std::string existing;
+		for (const auto &[otherUid, other] : getExtraBrowsers())
+			if (other && other->browser && other->browser->GetMainFrame())
+				existing += " " + std::to_string(otherUid) + "=" + SlDiag::url(other->browser->GetMainFrame()->GetURL());
+		SL_DIAG << "browser: createTabWindow uid=" << uid << " url=" << SlDiag::url(url) << " already open:" << (existing.empty() ? std::string(" (none)") : existing);
+	}
+
 	// Reserved now so a duplicate uid is rejected in the reply; the widget has to be built on the Qt thread
 	auto elements = std::make_shared<BrowserElements>();
 	elements->initScript = std::move(options.initScript);
@@ -460,8 +471,12 @@ void SlBrowser::createCefBrowser_internal(std::shared_ptr<BrowserElements> brows
 	// Only the registry owns a tab that is still waiting, so one destroyed meanwhile is simply gone
 	std::weak_ptr<BrowserElements> weak = browserElements;
 
+	SL_DIAG << "browser: tab waiting for profile uid=" << browserElements->uid << " contextDir=" << (browserElements->contextDir.empty() ? std::string("none") : SlDiag::hash(browserElements->contextDir));
+
 	SlBrowser::instance().withTabRequestContext(browserElements->contextDir, [weak, url, startHidden, keepOnTop](CefRefPtr<CefRequestContext> request_context) {
-		if (auto elements = weak.lock())
+		auto elements = weak.lock();
+		SL_DIAG << "browser: tab profile ready uid=" << (elements ? std::to_string(elements->uid) : std::string("(gone)"));
+		if (elements)
 			attachCefBrowser(elements, url, startHidden, keepOnTop, request_context);
 	});
 
@@ -527,6 +542,9 @@ void SlBrowser::attachCefBrowserWithWindow(std::shared_ptr<BrowserElements> brow
 		extra_info->SetString("initScript", browserElements->initScript);
 
 	browserElements->browser = CefBrowserHost::CreateBrowserSync(window_info, browserElements->client.get(), url, browser_settings, extra_info, request_context);
+
+	SL_DIAG << "browser: CreateBrowserSync " << (browserElements->isMain ? "main" : "tab") << " uid=" << browserElements->uid << " cef=" << (browserElements->browser ? browserElements->browser->GetIdentifier() : -1) << " url=" << SlDiag::url(url) << " initScript "
+		<< (browserElements->initScript.empty() ? std::string("none") : SlDiag::script(browserElements->initScript));
 
 	if (!browserElements->browser)
 	{
@@ -897,6 +915,7 @@ std::string SlBrowser::queueDestroyCefBrowser(const int32_t uid, const std::shar
 		return "uid not found";
 
 	std::shared_ptr<BrowserElements> ptr = browserElements->second;
+	SL_DIAG << "browser: destroying tab uid=" << uid << " cef=" << (ptr->browser ? ptr->browser->GetIdentifier() : -1) << (notifyClosed ? " (closed by user/page)" : " (tabs_destroyWindow or failure)");
 	if (notifyClosed)
 		ptr->notifyClosed = true;
 	ptr->closed = true;

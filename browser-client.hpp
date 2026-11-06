@@ -36,8 +36,10 @@ public:
 
 	/* CefDisplayHandler */
 	bool OnConsoleMessage(CefRefPtr<CefBrowser> browser, cef_log_severity_t level, const CefString &message, const CefString &source, int line) override;
+	void OnAddressChange(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, const CefString &url) override;
 
 	/* CefLifeSpanHandler */
+	void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
 	bool DoClose(CefRefPtr<CefBrowser> browser) override;
 	bool OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
 #if CHROME_VERSION_BUILD >= 6834
@@ -114,6 +116,9 @@ private:
 	static void DrainObsEvents();
 
 	bool valid() const;
+
+	// "main" or "tab uid=N", plus the CEF id, for [sl-diag] lines
+	std::string diagTag(CefRefPtr<CefBrowser> browser) const;
 
 	bool m_reroute_audio = true;
 	bool m_isMain = false;
