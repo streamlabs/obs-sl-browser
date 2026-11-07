@@ -9,6 +9,8 @@
  */
 
 import { readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { request } from "node:http";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { sleep } from "./obs.mjs";
@@ -19,6 +21,28 @@ export async function listPages(port) {
 	const res = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(3000) });
 	if (!res.ok) throw new Error(`DevTools returned HTTP ${res.status}`);
 	return (await res.json()).filter((t) => t.type === "page" && t.webSocketDebuggerUrl);
+}
+
+/** Probe the WebSocket Origin check used by Chrome's DevTools frontends. */
+export function upgradeStatus(webSocketUrl, origin) {
+	const url = new URL(webSocketUrl);
+	if (url.protocol !== "ws:") throw new Error(`unexpected DevTools protocol: ${url.protocol}`);
+	url.protocol = "http:";
+	return new Promise((resolve, reject) => {
+		const req = request(url, {
+			headers: {
+				Connection: "Upgrade",
+				Upgrade: "websocket",
+				"Sec-WebSocket-Key": randomBytes(16).toString("base64"),
+				"Sec-WebSocket-Version": "13",
+				Origin: origin,
+			},
+		}, (res) => { res.on("error", reject); res.resume(); resolve(res.statusCode); });
+		req.on("upgrade", (res, socket) => { socket.destroy(); resolve(res.statusCode); });
+		req.on("error", reject);
+		req.setTimeout(3000, () => req.destroy(new Error("DevTools WebSocket upgrade timed out")));
+		req.end();
+	});
 }
 
 /** Wait for an attachable page, preferring one whose url contains `match`. */
