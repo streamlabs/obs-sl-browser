@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>sl-browser api isolation</title>
+<body style="background:#102030;color:#9cf;font:13px monospace;margin:8px">
+<h3>api-isolation</h3>
+<script>
+// A real page rather than about:blank so OnContextCreated binds slabsGlobal on this context.
+document.body.append('slabsGlobal: ' + typeof window.slabsGlobal);
+</script>

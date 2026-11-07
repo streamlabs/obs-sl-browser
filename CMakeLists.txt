@@ -70,6 +70,7 @@ target_sources(
           GrpcBrowser.cpp
           SlBrowser.cpp
           SlBrowserWidget.cpp
+          BrowserJsHandler.cpp
           browser-app.cpp
           browser-app.hpp
           browser-client.cpp
@@ -142,6 +143,7 @@ target_sources(
   PRIVATE sl-browser-plugin.cpp
     GrpcPlugin.cpp
     PluginJsHandler.cpp
+    ObsEvents.cpp
     QtGuiModifications.cpp
     WebServer.cpp
     SlDockEventFilter.cpp

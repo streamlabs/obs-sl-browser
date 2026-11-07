@@ -7,7 +7,25 @@
 
 #include <windows.h>
 
+#include <algorithm>
+#include <iomanip>
+#include <random>
+#include <sstream>
+
 using namespace json11;
+
+namespace
+{
+std::string newReceiverToken()
+{
+	std::random_device random;
+	std::ostringstream token;
+	token << std::hex << std::setfill('0');
+	for (int i = 0; i < 4; ++i)
+		token << std::setw(8) << random();
+	return token.str();
+}
+} // namespace
 
 /*static*/
 int BrowserApp::getRemoteDebuggingPort()
@@ -43,6 +61,74 @@ void BrowserApp::OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command_li
 {
 	std::string pid = std::to_string(GetCurrentProcessId());
 	command_line->AppendSwitchWithValue("parent_pid", pid);
+
+	if (!m_apiOrigin.empty())
+		command_line->AppendSwitchWithValue("api_origin", m_apiOrigin);
+
+	if (!m_embedOrigins.empty())
+		command_line->AppendSwitchWithValue("embed_origins", m_embedOrigins);
+}
+
+std::string BrowserApp::OriginOf(const std::string &url)
+{
+	CefURLParts parts;
+	if (!CefParseURL(url, parts))
+		return {};
+
+	std::string scheme = CefString(&parts.scheme).ToString();
+	std::string host = CefString(&parts.host).ToString();
+	std::string port = CefString(&parts.port).ToString();
+
+	if (scheme.empty() || host.empty())
+		return {};
+
+	std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+	std::transform(host.begin(), host.end(), host.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+	if ((scheme == "http" && port == "80") || (scheme == "https" && port == "443"))
+		port.clear();
+
+	return scheme + "://" + host + (port.empty() ? "" : ":" + port);
+}
+
+/*static*/
+bool BrowserApp::isApprovedTabUrl(const std::string &url)
+{
+	CefURLParts parts;
+
+	if (!CefParseURL(url, parts))
+		return false;
+
+	if (!CefString(&parts.username).empty() || !CefString(&parts.password).empty())
+		return false;
+
+	// The parsed origin is lowercased and drops a default port, whatever the url's own spelling
+	std::string origin = CefString(&parts.origin).ToString();
+
+	while (!origin.empty() && origin.back() == '/')
+		origin.pop_back();
+
+	if (origin.empty())
+		return false;
+
+	for (const char *allowed : JavascriptApi::kTabAllowedOrigins)
+	{
+		if (origin == allowed)
+			return true;
+	}
+
+	static const std::string testOrigin = []() {
+		char buffer[MAX_PATH];
+		DWORD len = GetEnvironmentVariableA(JavascriptApi::kTestTabOriginEnvVar, buffer, MAX_PATH);
+		std::string value = (len > 0 && len < MAX_PATH) ? std::string(buffer, len) : std::string();
+
+		while (!value.empty() && value.back() == '/')
+			value.pop_back();
+
+		return value;
+	}();
+
+	return !testOrigin.empty() && origin == testOrigin;
 }
 
 void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefCommandLine> command_line)
@@ -77,53 +163,230 @@ void BrowserApp::OnBeforeCommandLineProcessing(const CefString &, CefRefPtr<CefC
 		command_line->AppendSwitchWithValue("remote-allow-origins", "http://localhost:" + std::to_string(port));
 }
 
+BrowserApp::Role BrowserApp::roleOf(CefRefPtr<CefBrowser> browser)
+{
+	std::lock_guard<std::mutex> grd(m_browserInfoMutex);
+	auto itr = m_browserInfos.find(browser->GetIdentifier());
+	return itr != m_browserInfos.end() ? itr->second.role : Role::None;
+}
+
 bool BrowserApp::OnAlreadyRunningAppRelaunch(CefRefPtr<CefCommandLine>, const CefString &)
 {
 	// Another instance shares our cache; don't let CEF open a stray default window.
 	return true;
 }
 
-void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, CefRefPtr<CefV8Context> context)
+void BrowserApp::OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionaryValue> extra_info)
 {
-	CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
+	std::lock_guard<std::mutex> grd(m_browserInfoMutex);
+	BrowserInfo &info = m_browserInfos[browser->GetIdentifier()];
+	++info.instances;
 
-	CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
-	globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
-	slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
+	if (!extra_info)
+		return;
 
-	for (auto &itr : JavascriptApi::getPluginFunctionNames())
-		slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+	if (extra_info->HasKey("role"))
+	{
+		const std::string role = extra_info->GetString("role");
 
-	for (auto &itr : JavascriptApi::getBrowserFunctionNames())
-		slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);	
+		if (role == "main")
+			info.role = Role::Main;
+		else if (role == "tab")
+			info.role = Role::Tab;
+	}
+
+	if (extra_info->HasKey("initScript"))
+		info.initScript = extra_info->GetString("initScript");
+}
+
+void BrowserApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
+{
+	const int browserId = browser->GetIdentifier();
+	bool lastInstance = false;
+	{
+		std::lock_guard<std::mutex> grd(m_browserInfoMutex);
+		auto itr = m_browserInfos.find(browserId);
+
+		if (itr == m_browserInfos.end() || --itr->second.instances <= 0)
+		{
+			if (itr != m_browserInfos.end())
+				m_browserInfos.erase(itr);
+			lastInstance = true;
+		}
+	}
+
+	// Cross-origin navigation may create the replacement browser before destroying the old one.
+	if (lastInstance)
+	{
+		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
+		for (auto itr = m_callbackMap.begin(); itr != m_callbackMap.end();)
+		{
+			if (itr->second.browserId == browserId)
+				itr = m_callbackMap.erase(itr);
+			else
+				++itr;
+		}
+	}
+}
+
+void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
+{
+	// Isolated worlds, such as one DevTools adds, also report the frame; only the page's own world gets the api and the init script
+	if (!context->IsSame(frame->GetV8Context()))
+		return;
+
+	const Role role = roleOf(browser);
+
+	if (role == Role::Main)
+	{
+		CefRefPtr<CefCommandLine> commandLine = CefCommandLine::GetGlobalCommandLine();
+		const std::string allowedOrigin = commandLine->GetSwitchValue("api_origin");
+		const std::string frameOrigin = OriginOf(frame->GetURL());
+		const bool isApiFrame = frame->IsMain() && !allowedOrigin.empty() && frameOrigin == allowedOrigin;
+
+		bool isEmbedFrame = false;
+		if (!frame->IsMain() && !frameOrigin.empty())
+		{
+			std::stringstream embedOrigins(commandLine->GetSwitchValue("embed_origins").ToString());
+			std::string embedOrigin;
+
+			while (!isEmbedFrame && std::getline(embedOrigins, embedOrigin, ','))
+				isEmbedFrame = embedOrigin == frameOrigin;
+		}
+
+		if (!isApiFrame && !isEmbedFrame)
+			return;
+
+		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
+		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
+		globalObj->SetValue("slabsGlobal", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
+		slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		if (!isApiFrame)
+			return;
+
+		for (auto &itr : JavascriptApi::getPluginFunctionNames())
+			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		for (auto &itr : JavascriptApi::getBrowserFunctionNames())
+			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		// A page that closes its own window leaves main half closed. Hiding it goes through browser_setHiddenState
+		CefRefPtr<CefV8Value> retval;
+		CefRefPtr<CefV8Exception> exception;
+		context->Eval("window.close = function close() {};", frame->GetURL(), 0, retval, exception);
+	}
+	else if (role == Role::Tab && frame->IsMain() && isApprovedTabUrl(frame->GetURL()))
+	{
+		CefRefPtr<CefV8Value> globalObj = context->GetGlobal();
+		CefRefPtr<CefV8Value> slabsGlobal = CefV8Value::CreateObject(nullptr, nullptr);
+		globalObj->SetValue("slabsTab", slabsGlobal, V8_PROPERTY_ATTRIBUTE_NONE);
+		slabsGlobal->SetValue("pluginVersion", CefV8Value::CreateString(OBS_BROWSER_VERSION_STRING), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		for (auto &itr : JavascriptApi::getBrowserTabsFunctionNames())
+			slabsGlobal->SetValue(itr.first, CefV8Value::CreateFunction(itr.first, this), V8_PROPERTY_ATTRIBUTE_NONE);
+
+		std::string initScript;
+
+		{
+			std::lock_guard<std::mutex> grd(m_browserInfoMutex);
+			auto itr = m_browserInfos.find(browser->GetIdentifier());
+
+			if (itr != m_browserInfos.end())
+				initScript = itr->second.initScript;
+		}
+
+		// Eval, not ExecuteJavaScript: it runs now, before any script of the page
+		if (!initScript.empty())
+		{
+			CefRefPtr<CefV8Value> retval;
+			CefRefPtr<CefV8Exception> exception;
+			context->Eval(initScript, frame->GetURL(), 0, retval, exception);
+		}
+	}
+}
+
+void BrowserApp::OnContextReleased(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
+{
+	std::vector<std::pair<int, std::string>> releasedReceivers;
+	{
+		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
+		for (auto itr = m_callbackMap.begin(); itr != m_callbackMap.end();)
+		{
+			if (itr->second.context->IsSame(context))
+			{
+				if (itr->second.receiverKind != ReceiverKind::None)
+					releasedReceivers.emplace_back(itr->first, itr->second.receiverToken);
+				itr = m_callbackMap.erase(itr);
+			}
+			else
+				++itr;
+		}
+	}
+	for (const auto &[id, token] : releasedReceivers)
+	{
+		CefRefPtr<CefProcessMessage> cleanup = CefProcessMessage::Create("releaseReceiver");
+		cleanup->GetArgumentList()->SetInt(0, id);
+		cleanup->GetArgumentList()->SetString(1, token);
+		frame->SendProcessMessage(PID_BROWSER, cleanup);
+	}
 }
 
 bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message)
 {
-	if (message->GetName() == "executeCallback")
+	if (message->GetName() == "executeCallback" || message->GetName() == "executeCallback_NoDelete")
 	{
 		CefRefPtr<CefListValue> arguments = message->GetArgumentList();
 		int callbackID = arguments->GetInt(0);
 		CefString jsonString = arguments->GetString(1);
+		int uuid = arguments->GetInt(2);
 
 		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
 
-		if (CefRefPtr<CefV8Value> function = m_callbackMap[callbackID].first)
+		auto itr = m_callbackMap.find(callbackID);
+		if (itr != m_callbackMap.end() && itr->second.browserId == browser->GetIdentifier() && (message->GetName() != "executeCallback_NoDelete" || itr->second.receiverToken == arguments->GetString(3).ToString()))
 		{
-			CefRefPtr<CefV8Context> context = m_callbackMap[callbackID].second;
+			CefRefPtr<CefV8Value> function = itr->second.function;
+			CefRefPtr<CefV8Context> context = itr->second.context;
+			if (!context->IsValid())
+			{
+				m_callbackMap.erase(itr);
+				return true;
+			}
 
 			CefV8ValueList args;
 			args.push_back(CefV8Value::CreateString(jsonString));
+
+			if (uuid != 0)
+				args.push_back(CefV8Value::CreateInt(uuid));
+
 			function->ExecuteFunctionWithContext(context, nullptr, args);
 
-			m_callbackMap.erase(callbackID);
+			if (message->GetName() != "executeCallback_NoDelete")
+				m_callbackMap.erase(callbackID);
 		}
 	}
-
-	if (message->GetName() == "executeJavascript")
+	else if (message->GetName() == "receiverRegistered")
+	{
+		const int callbackID = message->GetArgumentList()->GetInt(0);
+		std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
+		auto current = m_callbackMap.find(callbackID);
+		if (current != m_callbackMap.end() && current->second.browserId == browser->GetIdentifier() && current->second.receiverKind != ReceiverKind::None && current->second.receiverToken == message->GetArgumentList()->GetString(1).ToString())
+		{
+			const ReceiverKind kind = current->second.receiverKind;
+			for (auto itr = m_callbackMap.begin(); itr != m_callbackMap.end();)
+			{
+				if (itr->first < callbackID && itr->second.receiverKind == kind && (kind == ReceiverKind::ObsEvents || itr->second.browserId == current->second.browserId))
+					itr = m_callbackMap.erase(itr);
+				else
+					++itr;
+			}
+		}
+	}
+	else if (message->GetName() == "executeJavascript")
 	{
 		CefRefPtr<CefListValue> arguments = message->GetArgumentList();
-		browser->GetMainFrame()->ExecuteJavaScript(arguments->GetString(0), browser->GetMainFrame()->GetURL(), 0); 
+		browser->GetMainFrame()->ExecuteJavaScript(arguments->GetString(0), browser->GetMainFrame()->GetURL(), 0);
 	}
 
 	return true;
@@ -131,15 +394,31 @@ bool BrowserApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser, CefRefP
 
 bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const CefV8ValueList &arguments, CefRefPtr<CefV8Value> &, CefString &)
 {
-	if (JavascriptApi::isValidFunctionName(name.ToString()))
+	CefRefPtr<CefV8Context> current = CefV8Context::GetCurrentContext();
+	CefRefPtr<CefBrowser> browser = current->GetBrowser();
+
+	// Allowed functions depend on the calling browser, not on shared renderer state
+	const std::string funcName = name.ToString();
+	const Role role = roleOf(browser);
+	const bool allowedForBrowser = role == Role::Main ? (JavascriptApi::isPluginFunctionName(funcName) || JavascriptApi::isBrowserFunctionName(funcName)) : (role == Role::Tab && JavascriptApi::isBrowserTabFunctionName(funcName));
+	const std::string allowedOrigin = CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("api_origin");
+	const bool pageWorld = current->IsSame(current->GetFrame()->GetV8Context());
+	const bool allowedForFrame = pageWorld && (role == Role::Main ? (current->GetFrame()->IsMain() && !allowedOrigin.empty() && OriginOf(current->GetFrame()->GetURL()) == allowedOrigin) : (role == Role::Tab && current->GetFrame()->IsMain() && isApprovedTabUrl(current->GetFrame()->GetURL())));
+	const bool allowed = allowedForBrowser && allowedForFrame;
+
+	if (allowed)
 	{
 		int callBackId = 0;
+		const int browserId = browser->GetIdentifier();
+		const ReceiverKind receiverKind = funcName == "events_registerReceiver" ? ReceiverKind::ObsEvents : (funcName == "tabs_registerMsgReceiver" || funcName == "tab_registerMsgReceiver" ? ReceiverKind::Messages : ReceiverKind::None);
+		const std::string receiverToken = receiverKind != ReceiverKind::None ? newReceiverToken() : std::string();
+		const bool hasCallback = !arguments.empty() && arguments[0]->IsFunction();
 
-		if (arguments.size() >= 1 && arguments[0]->IsFunction())
+		if (hasCallback)
 		{
 			std::lock_guard<std::recursive_mutex> grd(m_callbackMutex);
 			callBackId = ++m_callbackIdCounter;
-			m_callbackMap[callBackId] = {arguments[0], CefV8Context::GetCurrentContext()};
+			m_callbackMap.emplace(callBackId, CallbackInfo{arguments[0], current, browserId, receiverKind, receiverToken});
 		}
 
 		CefRefPtr<CefProcessMessage> msg = CefProcessMessage::Create(name);
@@ -164,8 +443,9 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 			else if (arguments[l]->IsDouble())
 				args->SetDouble(pos, arguments[l]->GetDoubleValue());
 		}
+		if (receiverKind != ReceiverKind::None)
+			args->SetString(1, receiverToken);
 
-		CefRefPtr<CefBrowser> browser = CefV8Context::GetCurrentContext()->GetBrowser();
 		SendBrowserProcessMessage(browser, PID_BROWSER, msg);
 	}
 	else

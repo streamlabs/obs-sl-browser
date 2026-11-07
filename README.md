@@ -2,6 +2,8 @@
 
 Defining SL_PLUGIN_DEFAULT_URL as an env variable will override the default URL loaded by the plugin's browser.
 
+Test only: defining SL_PLUGIN_TEST_TAB_ORIGIN (scheme://host[:port]) adds that one origin to the ones `tabs_createWindow` and `tabs_loadUrl` accept, so the e2e harness can serve tab pages from its own http server. Nothing else widens the list, and it is unset in normal use.
+
 Remote debugging is off by default. To debug the plugin's page, set SL_PLUGIN_REMOTE_DEBUGGING_PORT to a port from 1024 to 65535 (e.g. `setx SL_PLUGIN_REMOTE_DEBUGGING_PORT 9123`), restart OBS, then open chrome://inspect or http://localhost:9123.
 
 ## Local Build Instructions

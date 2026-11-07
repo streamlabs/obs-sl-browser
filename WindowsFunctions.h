@@ -1,6 +1,8 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
+#include <vector>
 #include <windows.h>
 #include <wininet.h>
 #include <fstream>
@@ -12,8 +14,21 @@
 
 namespace WindowsFunctions
 {
+	// Test only: windows are kept off the desktop and never take focus
+	static bool TestOffscreen()
+	{
+		static const bool on = GetEnvironmentVariableA("SL_PLUGIN_TEST_OFFSCREEN", nullptr, 0) > 0;
+		return on;
+	}
+
 	static void ForceForegroundWindow(HWND focusOnWindowHandle)
 	{
+		if (TestOffscreen())
+		{
+			ShowWindow(focusOnWindowHandle, SW_SHOWNOACTIVATE);
+			return;
+		}
+
 		int style = GetWindowLong(focusOnWindowHandle, GWL_STYLE);
 
 		// Minimize and restore to be able to make it active.
