@@ -235,6 +235,10 @@ void BrowserApp::OnBrowserDestroyed(CefRefPtr<CefBrowser> browser)
 
 void BrowserApp::OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
 {
+	// Isolated worlds, such as one DevTools adds, also report the frame; only the page's own world gets the api and the init script
+	if (!context->IsSame(frame->GetV8Context()))
+		return;
+
 	const Role role = roleOf(browser);
 
 	if (role == Role::Main)
@@ -402,7 +406,8 @@ bool BrowserApp::Execute(const CefString &name, CefRefPtr<CefV8Value>, const Cef
 	const Role role = roleOf(browser);
 	const bool allowedForBrowser = role == Role::Main ? (JavascriptApi::isPluginFunctionName(funcName) || JavascriptApi::isBrowserFunctionName(funcName)) : (role == Role::Tab && JavascriptApi::isBrowserTabFunctionName(funcName));
 	const std::string allowedOrigin = CefCommandLine::GetGlobalCommandLine()->GetSwitchValue("api_origin");
-	const bool allowedForFrame = role == Role::Main ? (current->GetFrame()->IsMain() && !allowedOrigin.empty() && OriginOf(current->GetFrame()->GetURL()) == allowedOrigin) : (role == Role::Tab && current->GetFrame()->IsMain() && isApprovedTabUrl(current->GetFrame()->GetURL()));
+	const bool pageWorld = current->IsSame(current->GetFrame()->GetV8Context());
+	const bool allowedForFrame = pageWorld && (role == Role::Main ? (current->GetFrame()->IsMain() && !allowedOrigin.empty() && OriginOf(current->GetFrame()->GetURL()) == allowedOrigin) : (role == Role::Tab && current->GetFrame()->IsMain() && isApprovedTabUrl(current->GetFrame()->GetURL())));
 	const bool allowed = allowedForBrowser && allowedForFrame;
 
 	if (allowed)

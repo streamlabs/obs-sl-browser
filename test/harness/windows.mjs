@@ -26,6 +26,8 @@ public static class SltWindows {
 	[DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out Rect r);
 	[DllImport("user32.dll", SetLastError = true)] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr c);
 	[DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+	[DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+	[DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
 	public static List<KeyValuePair<long, string>> All() {
 		var list = new List<KeyValuePair<long, string>>();
 		EnumWindows((h, l) => {
@@ -62,6 +64,10 @@ if ($Action -eq 'close') {
 	$hit = $all | Where-Object { $_.Value -eq $Title } | Select-Object -First 1
 	$size = if ($hit) { [SltWindows]::ClientSize($hit.Key) } else { @(0, 0) }
 	ConvertTo-Json -Compress -InputObject @{ width = $size[0]; height = $size[1] }
+} elseif ($Action -eq 'state') {
+	$hit = $all | Where-Object { $_.Value -eq $Title } | Select-Object -First 1
+	$h = if ($hit) { [IntPtr]::new($hit.Key) } else { [IntPtr]::Zero }
+	ConvertTo-Json -Compress -InputObject @{ found = [bool]$hit; visible = [bool]($hit -and [SltWindows]::IsWindowVisible($h)); minimized = [bool]($hit -and [SltWindows]::IsIconic($h)) }
 } else {
 	ConvertTo-Json -Compress -InputObject @($all | ForEach-Object { $_.Value })
 }
@@ -90,6 +96,11 @@ export function windowTitles(workDir) {
 /** Post WM_CLOSE to the first window with exactly this title. True if there was one. */
 export function closeWindow(workDir, title) {
 	return run(workDir, ["close", title]).closed;
+}
+
+/** {found, visible, minimized} for the first window with exactly this title. Hidden windows are found too. */
+export function windowState(workDir, title) {
+	return run(workDir, ["state", title]);
 }
 
 /** Native client dimensions, in physical pixels, for a top-level window. */

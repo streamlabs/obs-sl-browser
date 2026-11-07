@@ -414,7 +414,7 @@ std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url
 
 	QMetaObject::invokeMethod(
 		qApp,
-		[elements, url, title = std::move(options.title), iconPath = std::move(options.iconPath)]() {
+		[elements, url, startHidden = options.startHidden, title = std::move(options.title), iconPath = std::move(options.iconPath)]() {
 			if (elements->closed)
 				return;
 
@@ -427,10 +427,13 @@ std::string SlBrowser::createTabWindow(const int32_t uid, const std::string &url
 			if (!iconPath.empty())
 				elements->widget->window()->setWindowIcon(QIcon(QString::fromStdWString(iconPath)));
 
-			// The HWND is not made until the widget is shown at least once
-			elements->widget->showMinimized();
+			// The browser needs the HWND. Showing minimized makes it too, but puts a hidden tab on the taskbar
+			if (startHidden)
+				elements->widget->winId();
+			else
+				elements->widget->showMinimized();
 
-			CefPostTask(TID_UI, base::BindOnce(&createCefBrowser_internal, elements, url, false, false));
+			CefPostTask(TID_UI, base::BindOnce(&createCefBrowser_internal, elements, url, startHidden, false));
 		},
 		Qt::QueuedConnection);
 

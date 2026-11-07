@@ -35,7 +35,7 @@ import { join } from "node:path";
 
 import { results, until } from "../../harness/suite.mjs";
 import { attachTo, listPages, upgradeStatus } from "../../harness/cdp.mjs";
-import { windowTitles, closeWindow, clientSize } from "../../harness/windows.mjs";
+import { windowTitles, closeWindow, clientSize, windowState } from "../../harness/windows.mjs";
 
 const TABS_NAMES = [
 	"tabs_createWindow", "tabs_destroyWindow", "tabs_resizeWindow", "tabs_loadUrl", "tabs_executeJs",
@@ -411,6 +411,28 @@ export default {
 				const after = await t.evaluate("({ count: window.__slInit, timeOrigin: performance.timeOrigin })");
 				if (before.count !== 1 || after.count !== 1) return `initScript count changed from ${before.count} to ${after.count}`;
 				if (after.timeOrigin !== before.timeOrigin || loads(120).length !== loadCount) return "hide/show reloaded the tab document";
+			});
+
+			// DevTools and other CDP clients add isolated worlds to a loaded page. Each one reports the frame to
+			// OnContextCreated, and a rerun there used to take over the tab's message receiver.
+			await r.step("an isolated world gets neither the api nor the initScript, on a tab or on main", async () => {
+				const isolatedWorld = async (client) => {
+					await client.command("Page.enable");
+					const { frameTree } = await client.command("Page.getFrameTree");
+					const { executionContextId } = await client.command("Page.createIsolatedWorld", { frameId: frameTree.frame.id, worldName: "slt-isolated" });
+					return executionContextId;
+				};
+
+				const t = tabCdp.get(120) || (await attach(120));
+				const inTab = await t.evaluate("({ tab: typeof window.slabsTab, init: typeof window.__slInit })", { contextId: await isolatedWorld(t) });
+				if (inTab.tab !== "undefined") return `an isolated world on the tab got slabsTab (${inTab.tab})`;
+				if (inTab.init !== "undefined") return "the initScript ran in an isolated world";
+
+				const page = await t.evaluate("({ tab: typeof window.slabsTab, count: window.__slInit })");
+				if (page.tab !== "object" || page.count !== 1) return `the tab page's own world changed: ${JSON.stringify(page)}`;
+
+				const onMain = await cdp.evaluate("typeof window.slabsGlobal", { contextId: await isolatedWorld(cdp) });
+				if (onMain !== "undefined") return `an isolated world on main got slabsGlobal (${onMain})`;
 			});
 
 			await r.step("an HTTP redirect runs initScript once in the final document", async () => {
@@ -1128,6 +1150,47 @@ export default {
 				if (!told) return "main was not told";
 				created.delete(131);
 				if ((await queryAll()).some((t) => t.uid === 131)) return "the tab is still listed";
+			});
+
+			/* -------------------------------------------------------------- start hidden --- */
+
+			// Checked as soon as tabs_createWindow replies: a window shown and then hidden again would already be visible by then.
+			await r.step("a tab created with startHidden runs its page without ever being shown, and opens on tabs_showWindow", async () => {
+				const title = "SLT-start-hidden-135";
+				const res = await createTab(135, title, "", ["", "window.__slInit = (window.__slInit || 0) + 1;", false, "", true]);
+				if (isError(res)) return res.error;
+
+				const hiddenState = windowState(workDir, title);
+				if (!hiddenState.found) return `no window titled "${title}"`;
+				if (hiddenState.visible || hiddenState.minimized) return `the window was shown: ${JSON.stringify(hiddenState)}`;
+				if ((await cdp.call("tabs_getIsWindowHidden", 135)).result !== true) return "tabs_getIsWindowHidden is not true";
+				if (loads(135).at(-1)?.data?.init !== 1) return `the hidden page's initScript count is ${loads(135).at(-1)?.data?.init}`;
+
+				if (isError(await cdp.call("tabs_showWindow", 135))) return "show errored";
+				const shown = await until(async () => windowState(workDir, title).visible, { timeoutMs: 10000, everyMs: 250 });
+				if (!shown) return "tabs_showWindow did not show it";
+				if (windowState(workDir, title).minimized) return "it was shown minimized";
+				if ((await cdp.call("tabs_getIsWindowHidden", 135)).result !== false) return "tabs_getIsWindowHidden is still true";
+
+				const sized = await until(async () => {
+					const native = clientSize(workDir, title);
+					const s = lastState(135);
+					return native.width >= 320 && s && Math.abs(s.innerWidth * s.dpr - native.width) <= 24 ? { native, s } : null;
+				}, { timeoutMs: 10000, everyMs: 250 });
+				if (!sized) return `the page does not fill the shown window: native ${JSON.stringify(clientSize(workDir, title))}, page ${JSON.stringify(lastState(135))}`;
+
+				if (isError(await cdp.call("tabs_destroyWindow", 135))) return "destroy errored";
+				created.delete(135);
+			});
+
+			await r.step("startHidden false, like leaving it out, opens the tab shown", async () => {
+				const title = "SLT-start-shown-136";
+				const res = await createTab(136, title, "", ["", "", false, "", false]);
+				if (isError(res)) return res.error;
+				const state = windowState(workDir, title);
+				if (!state.visible || state.minimized) return `the window is not shown normally: ${JSON.stringify(state)}`;
+				if (isError(await cdp.call("tabs_destroyWindow", 136))) return "destroy errored";
+				created.delete(136);
 			});
 
 			/* ------------------------------------------------------------------ cookies --- */
