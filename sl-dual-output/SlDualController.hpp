@@ -111,7 +111,12 @@ private: // persistence (scene collection, key "sl-dual-output")
 	void restoreFromCollectionFile();
 
 	// Every load starts here: the settings are per collection, so nothing may survive from the last one.
+	// The stream destination is not a collection setting and is kept.
 	void resetConfigToDefaults();
+
+	// Server and credentials live in the profile, like OBS's own service.json.
+	void loadProfileDestination();
+	void saveProfileDestination() const;
 
 private: // docks
 	void createDocks();

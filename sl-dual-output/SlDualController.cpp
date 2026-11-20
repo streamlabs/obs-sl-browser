@@ -50,6 +50,7 @@ bool SlDualController::init()
 	blog(LOG_INFO, SL_DUAL_LOG_PREFIX "initializing (built against OBS %s)", SL_DUAL_OBS_VERSION_RAW);
 
 	transitions = std::make_unique<SlDualTransitions>();
+	loadProfileDestination();
 	restoreFromCollectionFile();
 	transitions->rebuild(config);
 
@@ -229,6 +230,7 @@ void SlDualController::applySettings(const SlDualConfig &next)
 	}
 
 	applyOutputModeSetting();
+	saveProfileDestination();
 
 	if (config.enabled != wasEnabled)
 	{
@@ -554,6 +556,10 @@ void SlDualController::onFrontendEvent(enum obs_frontend_event event)
 		onCollectionChanged();
 		break;
 	}
+	case OBS_FRONTEND_EVENT_PROFILE_CHANGED: {
+		loadProfileDestination();
+		break;
+	}
 	case OBS_FRONTEND_EVENT_FINISHED_LOADING: {
 		ensureCanvas();
 		refreshSceneUi();
@@ -689,7 +695,7 @@ void SlDualController::onSaveLoad(obs_data_t *saveData, bool saving)
 		{
 			// These settings belong to the collection, so a collection that carries none gets the
 			// defaults - not whatever the previous one left in `config`, which would then be written
-			// into this collection's file at the next save. Stream credentials included.
+			// into this collection's file at the next save.
 			resetConfigToDefaults();
 
 			if (transitions)
@@ -700,7 +706,49 @@ void SlDualController::onSaveLoad(obs_data_t *saveData, bool saving)
 
 void SlDualController::resetConfigToDefaults()
 {
-	config = SlDualConfig();
+	SlDualConfig defaults;
+	defaults.server = std::move(config.server);
+	defaults.key = std::move(config.key);
+	defaults.useAuth = config.useAuth;
+	defaults.authUsername = std::move(config.authUsername);
+	defaults.authPassword = std::move(config.authPassword);
+	config = std::move(defaults);
+}
+
+static const char *kProfileSection = "SlDualOutput";
+
+void SlDualController::loadProfileDestination()
+{
+	config_t *profile = obs_frontend_get_profile_config();
+
+	if (!profile)
+		return;
+
+	auto get = [profile](const char *name) {
+		const char *value = config_get_string(profile, kProfileSection, name);
+		return std::string(value ? value : "");
+	};
+
+	config.server = get("Server");
+	config.key = get("Key");
+	config.useAuth = config_get_bool(profile, kProfileSection, "UseAuth");
+	config.authUsername = get("AuthUsername");
+	config.authPassword = get("AuthPassword");
+}
+
+void SlDualController::saveProfileDestination() const
+{
+	config_t *profile = obs_frontend_get_profile_config();
+
+	if (!profile)
+		return;
+
+	config_set_string(profile, kProfileSection, "Server", config.server.c_str());
+	config_set_string(profile, kProfileSection, "Key", config.key.c_str());
+	config_set_bool(profile, kProfileSection, "UseAuth", config.useAuth);
+	config_set_string(profile, kProfileSection, "AuthUsername", config.authUsername.c_str());
+	config_set_string(profile, kProfileSection, "AuthPassword", config.authPassword.c_str());
+	config_save(profile);
 }
 
 obs_data_t *SlDualController::buildSaveData() const
@@ -743,17 +791,6 @@ obs_data_t *SlDualController::buildSaveData() const
 	obs_data_set_array(d, "custom_transitions", customs);
 	obs_data_array_release(customs);
 	obs_data_set_bool(d, "seeded", config.seeded);
-	obs_data_set_string(d, "server", config.server.c_str());
-
-	// Deliberate, and a known tradeoff: the key and password go in the scene collection rather than
-	// the profile, so that each collection can stream somewhere different. OBS keeps its own stream
-	// key in the profile instead, which is why exporting a collection is normally safe - here it is
-	// not, and an exported or shared collection carries live credentials in clear text. Moving them
-	// to profile storage would mean one key for every collection, which is not what this is for.
-	obs_data_set_string(d, "key", config.key.c_str());
-	obs_data_set_bool(d, "use_auth", config.useAuth);
-	obs_data_set_string(d, "auth_username", config.authUsername.c_str());
-	obs_data_set_string(d, "auth_password", config.authPassword.c_str());
 	obs_data_set_string(d, "encoder_id", config.encoderId.c_str());
 	obs_data_set_int(d, "video_bitrate", config.videoBitrateKbps);
 	obs_data_set_int(d, "audio_bitrate", config.audioBitrateKbps);
@@ -775,11 +812,6 @@ void SlDualController::applyLoadedData(obs_data_t *d)
 	obs_data_set_default_int(d, "canvas_height", config.canvasHeight);
 	obs_data_set_default_string(d, "active_scene", config.activeScene.c_str());
 	obs_data_set_default_bool(d, "seeded", config.seeded);
-	obs_data_set_default_string(d, "server", config.server.c_str());
-	obs_data_set_default_string(d, "key", config.key.c_str());
-	obs_data_set_default_bool(d, "use_auth", config.useAuth);
-	obs_data_set_default_string(d, "auth_username", config.authUsername.c_str());
-	obs_data_set_default_string(d, "auth_password", config.authPassword.c_str());
 	obs_data_set_default_string(d, "encoder_id", config.encoderId.c_str());
 	obs_data_set_default_int(d, "video_bitrate", config.videoBitrateKbps);
 	obs_data_set_default_int(d, "audio_bitrate", config.audioBitrateKbps);
@@ -846,11 +878,6 @@ void SlDualController::applyLoadedData(obs_data_t *d)
 		transitions->rebuild(config);
 
 	config.seeded = obs_data_get_bool(d, "seeded");
-	config.server = obs_data_get_string(d, "server");
-	config.key = obs_data_get_string(d, "key");
-	config.useAuth = obs_data_get_bool(d, "use_auth");
-	config.authUsername = obs_data_get_string(d, "auth_username");
-	config.authPassword = obs_data_get_string(d, "auth_password");
 	config.encoderId = obs_data_get_string(d, "encoder_id");
 	config.videoBitrateKbps = (int)obs_data_get_int(d, "video_bitrate");
 	config.audioBitrateKbps = (int)obs_data_get_int(d, "audio_bitrate");
