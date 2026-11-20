@@ -26,6 +26,8 @@
 #include <QAction>
 #include <QToolbar>
 
+#include "sl-dual-output/SlDualOutput.hpp"
+
 PROCESS_INFORMATION g_browserProcessInfo;
 static std::thread g_browserWatchThread;
 static std::atomic<bool> g_browserTerminating = false;
@@ -371,6 +373,9 @@ void obs_module_post_load(void)
 	});
 
 	window->menuBar()->addAction(action);
+	
+	// Dual Output WIP
+	SlDualOutput::instance().initialize();
 }
 
 void obs_module_unload(void)
@@ -387,4 +392,5 @@ void obs_module_unload(void)
 	PluginJsHandler::instance().stop();
 	GrpcPlugin::instance().stop();
 	WebServer::instance().stop();
+	SlDualOutput::instance().shutdown();
 }
