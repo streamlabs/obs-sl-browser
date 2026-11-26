@@ -2669,13 +2669,21 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 			}
 		}
 	}
-	catch (const fs::filesystem_error &e)
-	{
-		caughtError = e.what();
-	}
 	catch (const std::exception &e)
 	{
+		// MSVC builds what() from the path in the ANSI code page, which the reply guard rejects as a whole.
 		caughtError = e.what();
+
+		if (!isValidUtf8(caughtError))
+		{
+			const int needed = MultiByteToWideChar(CP_ACP, 0, caughtError.data(), (int)caughtError.size(), nullptr, 0);
+			std::wstring wide((size_t)(needed > 0 ? needed : 0), L'\0');
+
+			if (needed > 0)
+				MultiByteToWideChar(CP_ACP, 0, caughtError.data(), (int)caughtError.size(), wide.data(), needed);
+
+			caughtError = ws_to_utf8(wide);
+		}
 	}
 	catch (...)
 	{
