@@ -1,6 +1,8 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
+#include <vector>
 #include <windows.h>
 #include <wininet.h>
 #include <fstream>
@@ -36,12 +38,159 @@ namespace WindowsFunctions
 		}
 	}
 
-	static bool Unzip(const std::string &filepath, std::vector<std::string> &output)
+	static bool IsUnsafeZipComponent(const std::wstring &component, const char *&out_reason)
 	{
-		unzFile zipFile = unzOpen(filepath.c_str());
+		for (wchar_t c : component)
+		{
+			if (c < 0x20 || wcschr(L":<>\"|?*", c))
+			{
+				out_reason = "invalid character";
+				return true;
+			}
+		}
+
+		if (component.find_last_not_of(L". ") == std::wstring::npos)
+		{
+			out_reason = "dot-only name";
+			return true;
+		}
+
+		std::wstring base = component.substr(0, component.find(L'.'));
+		base.erase(base.find_last_not_of(L' ') + 1);
+		for (wchar_t &c : base)
+			c = (wchar_t)::towupper(c);
+
+		static const wchar_t *const devices[] = {L"CON", L"PRN", L"AUX", L"NUL", L"CONIN$", L"CONOUT$"};
+		for (const wchar_t *device : devices)
+		{
+			if (base == device)
+			{
+				out_reason = "reserved device name";
+				return true;
+			}
+		}
+
+		// COM1-9 and LPT1-9, including the superscript digits Windows also reserves.
+		if (base.size() == 4 && (base.compare(0, 3, L"COM") == 0 || base.compare(0, 3, L"LPT") == 0))
+		{
+			wchar_t digit = base[3];
+			if ((digit >= L'1' && digit <= L'9') || digit == 0x00B9 || digit == 0x00B2 || digit == 0x00B3)
+			{
+				out_reason = "reserved device name";
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	static std::wstring ToLowerWide(std::wstring s)
+	{
+		for (wchar_t &c : s)
+			c = (wchar_t)::towlower(c);
+		return s;
+	}
+
+	struct ZipEntryTarget
+	{
+		std::filesystem::path path;
+		bool isDir = false;
+		bool skip = false;
+	};
+
+	static bool ResolveZipEntry(const std::vector<char> &rawName, bool isUtf8, const std::filesystem::path &destDir, ZipEntryTarget &out_target, const char *&out_reason)
+	{
+		if (rawName.empty() || memchr(rawName.data(), 0, rawName.size()) != nullptr)
+		{
+			out_reason = "empty name or embedded NUL";
+			return false;
+		}
+
+		const UINT codePage = isUtf8 ? CP_UTF8 : CP_ACP;
+		const DWORD flags = isUtf8 ? MB_ERR_INVALID_CHARS : 0;
+		const int needed = MultiByteToWideChar(codePage, flags, rawName.data(), (int)rawName.size(), nullptr, 0);
+		if (needed <= 0)
+		{
+			out_reason = "undecodable name";
+			return false;
+		}
+
+		std::wstring name((size_t)needed, L'\0');
+		MultiByteToWideChar(codePage, flags, rawName.data(), (int)rawName.size(), name.data(), needed);
+
+		if (name.front() == L'/' || name.front() == L'\\')
+		{
+			out_reason = "rooted path";
+			return false;
+		}
+
+		out_target.isDir = (name.back() == L'/' || name.back() == L'\\');
+
+		std::filesystem::path relative;
+		size_t start = 0;
+		while (start <= name.size())
+		{
+			size_t end = name.find_first_of(L"/\\", start);
+			if (end == std::wstring::npos)
+				end = name.size();
+
+			std::wstring component = name.substr(start, end - start);
+			start = end + 1;
+
+			if (component.empty() || component == L".")
+				continue;
+
+			if (component == L"..")
+			{
+				out_reason = "parent directory reference";
+				return false;
+			}
+
+			if (IsUnsafeZipComponent(component, out_reason))
+				return false;
+
+			relative /= component;
+		}
+
+		if (relative.empty())
+		{
+			if (!out_target.isDir)
+			{
+				out_reason = "no file name";
+				return false;
+			}
+
+			// A directory entry naming the destination itself, such as "./"
+			out_target.skip = true;
+			return true;
+		}
+
+		std::filesystem::path root = destDir.lexically_normal();
+		std::filesystem::path full = (root / relative).lexically_normal();
+
+		std::wstring rootStr = ToLowerWide(root.wstring());
+		while (!rootStr.empty() && (rootStr.back() == L'\\' || rootStr.back() == L'/'))
+			rootStr.pop_back();
+
+		const std::wstring fullStr = ToLowerWide(full.wstring());
+		const bool contained = fullStr.size() > rootStr.size() && fullStr.compare(0, rootStr.size(), rootStr) == 0 && (fullStr[rootStr.size()] == L'\\' || fullStr[rootStr.size()] == L'/');
+		if (!contained)
+		{
+			out_reason = "escapes the destination folder";
+			return false;
+		}
+
+		out_target.path = full;
+		return true;
+	}
+
+	// Validates every entry before writing any of them, so a rejected archive extracts nothing.
+	static bool Unzip(const std::string &zipPathUtf8, const std::filesystem::path &destDir, std::vector<std::filesystem::path> &out_files, std::string &out_error)
+	{
+		unzFile zipFile = unzOpen(zipPathUtf8.c_str());
 		if (!zipFile)
 		{
-			// Failed to open the zip file
+			out_error = "Could not open zip";
 			return false;
 		}
 
@@ -49,40 +198,100 @@ namespace WindowsFunctions
 		if (unzGetGlobalInfo(zipFile, &globalInfo) != UNZ_OK)
 		{
 			unzClose(zipFile);
+			out_error = "Could not read zip directory";
 			return false;
 		}
 
-		char buffer[4096]; // Adjust buffer size as needed
+		std::vector<ZipEntryTarget> targets;
+		targets.reserve(globalInfo.number_entry);
 
 		for (uLong i = 0; i < globalInfo.number_entry; ++i)
 		{
-			char filename[256];
 			unz_file_info fileInfo;
-
-			if (unzGetCurrentFileInfo(zipFile, &fileInfo, filename, sizeof(filename), NULL, 0, NULL, 0) != UNZ_OK)
+			if (unzGetCurrentFileInfo(zipFile, &fileInfo, NULL, 0, NULL, 0, NULL, 0) != UNZ_OK)
 			{
 				unzClose(zipFile);
+				out_error = "Could not read zip entry #" + std::to_string(i);
 				return false;
 			}
 
-			std::filesystem::path fullOutputPath = std::filesystem::path(filepath).parent_path() / filename;
-
-			if (filename[strlen(filename) - 1] == '/')
+			std::vector<char> rawName(fileInfo.size_filename + 1);
+			if (unzGetCurrentFileInfo(zipFile, &fileInfo, rawName.data(), (uLong)rawName.size(), NULL, 0, NULL, 0) != UNZ_OK)
 			{
-				// It's a directory
-				std::filesystem::create_directories(fullOutputPath);
+				unzClose(zipFile);
+				out_error = "Could not read zip entry #" + std::to_string(i);
+				return false;
+			}
+			rawName.pop_back();
+
+			ZipEntryTarget target;
+			const char *reason = "";
+			if (!ResolveZipEntry(rawName, (fileInfo.flag & 0x800) != 0, destDir, target, reason))
+			{
+				unzClose(zipFile);
+				out_error = "Unsafe zip entry #" + std::to_string(i) + ": " + reason;
+				return false;
+			}
+			targets.push_back(std::move(target));
+
+			if ((i + 1) < globalInfo.number_entry && unzGoToNextFile(zipFile) != UNZ_OK)
+			{
+				unzClose(zipFile);
+				out_error = "Could not read zip entry #" + std::to_string(i + 1);
+				return false;
+			}
+		}
+
+		if (unzGoToFirstFile(zipFile) != UNZ_OK && globalInfo.number_entry > 0)
+		{
+			unzClose(zipFile);
+			out_error = "Could not read zip directory";
+			return false;
+		}
+
+		char buffer[4096];
+
+		for (uLong i = 0; i < globalInfo.number_entry; ++i)
+		{
+			const ZipEntryTarget &target = targets[i];
+			std::error_code ec;
+
+			if (target.skip)
+			{
+				// Nothing to create
+			}
+			else if (target.isDir)
+			{
+				std::filesystem::create_directories(target.path, ec);
+				if (ec)
+				{
+					unzClose(zipFile);
+					out_error = "Could not create folder for entry #" + std::to_string(i);
+					return false;
+				}
 			}
 			else
 			{
-				// It's a file
 				if (unzOpenCurrentFile(zipFile) != UNZ_OK)
 				{
 					unzClose(zipFile);
+					out_error = "Could not open zip entry #" + std::to_string(i);
 					return false;
 				}
 
-				std::filesystem::create_directories(fullOutputPath.parent_path());
-				std::ofstream outFile(fullOutputPath, std::ios::binary);
+				std::filesystem::create_directories(target.path.parent_path(), ec);
+				std::ofstream outFile;
+				if (!ec)
+					outFile.open(target.path, std::ios::binary);
+
+				if (ec || !outFile.is_open())
+				{
+					unzCloseCurrentFile(zipFile);
+					unzClose(zipFile);
+					out_error = "Could not create file for entry #" + std::to_string(i);
+					return false;
+				}
+
 				int error = UNZ_OK;
 				do
 				{
@@ -91,6 +300,7 @@ namespace WindowsFunctions
 					{
 						unzCloseCurrentFile(zipFile);
 						unzClose(zipFile);
+						out_error = "Could not read zip entry #" + std::to_string(i);
 						return false;
 					}
 					if (error > 0)
@@ -100,31 +310,29 @@ namespace WindowsFunctions
 				} while (error > 0);
 
 				outFile.close();
-				auto fpstr = fullOutputPath.string();
-
-				// Use '\' for all just because
-				for (size_t i = 0; i < fpstr.size(); ++i)
+				if (outFile.fail())
 				{
-					if (fpstr[i] == '/')
-						fpstr[i] = '\\';
+					unzCloseCurrentFile(zipFile);
+					unzClose(zipFile);
+					out_error = "Could not write file for entry #" + std::to_string(i);
+					return false;
 				}
 
-				output.push_back(fpstr);
+				out_files.push_back(target.path);
 
 				if (unzCloseCurrentFile(zipFile) != UNZ_OK)
 				{
 					unzClose(zipFile);
+					out_error = "Checksum mismatch in zip entry #" + std::to_string(i);
 					return false;
 				}
 			}
 
-			if ((i + 1) < globalInfo.number_entry)
+			if ((i + 1) < globalInfo.number_entry && unzGoToNextFile(zipFile) != UNZ_OK)
 			{
-				if (unzGoToNextFile(zipFile) != UNZ_OK)
-				{
-					unzClose(zipFile);
-					return false;
-				}
+				unzClose(zipFile);
+				out_error = "Could not read zip entry #" + std::to_string(i + 1);
+				return false;
 			}
 		}
 
