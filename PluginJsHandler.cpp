@@ -4293,7 +4293,7 @@ void PluginJsHandler::frontendOutputRequest(const char *output, const char *what
 			const bool paused = !streaming && obs_frontend_recording_paused();
 			const auto fail = [&out_jsonReturn](const std::string &why) { out_jsonReturn = Json(Json::object({{"error", why}})).dump(); };
 
-			if (request == "start" && (active || state == "starting"))
+			if (request == "start" && (active || state == "starting" || (streaming && s_streamStartInFlight)))
 				fail("Already " + std::string(active ? "running" : "starting") + ": " + name);
 			else if (request != "start" && !active)
 				fail("Not running: " + name);
@@ -4311,6 +4311,17 @@ void PluginJsHandler::frontendOutputRequest(const char *output, const char *what
 			}
 			else
 			{
+				if (streaming && request == "start")
+				{
+					s_streamStartInFlight = true;
+					releaseStreamStartWhenSettled(mainWindow, ++s_streamStartId, 0, false);
+				}
+				else if (streaming)
+				{
+					s_streamStartInFlight = false;
+					++s_streamStartId;
+				}
+
 				// obs may open a message box, and this call must not wait on it
 				QMetaObject::invokeMethod(
 					mainWindow,

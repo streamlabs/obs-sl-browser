@@ -253,11 +253,13 @@ export default {
 				const before = windows().map((w) => w.title);
 				let connected;
 				const got = await happens(async () => {
-					seen.start = await cdp.call("obs_streaming_start");
+					// The second goes out before any event could have reported the first, as with Enhanced Broadcasting's async setup
+					[seen.start, seen.immediateStart] = await Promise.all([cdp.call("obs_streaming_start"), cdp.call("obs_streaming_start")]);
 					connected = await until(() => sockets.size > 0, { timeoutMs: 10000, everyMs: 100 });
 				});
 
 				if (seen.start?.error) return evidence(`start refused: ${seen.start.error}`);
+				if (!/Already starting/.test(seen.immediateStart?.error)) return evidence("no Already starting error for a start issued right after the first");
 				if (!connected) return evidence("obs never connected");
 				if (got !== "streaming:starting") return evidence(`states ${got}`);
 				if ((await cdp.call("obs_get_output_state")).streaming.state !== "starting") return evidence("the getter does not say starting");
