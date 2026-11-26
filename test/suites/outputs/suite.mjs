@@ -7,6 +7,9 @@
  * The profile asks for a confirmation before stopping a recording or a stream. The button asks,
  * these calls must not, so a window that is open after one is a failure.
  *
+ * Windows are compared for obs's own process only: the harness starts it minimized to the tray, so a
+ * failed connection raises a toast from another process rather than a message box.
+ *
  * Not covered: a stream that connects, and the message boxes obs opens for a start it refuses.
  * The stream is pointed at a local socket that accepts and never answers, so it stays connecting.
  */
@@ -17,7 +20,7 @@ import { join } from "node:path";
 
 import { results, until } from "../../harness/suite.mjs";
 import { rundirOf } from "../../harness/obs.mjs";
-import { closeWindow, windowTitles } from "../../harness/windows.mjs";
+import { describeWindow, windowList } from "../../harness/windows.mjs";
 
 // Longer than the coalescing windows, so a held-back trailing event has arrived
 const SETTLE_MS = 800;
@@ -41,12 +44,13 @@ export default {
 		BasicWindow: { WarnBeforeStartingStream: "true", WarnBeforeStoppingStream: "true", WarnBeforeStoppingRecord: "true" },
 	}),
 
-	async run({ cdp, obs, workDir, say }) {
+	async run({ cdp, obs, workDir }) {
 		const r = results();
 
 		const clear = () => cdp.evaluate("window.__sltInbox.length = 0");
 		const events = async () => (await cdp.inbox()).map((args) => JSON.parse(args[0]));
 		const states = async () => (await events()).filter((e) => e.event === "outputStateChanged").map((e) => `${e.output}:${e.state}`).join();
+		const windows = () => windowList(workDir, obs?.pid);
 		const recordings = () => readdirSync(workDir).filter((f) => f.endsWith(".mkv"));
 
 		// Clears, runs the action, waits, and gives back the output:state sequence of what obs reported
@@ -138,7 +142,7 @@ export default {
 		});
 
 		await r.step("recording: start is starting then started, the getter agrees, and no window opens", async () => {
-			const before = windowTitles(workDir);
+			const before = windows().map((w) => w.title);
 			let reply;
 			const got = await happens(async () => (reply = await cdp.call("obs_recording_start")));
 
@@ -150,9 +154,9 @@ export default {
 			if (state.recording.state !== "started" || state.recording.paused !== false) return JSON.stringify(state.recording);
 			if (typeof (await cdp.call("obs_recording_start")).error !== "string") return "no error for starting twice";
 
-			const after = windowTitles(workDir);
+			const opened = windows().filter((w) => !before.includes(w.title));
 
-			if (after.length !== before.length) return `windows ${JSON.stringify(before)} then ${JSON.stringify(after)}`;
+			if (opened.length) return `windows opened: ${opened.map(describeWindow).join(", ")}`;
 		});
 
 		await r.step("recording: pause is one paused event, a second pause is an error", async () => {
@@ -178,7 +182,7 @@ export default {
 		});
 
 		await r.step("recording: stop is stopping then stopped, the file is written, and a second stop is an error", async () => {
-			const before = windowTitles(workDir);
+			const before = windows().map((w) => w.title);
 			let reply;
 			const got = await happens(async () => (reply = await cdp.call("obs_recording_stop")), "recording:stopped");
 
@@ -186,7 +190,10 @@ export default {
 			if (got !== "recording:stopping,recording:stopped") return `states ${got}`;
 			if ((await cdp.call("obs_get_output_state")).recording.state !== "stopped") return "the getter still says running";
 			if (!(await until(() => recordings().length > 0, { timeoutMs: 20000, everyMs: 250 }))) return `no .mkv in ${workDir}`;
-			if (windowTitles(workDir).length !== before.length) return "a window opened";
+
+			const opened = windows().filter((w) => !before.includes(w.title));
+
+			if (opened.length) return `windows opened: ${opened.map(describeWindow).join(", ")}`;
 			if (typeof (await cdp.call("obs_recording_stop")).error !== "string") return "no error for stopping twice";
 		});
 
@@ -199,15 +206,23 @@ export default {
 			if (bad.length) return `no error for ${bad.map(([what, reply]) => `${what} (${JSON.stringify(reply)})`).join(", ")}`;
 		});
 
-		// obs shows this when a stream that was connecting fails, which is the only way out of the step below if the stop is refused
-		const CONNECT_FAILED_TITLE = "Failed to connect";
-
 		await r.step("streaming: a start against a server that never answers stays starting, a second start is an error, and the stream ends in stopped", async () => {
 			const sockets = new Set();
+			let refusing = false;
 			const server = net.createServer((socket) => {
-				sockets.add(socket);
 				socket.on("error", () => {});
+				if (refusing) return socket.destroy();
+				sockets.add(socket);
 			});
+			const seen = {};
+			// Everything a failure needs to be understood from the report alone
+			const evidence = async (why) => `${why}; ${JSON.stringify({
+				at: new Date().toISOString(),
+				states: await states(),
+				getter: (await cdp.call("obs_get_output_state")).streaming,
+				...seen,
+				sockets: sockets.size,
+			})}`;
 
 			await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 
@@ -216,37 +231,41 @@ export default {
 
 				if (settings.error) return settings.error;
 
-				const before = windowTitles(workDir);
-				let reply;
+				const before = windows().map((w) => w.title);
+				let connected;
 				const got = await happens(async () => {
-					reply = await cdp.call("obs_streaming_start");
-					await sleep(700);
+					seen.start = await cdp.call("obs_streaming_start");
+					connected = await until(() => sockets.size > 0, { timeoutMs: 10000, everyMs: 100 });
 				});
 
-				if (reply?.error) return reply.error;
-				if (got !== "streaming:starting") return `states ${got}`;
-				if ((await cdp.call("obs_get_output_state")).streaming.state !== "starting") return "the getter does not say starting";
-				if (!/Already starting/.test((await cdp.call("obs_streaming_start")).error)) return "no Already starting error for a second start";
+				if (seen.start?.error) return evidence(`start refused: ${seen.start.error}`);
+				if (!connected) return evidence("obs never connected");
+				if (got !== "streaming:starting") return evidence(`states ${got}`);
+				if ((await cdp.call("obs_get_output_state")).streaming.state !== "starting") return evidence("the getter does not say starting");
 
-				const stop = await cdp.call("obs_streaming_stop");
+				seen.secondStart = await cdp.call("obs_streaming_start");
 
-				if (stop.error)
-				{
-					r.info("obs_streaming_stop while starting", `refused: ${stop.error}`);
-					sockets.forEach((socket) => socket.destroy());
-				}
+				if (!/Already starting/.test(seen.secondStart.error)) return evidence("no Already starting error for a second start");
 
-				if (!(await until(async () => (await states()).includes("streaming:stopped"), { timeoutMs: 30000, everyMs: 250 }))) return `no stopped in 30 s, states ${await states()}`;
-				if ((await cdp.call("obs_get_output_state")).streaming.state !== "stopped") return "the getter does not say stopped";
+				seen.stop = await cdp.call("obs_streaming_stop");
+
+				if (seen.stop.error) r.info("obs_streaming_stop while starting", `refused: ${seen.stop.error}`);
+
+				// Ending the connection fails the handshake at once, rather than after librtmp's own timeout
+				refusing = true;
+				sockets.forEach((socket) => socket.destroy());
+				server.close();
+
+				if (!(await until(async () => (await states()).includes("streaming:stopped"), { timeoutMs: 30000, everyMs: 250 }))) return evidence("no stopped in 30 s");
+				if ((await cdp.call("obs_get_output_state")).streaming.state !== "stopped") return evidence("the getter does not say stopped");
 
 				await sleep(SETTLE_MS);
 
-				const opened = windowTitles(workDir).filter((title) => !before.includes(title));
+				const opened = windows().filter((w) => !before.includes(w.title));
 
-				if (opened.includes(CONNECT_FAILED_TITLE)) closeWindow(workDir, CONNECT_FAILED_TITLE);
-				if (opened.length) say(`windows left by the stream: ${JSON.stringify(opened)}`);
-				if (opened.some((title) => title !== CONNECT_FAILED_TITLE)) return `windows ${JSON.stringify(opened)}`;
+				if (opened.length) return evidence(`windows opened: ${opened.map(describeWindow).join(", ")}`);
 			} finally {
+				refusing = true;
 				sockets.forEach((socket) => socket.destroy());
 				server.close();
 			}
