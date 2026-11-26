@@ -2600,6 +2600,8 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 	std::string migrationLogPath = appDataPath + "\\StreamlabsOBS_CEF_Cache\\profile-migration.log";
 	std::string streamlabsServiceDir = programDataPath + "\\StreamlabsService";
 
+	std::string caughtError;
+
 	try
 	{
 		std::size_t currentLogDirSize = 0;
@@ -2667,23 +2669,31 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 			}
 		}
 	}
-	catch (const fs::filesystem_error &e)
-	{
-		std::string err = e.what();
-		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
-	}
 	catch (const std::exception &e)
 	{
-		std::string err = e.what();
-		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+		// MSVC builds what() from the path in the ANSI code page, which the reply guard rejects as a whole.
+		caughtError = e.what();
+
+		if (!isValidUtf8(caughtError))
+		{
+			const int needed = MultiByteToWideChar(CP_ACP, 0, caughtError.data(), (int)caughtError.size(), nullptr, 0);
+			std::wstring wide((size_t)(needed > 0 ? needed : 0), L'\0');
+
+			if (needed > 0)
+				MultiByteToWideChar(CP_ACP, 0, caughtError.data(), (int)caughtError.size(), wide.data(), needed);
+
+			caughtError = ws_to_utf8(wide);
+		}
 	}
 	catch (...)
 	{
-		out_jsonReturn = Json(Json::object({{"error", "Unknown Exception"}})).dump();
+		caughtError = "Unknown Exception";
 	}
 
 	if (fullReport.empty())
-		out_jsonReturn = Json(Json::object({{"error", "Empty Report"}})).dump();
+		out_jsonReturn = Json(Json::object({{"error", caughtError.empty() ? "Empty Report" : caughtError}})).dump();
+	else if (!caughtError.empty())
+		out_jsonReturn = Json(Json::object({{"content", fullReport}, {"warning", caughtError}})).dump();
 	else
 		out_jsonReturn = Json(Json::object({{"content", fullReport}})).dump();
 }

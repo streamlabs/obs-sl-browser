@@ -339,7 +339,7 @@ public:
 
 			// .(@function(arg1))
 			//	Returns a string that is a combination of log files. Bytes that are not valid UTF-8 are replaced with U+FFFD
-			//		Example arg1 = { "content": "up to ~8mb of text" }
+			//		Example arg1 = { "content": "up to ~8mb of text", "warning": "set when a log could not be read; content is partial" }
 			{"fs_getLogsReportString", JS_GET_LOGS_REPORT_STRING},
 
 			// .(@function(arg1), @pathA, @pathB)
