@@ -91,11 +91,14 @@ if ($Action -eq 'close') {
 	$h = if ($hit) { [IntPtr]::new($hit.Key) } else { [IntPtr]::Zero }
 	ConvertTo-Json -Compress -InputObject @{ found = [bool]$hit; visible = [bool]($hit -and [SltWindows]::IsWindowVisible($h)); minimized = [bool]($hit -and [SltWindows]::IsIconic($h)) }
 } else {
+	# One process snapshot per call: a lookup per window takes seconds on a busy desktop.
+	$names = @{}
+	foreach ($p in Get-Process) { $names[[uint32]$p.Id] = $p.ProcessName }
 	$rows = @(foreach ($w in $all) {
 		$owner = [SltWindows]::OwnerOf($w.Key)
 		if ($OwnerPid -ne 0 -and $owner -ne $OwnerPid) { continue }
-		$proc = Get-Process -Id $owner -ErrorAction SilentlyContinue
-		@{ title = $w.Value; pid = [int]$owner; class = [SltWindows]::ClassOf($w.Key); process = if ($proc) { $proc.ProcessName } else { '' } }
+		$name = $names[[uint32]$owner]
+		@{ title = $w.Value; pid = [int]$owner; class = [SltWindows]::ClassOf($w.Key); process = if ($name) { $name } else { '' } }
 	})
 	ConvertTo-Json -Compress -InputObject $rows
 }
