@@ -63,6 +63,12 @@ public static class SltWindows {
 				throw new Exception("cannot restore DPI awareness: " + Marshal.GetLastWin32Error());
 		}
 	}
+	// A selection of the tray icon, as Qt's tray icon window receives it from the shell (WM_APP + 101, NIN_SELECT). The icon id is not exposed, so each small one is tried
+	public static bool TrayClick(long h) {
+		bool sent = false;
+		for (int id = 0; id < 8; id++) sent |= PostMessage(new IntPtr(h), 0x8000 + 101, new IntPtr(id), new IntPtr(0x0400));
+		return sent;
+	}
 	public static bool Close(long h) { return PostMessage(new IntPtr(h), 0x0010, IntPtr.Zero, IntPtr.Zero); }
 }
 "@
@@ -72,6 +78,10 @@ if ($Action -eq 'close') {
 	$hit = $all | Where-Object { $_.Value -eq $Title } | Select-Object -First 1
 	if ($hit) { [void][SltWindows]::Close($hit.Key) }
 	ConvertTo-Json -Compress -InputObject @{ closed = [bool]$hit }
+} elseif ($Action -eq 'tray-click') {
+	$hit = $all | Where-Object { $_.Value -eq $Title -and [SltWindows]::OwnerOf($_.Key) -eq $OwnerPid } | Select-Object -First 1
+	if ($hit) { [void][SltWindows]::TrayClick($hit.Key) }
+	ConvertTo-Json -Compress -InputObject @{ found = [bool]$hit }
 } elseif ($Action -eq 'client-size') {
 	$hit = $all | Where-Object { $_.Value -eq $Title } | Select-Object -First 1
 	$size = if ($hit) { [SltWindows]::ClientSize($hit.Key) } else { @(0, 0) }
@@ -129,6 +139,11 @@ export function closeWindow(workDir, title) {
 /** {found, visible, minimized} for the first window with exactly this title. Hidden windows are found too. */
 export function windowState(workDir, title) {
 	return run(workDir, ["state", title]);
+}
+
+/** Clicks the tray icon of the process with this pid, which obs answers by showing or hiding its window. True if it has one. */
+export function clickTrayIcon(workDir, pid) {
+	return run(workDir, ["tray-click", "QTrayIconMessageWindow", String(pid)]).found;
 }
 
 /** Native client dimensions, in physical pixels, for a top-level window. */
