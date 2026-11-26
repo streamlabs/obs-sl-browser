@@ -1,4 +1,5 @@
 #include "GrpcBrowser.h"
+#include "JavascriptApi.h"
 #include "SlBrowser.h"
 #include "WindowsFunctions.h"
 
@@ -18,7 +19,7 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 		execute_args->SetInt(0, request->funcid());
 		execute_args->SetString(1, request->jsonstr());
 
-		if (auto ptr = SlBrowser::instance().browserClient->PopCallback(request->funcid()))
+		if (auto ptr = SlBrowser::instance().m_mainBrowser->client->PopCallback(request->funcid()))
 		{
 			SendBrowserProcessMessage(ptr, PID_RENDERER, msg);
 		}
@@ -36,7 +37,7 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 		CefRefPtr<CefListValue> execute_args = msg->GetArgumentList();
 		execute_args->SetString(0, request->str());
 
-		if (auto ptr = SlBrowser::instance().browserClient->GetMostRecentRenderKnown())
+		if (auto ptr = SlBrowser::instance().m_mainBrowser->client->GetMostRecentRenderKnown())
 		{
 			SendBrowserProcessMessage(ptr, PID_RENDERER, msg);
 		}
@@ -48,10 +49,16 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 		return grpc::Status::OK;
 	}
 
+	grpc::Status com_grpc_obs_event(grpc::ServerContext *context, const grpc_obs_event *request, grpc_empty_Reply *response) override
+	{
+		BrowserClient::SendObsEventToReceiver(request->jsonstr());
+		return grpc::Status::OK;
+	}
+
 	grpc::Status com_grpc_window_toggleVisibility(grpc::ServerContext *context, const grpc_window_toggleVisibility *request, grpc_empty_Reply *response) override
 	{
 		// If hidden
-		if (SlBrowser::instance().m_widget->isHidden())
+		if (SlBrowser::instance().m_mainBrowser->widget->isHidden())
 		{
 			// Main page isn't loading and it also failed
 			if (!SlBrowser::instance().getMainLoadingInProgress() && !SlBrowser::instance().getMainPageSuccess())
@@ -59,24 +66,24 @@ class grpc_proxy_objImpl final : public grpc_proxy_obj::Service
 				// Attempt load default URL again
 				SlBrowser::instance().setMainLoadingInProgress(true);
 
-				if (auto browser = SlBrowser::instance().m_browser)
+				if (auto browser = SlBrowser::instance().m_mainBrowser->browser)
 				{
-					if (auto frame = SlBrowser::instance().m_browser->GetMainFrame())
+					if (auto frame = SlBrowser::instance().m_mainBrowser->browser->GetMainFrame())
 						frame->LoadURL(SlBrowser::getDefaultUrl());
 				}
 			}
 
 			// Swap hidden state
-			SlBrowser::instance().m_widget->setHidden(!SlBrowser::instance().m_widget->isHidden());
+			SlBrowser::instance().m_mainBrowser->widget->setHidden(!SlBrowser::instance().m_mainBrowser->widget->isHidden());
 		}
 
-		if (!SlBrowser::instance().m_widget->isHidden())
+		if (!SlBrowser::instance().m_mainBrowser->widget->isHidden())
 		{
-			HWND hwnd = HWND(SlBrowser::instance().m_widget->winId());
+			HWND hwnd = HWND(SlBrowser::instance().m_mainBrowser->widget->winId());
 			WindowsFunctions::ForceForegroundWindow(hwnd);
 		}
 
-		SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_widget->isHidden());
+		SlBrowser::instance().saveHiddenState(SlBrowser::instance().m_mainBrowser->widget->isHidden());
 		return grpc::Status::OK;
 	}
 };
@@ -127,6 +134,7 @@ bool GrpcBrowser::startServer(int32_t listenPort)
 
 	m_builder = std::make_unique<grpc::ServerBuilder>();
 	m_builder->AddListeningPort(std::string("localhost:") + std::to_string(m_listenPort), grpc::InsecureServerCredentials());
+	m_builder->SetMaxReceiveMessageSize((int)JavascriptApi::kMaxReplyBytes + 64 * 1024);
 
 	m_serverObj = std::make_unique<grpc_proxy_objImpl>();
 	m_builder->RegisterService(m_serverObj.get());

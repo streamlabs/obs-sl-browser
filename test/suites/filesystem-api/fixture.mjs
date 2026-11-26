@@ -45,17 +45,17 @@ const EOCD_SIG = 0x06054b50;
 const DOS_DATE = 0x0021;
 const DOS_TIME = 0x0000;
 
-function entry(name, contents, offset) {
-	// Zip paths are forward-slashed regardless of platform. minizip hands the name through to
-	// std::filesystem, which is happy either way, but the format is not ours to reinterpret.
-	const nameBytes = Buffer.from(name.replaceAll("\\", "/"), "utf8");
+function entry({ name, contents, nameBytes: rawName, flags = 0 }, offset) {
+	// Zip paths are forward-slashed regardless of platform, unless the caller hands over the exact
+	// name bytes - the traversal probes need a backslash and an overlong name to reach the unpacker as is.
+	const nameBytes = rawName ?? Buffer.from(name.replaceAll("\\", "/"), "utf8");
 	const data = Buffer.from(contents, "utf8");
 	const crc = crc32(data);
 
 	const local = Buffer.alloc(30);
 	local.writeUInt32LE(LOCAL_SIG, 0);
 	local.writeUInt16LE(20, 4); // version needed
-	local.writeUInt16LE(0, 6); // flags
+	local.writeUInt16LE(flags, 6); // flags
 	local.writeUInt16LE(0, 8); // method 0 = stored
 	local.writeUInt16LE(DOS_TIME, 10);
 	local.writeUInt16LE(DOS_DATE, 12);
@@ -69,7 +69,7 @@ function entry(name, contents, offset) {
 	central.writeUInt32LE(CENTRAL_SIG, 0);
 	central.writeUInt16LE(20, 4); // version made by
 	central.writeUInt16LE(20, 6); // version needed
-	central.writeUInt16LE(0, 8);
+	central.writeUInt16LE(flags, 8); // flags
 	central.writeUInt16LE(0, 10);
 	central.writeUInt16LE(DOS_TIME, 12);
 	central.writeUInt16LE(DOS_DATE, 14);
@@ -90,14 +90,14 @@ function entry(name, contents, offset) {
 	};
 }
 
-/** @param {{name: string, contents: string}[]} files */
+/** @param {{name?: string, contents: string, nameBytes?: Buffer, flags?: number}[]} files */
 export function buildZip(files) {
 	const locals = [];
 	const centrals = [];
 	let offset = 0;
 
 	for (const f of files) {
-		const e = entry(f.name, f.contents, offset);
+		const e = entry(f, offset);
 		offset += e.local.length;
 		locals.push(e.local);
 		centrals.push(e.central);

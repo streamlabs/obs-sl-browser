@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>obs events frame</title>
+<body>
+<script src="/_harness/inpage.js"></script>
+<script>
+// Embedded as an iframe by suite.mjs, to report whether a subframe can register for obs events.
+const g = window.slabsGlobal;
+
+fetch(location.origin + '/report', {
+	method: 'POST',
+	headers: {'content-type': 'application/json'},
+	body: JSON.stringify({who: 'events-frame', event: 'FRAME', data: {
+		isTop: window === window.top,
+		keys: typeof g === 'object' ? Object.keys(g).sort() : null
+	}})
+}).catch(function () { return null; });
+</script>

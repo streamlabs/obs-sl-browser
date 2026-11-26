@@ -29,7 +29,7 @@ The default OBS is the rundir `CI\dev_build.ps1` produces, resolved through `obs
 ```powershell
 node test/run.mjs
 node test/run.mjs --obs "D:\some\other\rundir\bin\64bit\obs64.exe"
-node test/run.mjs --no-launch --keep-open      # against an OBS you already have open
+node test/run.mjs smoke --no-launch --observer-port 8765 --devtools-port 9123
 node test/run.mjs --json --junit results.xml   # what CI runs
 ```
 
@@ -50,6 +50,10 @@ write, it stops rather than overwrite your work — pass `--force` if you meant 
 Your everyday OBS is untouched: nothing writes to `%APPDATA%\obs-studio`, and no
 `portable_mode.txt` marker is left behind, so launching that rundir yourself still behaves
 normally.
+
+`USERPROFILE`, `APPDATA` and `LOCALAPPDATA` of the OBS process tree point at `test/.home`,
+so everything below that says `%APPDATA%` lands there, not in your real profile. The run stops
+if OBS does not create its CEF cache under that directory.
 
 One suite is an exception, and not to the profile: the filesystem api resolves every path
 against `%APPDATA%\StreamlabsOBS`, so `filesystem-api` has nowhere else to run. Most of its
@@ -74,6 +78,12 @@ a second OBS, because it would have no way to tell which one it had attached to.
 `--no-launch` attaches to an OBS that is already running, so it needs to know that OBS's port:
 pass `--devtools-port <n>`, or it assumes 9123 (start that OBS with
 `SL_PLUGIN_REMOTE_DEBUGGING_PORT=9123`).
+It also requires `--observer-port <n>` and an OBS process started with
+`SL_PLUGIN_DEFAULT_URL` on that exact origin, for example
+`http://127.0.0.1:8765/page.html` for `--observer-port 8765`. The harness starts
+its server and navigates the existing browser to the suite page after attaching;
+it cannot change the origin that OBS allowed when it started. Suites that need a
+seeded profile or the test-only tab origin must use the normal launch mode.
 
 That is also why `--keep-open` applies to the last suite of a run: an OBS left open by an
 earlier suite would block every later one.
@@ -113,6 +123,9 @@ then tear everything down and dump the observer's events to `test/.work/<suite>/
 | | |
 | --- | --- |
 | `cdp.call(fn, ...args)` | call a plugin api function, get its reply parsed. `{__missing}`, `{__timeout}` and `{__raw}` are the diagnostic shapes; a setter answering with an empty string parses to `{}` |
+| `cdp.callOn(global, fn, ...args)` | like `call`, on `slabsGlobal` or on `slabsTab` (a tab window) |
+| `cdp.listen(global, registerFn)`, `cdp.inbox()` | register a receiver that stays registered, and read back the arguments of every invocation |
+| `port` | the DevTools port, for `attachTo(port, urlSubstring)` from `harness/cdp.mjs` to drive a further page |
 | `cdp.evaluate(expr, {awaitPromise})` | run anything in the page |
 | `cdp.inject(file)` | load a classic script into the page — how a large in-page suite gets there |
 | `observer.events` | everything any page has reported, newest last |
@@ -147,6 +160,8 @@ in `RegisterCallback`. Until the page calls *some* `slabsGlobal` function, that 
 and pushes are dropped to a `printf`. A page that only listens never hears anything. The
 harness makes a priming call after attaching, so suites inherit this already done; a page
 that runs standalone in a browser has to do it itself.
+
+**Tab urls must not contain `page.html`.** Tab windows show up in the same `/json/list` as the main page, and `waitForPage` matches by substring, so a tab served as `page.html` could be attached to instead of the main window. The `multi-browser` suite names its tab page `tab.html` for that reason.
 
 **Browser sources load late.** A browser source can take anywhere from ten seconds to over a
 minute to load its page after OBS starts, and nothing announces when it has. Repeat and wait
@@ -183,6 +198,7 @@ test/
     obs.mjs        find, start and stop OBS
     profile.mjs    the throwaway portable profile
     cdp.mjs        DevTools client, page attachment, api calls
+    windows.mjs    top-level window titles, and closing one the way a user does
     inpage.js      the shared in-page helpers (window.__slt)
     observer.mjs   the suite web server and its out-of-band report log
     suite.mjs      the suite contract, results(), until()
@@ -191,4 +207,6 @@ test/
     smoke/         the plugin comes up and answers
     source-message/ browsersource_sendMessage reaches the right browser source
     filesystem-api/ the sandboxed filesystem and process api, and its containment
+    multi-browser/ the tabs_* windows: privilege boundary, messaging, resize, lifecycle
+    obs-events/    events_registerReceiver: source, scene and scene item events, each exactly once
 ```

@@ -2,6 +2,7 @@
 #include "JavascriptApi.h"
 #include "PluginJsHandler.h"
 
+#include <chrono>
 #include <filesystem>
 
 /***
@@ -32,14 +33,17 @@ bool grpc_plugin_objClient::send_executeCallback(const int functionId, const std
 {
 	grpc_js_api_ExecuteCallback request;
 	request.set_funcid(functionId);
-	request.set_jsonstr(jsonStr.c_str());
+	request.set_jsonstr(jsonStr);
 
 	grpc_js_api_Reply reply;
 	grpc::ClientContext context;
 	grpc::Status status = stub_->com_grpc_js_executeCallback(&context, request, &reply);
 
 	if (!status.ok())
+	{
+		blog(LOG_ERROR, "send_executeCallback %d failed: %d %s", functionId, (int)status.error_code(), status.error_message().c_str());
 		return m_connected = false;
+	}
 
 	return true;
 }
@@ -47,7 +51,7 @@ bool grpc_plugin_objClient::send_executeCallback(const int functionId, const std
 bool grpc_plugin_objClient::send_executeJavascript(const std::string& codeStr)
 {
 	grpc_run_javascriptOnBrowser request;
-	request.set_str(codeStr.c_str());
+	request.set_str(codeStr);
 
 	grpc_empty_Reply reply;
 	grpc::ClientContext context;
@@ -66,6 +70,23 @@ bool grpc_plugin_objClient::send_windowToggleVisibility()
 	grpc_empty_Reply reply;
 	grpc::ClientContext context;
 	grpc::Status status = stub_->com_grpc_window_toggleVisibility(&context, request, &reply);
+
+	if (!status.ok())
+		return m_connected = false;
+
+	return true;
+}
+
+bool grpc_plugin_objClient::send_obsEvent(const std::string &json)
+{
+	grpc_obs_event request;
+	request.set_jsonstr(json);
+
+	grpc_empty_Reply reply;
+	grpc::ClientContext context;
+	// A browser that stays connected but stops answering must not wedge ObsEvents::stop()
+	context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
+	grpc::Status status = stub_->com_grpc_obs_event(&context, request, &reply);
 
 	if (!status.ok())
 		return m_connected = false;
