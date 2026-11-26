@@ -16,7 +16,7 @@
  * Zero dependencies. Node 22+ for the built-in WebSocket.
  */
 
-import { readdirSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { readdirSync, existsSync, mkdirSync, rmSync, copyFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
@@ -199,6 +199,7 @@ async function runSuite(name) {
 				collection: suite.collection ? join(suite.dir, suite.collection) : null,
 				replace: { BASE_URL: server.origin },
 				basic: suite.profile?.(workDir),
+				user: suite.user?.(workDir),
 				force: has("--force"),
 			});
 			obs = await launchObs({
@@ -256,7 +257,11 @@ async function runSuite(name) {
 		// The OBS log is the first thing anyone wants when a run goes wrong.
 		if (exe && (run.error || run.results.some((r) => r.status === "fail"))) {
 			const log = latestLog(join(rundirOf(exe), "config", "obs-studio", "logs"));
-			if (log) run.obsLog = log;
+			if (log) {
+				// OBS keeps only the newest logs, so a later suite's launch can rotate this one away
+				const kept = join(workDir, "obs.log");
+				try { copyFileSync(log, kept); run.obsLog = kept; } catch { run.obsLog = log; }
+			}
 		}
 		run.ms = Date.now() - started;
 	}

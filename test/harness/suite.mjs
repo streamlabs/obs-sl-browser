@@ -10,6 +10,7 @@
  *   collection   optional scene collection .json, installed and selected. {{BASE_URL}} in it
  *                is replaced with the harness server's origin
  *   profile      optional function (workDir) returning ini sections for the profile's basic.ini
+ *   user         optional function (workDir) returning ini sections for user.ini
  *   cdp          false if the suite does not need a DevTools attachment (default true)
  *   expectMissing api names the suite calls on purpose that do not exist - so test/check.mjs
  *                does not report them as typos
@@ -44,6 +45,7 @@ export function validate(suite, dirName) {
 		bad("collection", "a string, or absent");
 	}
 	if (suite.profile !== undefined && typeof suite.profile !== "function") bad("profile", "a function, or absent");
+	if (suite.user !== undefined && typeof suite.user !== "function") bad("user", "a function, or absent");
 	if (typeof suite.cdp !== "boolean") bad("cdp", "a boolean");
 	if (!Number.isFinite(suite.timeoutMs) || suite.timeoutMs <= 0) bad("timeoutMs", "a positive number of milliseconds");
 	if (!Array.isArray(suite.expectMissing) || suite.expectMissing.some((n) => typeof n !== "string")) {

@@ -34,6 +34,7 @@
 // Obs
 #include <obs.hpp>
 #include <obs-frontend-api.h>
+#include <util/dstr.h>
 
 #include "../obs-browser/panel/browser-panel-internal.hpp"
 
@@ -69,6 +70,25 @@ bool sourceMonitoringEnabled(const obs_source_t *source)
 #else
 	return obs_source_get_monitoring_type(source) != OBS_MONITORING_TYPE_NONE;
 #endif
+}
+
+constexpr int kMinReplayBufferSeconds = 5;
+constexpr int kMaxReplayBufferSeconds = 21600;
+
+const char *replayBufferConfigSection(config_t *config)
+{
+	return astrcmpi(config_get_string(config, "Output", "Mode"), "Advanced") == 0 ? "AdvOut" : "SimpleOutput";
+}
+
+bool isTransitionType(const std::string &id)
+{
+	const char *type;
+	for (size_t i = 0; obs_enum_transition_types(i, &type); i++)
+	{
+		if (id == type)
+			return true;
+	}
+	return false;
 }
 } // namespace
 
@@ -330,6 +350,30 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_OBS_REPLAY_BUFFER_SAVE:
 			JS_OBS_REPLAY_BUFFER_SAVE(jsonParams, jsonReturnStr);
 			break;
+		case JavascriptApi::JS_OBS_REPLAY_BUFFER_GET_SETTINGS:
+			JS_OBS_REPLAY_BUFFER_GET_SETTINGS(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_REPLAY_BUFFER_SET_DURATION:
+			JS_OBS_REPLAY_BUFFER_SET_DURATION(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_STREAMING_START:
+			JS_OBS_STREAMING_START(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_STREAMING_STOP:
+			JS_OBS_STREAMING_STOP(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_RECORDING_START:
+			JS_OBS_RECORDING_START(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_RECORDING_STOP:
+			JS_OBS_RECORDING_STOP(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_RECORDING_PAUSE:
+			JS_OBS_RECORDING_PAUSE(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_RECORDING_UNPAUSE:
+			JS_OBS_RECORDING_UNPAUSE(jsonParams, jsonReturnStr);
+			break;
 		case JavascriptApi::JS_OBS_HOTKEY_REGISTER_FOR_APP:
 			JS_OBS_HOTKEY_REGISTER_FOR_APP(jsonParams, jsonReturnStr);
 			break;
@@ -353,6 +397,9 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_GET_CURRENT_SCENE: JS_GET_CURRENT_SCENE(jsonParams,jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_BRING_FRONT: JS_OBS_BRING_FRONT(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_TOGGLE_HIDE_SELF: JS_OBS_TOGGLE_HIDE_SELF(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_GET_TRANSITIONS:
+			JS_OBS_GET_TRANSITIONS(jsonParams, jsonReturnStr);
+			break;
 		case JavascriptApi::JS_OBS_ADD_TRANSITION: JS_OBS_ADD_TRANSITION(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_SET_CURRENT_TRANSITION: JS_OBS_SET_CURRENT_TRANSITION(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_REMOVE_TRANSITION: JS_OBS_REMOVE_TRANSITION(jsonParams, jsonReturnStr); break;
@@ -388,10 +435,30 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	// We're done, send callback
 	if (param1Value.int_value() > 0)
 	{
-		if (auto *client = GrpcPlugin::instance().getClient())
-			client->send_executeCallback(param1Value.int_value(), jsonReturnStr);
-		else
+		auto *client = GrpcPlugin::instance().getClient();
+
+		if (!client)
+		{
 			blog(LOG_ERROR, "PluginJsHandler::executeApiRequest no channel to answer %s on", funcName.c_str());
+			return;
+		}
+
+		if (jsonReturnStr.size() > JavascriptApi::kMaxReplyBytes)
+		{
+			blog(LOG_ERROR, "PluginJsHandler::executeApiRequest reply to %s is too large (%zu bytes)", funcName.c_str(), jsonReturnStr.size());
+			jsonReturnStr = Json(Json::object{{"error", "The reply was too large to deliver (" + std::to_string(jsonReturnStr.size()) + " bytes)"}}).dump();
+		}
+		else if (!isValidUtf8(jsonReturnStr))
+		{
+			blog(LOG_ERROR, "PluginJsHandler::executeApiRequest reply to %s is not valid UTF-8", funcName.c_str());
+			jsonReturnStr = Json(Json::object{{"error", "The reply was not valid UTF-8"}}).dump();
+		}
+
+		if (!client->send_executeCallback(param1Value.int_value(), jsonReturnStr))
+		{
+			blog(LOG_ERROR, "PluginJsHandler::executeApiRequest could not deliver the reply to %s", funcName.c_str());
+			client->send_executeCallback(param1Value.int_value(), Json(Json::object{{"error", "The reply could not be delivered"}}).dump());
+		}
 	}
 }
 
@@ -1301,8 +1368,7 @@ void PluginJsHandler::JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, 
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[mainWindow, sourceName, &out_jsonReturn]() {
-
+		[sourceName, &out_jsonReturn]() {
 			obs_frontend_source_list transitions = {};
 			obs_frontend_get_transitions(&transitions);
 
@@ -1326,8 +1392,9 @@ void PluginJsHandler::JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, 
 			}
 
 			obs_frontend_set_current_transition(transition);
+			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
 		},
-		Qt::BlockingQueuedConnection);	
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::JS_SAVE_SL_BROWSER_DOCKS(const json11::Json& params, std::string& out_jsonReturn)
@@ -1351,26 +1418,48 @@ void PluginJsHandler::JS_SOURCE_FILTER_ADD(const json11::Json &params, std::stri
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
 	// This code is executed in the context of the QMainWindow's thread.
-	QMetaObject::invokeMethod(mainWindow, [mainWindow, sourceName, filterName, &out_jsonReturn]() {
-		OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[sourceName, filterName, &out_jsonReturn]() {
+			OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
 
-		if (!source)
-		{
-			out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
-			return;
-		}
+			if (!source)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
+				return;
+			}
 
-		OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
+			OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
 
-		if (!filter)
-		{
-			out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
-			return;
-		}
+			if (!filter)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
+				return;
+			}
 
-		obs_source_filter_add(source, filter);
-		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
-	});
+			if (obs_source_get_type(filter) != OBS_SOURCE_TYPE_FILTER)
+			{
+				out_jsonReturn = Json(Json::object({{"error", filterName + " is not a filter"}})).dump();
+				return;
+			}
+
+			if (obs_source_t *parent = obs_filter_get_parent(filter))
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Filter is already attached to " + std::string(obs_source_get_name(parent))}})).dump();
+				return;
+			}
+
+			obs_source_filter_add(source, filter);
+
+			if (obs_filter_get_parent(filter) != source.Get())
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Filter is not compatible with the source"}})).dump();
+				return;
+			}
+
+			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::string &out_jsonReturn)
@@ -1383,30 +1472,42 @@ void PluginJsHandler::JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::s
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
 	// This code is executed in the context of the QMainWindow's thread.
-	QMetaObject::invokeMethod(mainWindow, [mainWindow, sourceName, filterName, &out_jsonReturn]() {
-		OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[sourceName, filterName, &out_jsonReturn]() {
+			OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
 
-		if (!source)
-		{
-			out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
-			return;
-		}
+			if (!source)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
+				return;
+			}
 
-		OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
+			OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
 
-		if (!filter)
-		{
-			out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
-			return;
-		}
+			if (!filter)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
+				return;
+			}
 
-		obs_source_filter_remove(source, filter);
-		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
-	});
+			if (obs_filter_get_parent(filter) != source.Get())
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Filter is not attached to " + sourceName}})).dump();
+				return;
+			}
+
+			obs_source_filter_remove(source, filter);
+			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::string &out_jsonReturn)
 {
+#if LIBOBS_API_MAJOR_VER >= 32
+	out_jsonReturn = Json(Json::object({{"error", "obs_remove_transition is not supported on this OBS version"}})).dump();
+#else
 	const auto &param2Value = params["param2"];
 	std::string sourceName = param2Value.string_value();
 
@@ -1449,7 +1550,7 @@ void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::
 
 					if (idx == -1)
 					{
-						out_jsonReturn = Json(Json::object({{"Transition not found in Qt widget", true}})).dump();
+						out_jsonReturn = Json(Json::object({{"error", "Transition not found in the transitions widget"}})).dump();
 						return;
 					}
 
@@ -1459,7 +1560,39 @@ void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::
 				}
 			}
 
-			out_jsonReturn = Json(Json::object({{"error", "Unable to find transitions widget"}})).dump();	
+			out_jsonReturn = Json(Json::object({{"error", "Unable to find transitions widget"}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+#endif
+}
+
+void PluginJsHandler::JS_OBS_GET_TRANSITIONS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[&out_jsonReturn]() {
+			obs_frontend_source_list list = {};
+			obs_frontend_get_transitions(&list);
+			OBSSourceAutoRelease current = obs_frontend_get_current_transition();
+
+			Json::array transitions;
+			for (size_t i = 0; i < list.sources.num; i++)
+			{
+				obs_source_t *source = list.sources.array[i];
+				transitions.push_back(Json::object({
+					{"name", obs_source_get_name(source)},
+					{"uuid", obs_source_get_uuid(source)},
+					{"id", obs_source_get_id(source)},
+					{"current", source == current.Get()},
+					{"configurable", obs_source_configurable(source)},
+					{"fixed", obs_transition_fixed(source)},
+				}));
+			}
+
+			obs_frontend_source_list_free(&list);
+			out_jsonReturn = Json(Json::object({{"transitions", transitions}, {"duration", obs_frontend_get_transition_duration()}})).dump();
 		},
 		Qt::BlockingQueuedConnection);
 }
@@ -1471,6 +1604,21 @@ void PluginJsHandler::JS_OBS_ADD_TRANSITION(const json11::Json& params, std::str
 	std::string id = param2Value.string_value();
 	std::string sourceName = param3Value.string_value();
 
+	if (!isTransitionType(id))
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Not a transition type: " + id}})).dump();
+		return;
+	}
+
+	if (sourceName.empty())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "The transition needs a name"}})).dump();
+		return;
+	}
+
+#if LIBOBS_API_MAJOR_VER >= 32
+	out_jsonReturn = Json(Json::object({{"error", "obs_add_transition is not supported on this OBS version"}})).dump();
+#else
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
 	// This code is executed in the context of the QMainWindow's thread.
@@ -1539,9 +1687,10 @@ void PluginJsHandler::JS_OBS_ADD_TRANSITION(const json11::Json& params, std::str
 				}
 			}
 
-			out_jsonReturn = Json(Json::object({{"error", "Unable to find transitions widget"}})).dump();	
+			out_jsonReturn = Json(Json::object({{"error", "Unable to find transitions widget"}})).dump();
 		},
 		Qt::BlockingQueuedConnection);
+#endif
 }
 
 void PluginJsHandler::JS_OBS_TOGGLE_HIDE_SELF(const json11::Json& params, std::string& out_jsonReturn)
@@ -2128,17 +2277,33 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 			}
 			else
 			{
-				std::vector<std::string> filepaths;
+				std::vector<std::filesystem::path> filepaths;
+				std::string unzipError;
+				bool unzipped = false;
 
-				if (WindowsFunctions::Unzip(ws_to_utf8(zipFilepath), filepaths))
+				try
+				{
+					unzipped = WindowsFunctions::Unzip(ws_to_utf8(zipFilepath), std::filesystem::path(subFolderPath), filepaths, unzipError);
+				}
+				catch (const std::exception &)
+				{
+					unzipError = "Unexpected error while unpacking";
+				}
+
+				if (unzipped)
 				{
 					// Build json string now
 					Json::array json_array;
 
 					for (const auto &filepath : filepaths)
 					{
+						std::wstring native = filepath.wstring();
+
+						// Use '\' for all just because
+						std::replace(native.begin(), native.end(), L'/', L'\\');
+
 						Json::object obj;
-						obj["path"] = filepath;
+						obj["path"] = ws_to_utf8(native);
 						json_array.push_back(obj);
 					}
 
@@ -2146,7 +2311,7 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 				}
 				else
 				{
-					out_jsonReturn = Json(Json::object({{"error", "Unzip file failed"}})).dump();
+					out_jsonReturn = Json(Json::object({{"error", "Unzip file failed: " + unzipError}})).dump();
 				}
 			}
 		}
@@ -2285,7 +2450,7 @@ void PluginJsHandler::JS_READ_FILE(const Json &params, std::string &out_jsonRetu
 	std::string filepath = param2Value.string_value();
 	std::string filecontents;
 
-	std::ifstream file(filepath, std::ios::binary | std::ios::ate);
+	std::ifstream file(std::filesystem::path(utf8_to_ws(filepath)), std::ios::binary | std::ios::ate);
 
 	Json ret;
 
@@ -2307,7 +2472,11 @@ void PluginJsHandler::JS_READ_FILE(const Json &params, std::string &out_jsonRetu
 				std::stringstream buffer;
 				buffer << file.rdbuf();
 				filecontents = buffer.str();
-				ret = Json::object({{"contents", filecontents}});
+
+				if (isValidUtf8(filecontents))
+					ret = Json::object({{"contents", filecontents}});
+				else
+					ret = Json::object({{"error", "File is not valid UTF-8 text"}});
 			}
 		}
 		catch (...)
@@ -2435,8 +2604,8 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 
 		// Read the file content
 		std::vector<char> buffer(std::istreambuf_iterator<char>(file), {});
-		fullReport += "-- " + filePath.filename().string() + " --\n\n";
-		fullReport.append(buffer.begin(), buffer.end());
+		fullReport += "-- " + ws_to_utf8(filePath.filename().wstring()) + " --\n\n";
+		fullReport += ws_to_utf8(utf8_to_ws(std::string(buffer.begin(), buffer.end())));
 		fullReport += "\n\n-- END OF FILE --\n\n";
 	};
 
@@ -2446,6 +2615,8 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 	std::string cefLogPath = appDataPath + "\\StreamlabsOBS_CEF_Cache\\cef.log";
 	std::string migrationLogPath = appDataPath + "\\StreamlabsOBS_CEF_Cache\\profile-migration.log";
 	std::string streamlabsServiceDir = programDataPath + "\\StreamlabsService";
+
+	std::string caughtError;
 
 	try
 	{
@@ -2467,7 +2638,7 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 
 					if (currentLogDirSize + fileSize > maxLogFileSize)
 					{
-						fullReport += "-- " + path.filename().string() + " --\n\n";
+						fullReport += "-- " + ws_to_utf8(path.filename().wstring()) + " --\n\n";
 						fullReport += "File too large to fit in report.\n\n";
 						continue;
 					}
@@ -2491,32 +2662,54 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 		// Process Streamlabs Service log and text files with size check
 		if (fs::exists(streamlabsServiceDir) && fs::is_directory(streamlabsServiceDir))
 		{
+			std::size_t serviceLogSize = 0;
+
 			for (const auto &entry : fs::directory_iterator(streamlabsServiceDir))
 			{
 				const auto &path = entry.path();
 
 				if (path.extension() == ".log" || path.extension() == ".txt")
+				{
+					const std::size_t contribution = std::min<std::size_t>(entry.file_size(), maxLogFileSize);
+
+					if (serviceLogSize + contribution > maxLogFileSize)
+					{
+						fullReport += "-- " + ws_to_utf8(path.filename().wstring()) + " --\n\n";
+						fullReport += "File too large to fit in report.\n\n";
+						continue;
+					}
+
 					processLogFile(path, fullReport);
+					serviceLogSize += contribution;
+				}
 			}
 		}
 	}
-	catch (const fs::filesystem_error &e)
-	{
-		std::string err = e.what();
-		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
-	}
 	catch (const std::exception &e)
 	{
-		std::string err = e.what();
-		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+		// MSVC builds what() from the path in the ANSI code page, which the reply guard rejects as a whole.
+		caughtError = e.what();
+
+		if (!isValidUtf8(caughtError))
+		{
+			const int needed = MultiByteToWideChar(CP_ACP, 0, caughtError.data(), (int)caughtError.size(), nullptr, 0);
+			std::wstring wide((size_t)(needed > 0 ? needed : 0), L'\0');
+
+			if (needed > 0)
+				MultiByteToWideChar(CP_ACP, 0, caughtError.data(), (int)caughtError.size(), wide.data(), needed);
+
+			caughtError = ws_to_utf8(wide);
+		}
 	}
 	catch (...)
 	{
-		out_jsonReturn = Json(Json::object({{"error", "Unknown Exception"}})).dump();
+		caughtError = "Unknown Exception";
 	}
 
 	if (fullReport.empty())
-		out_jsonReturn = Json(Json::object({{"error", "Empty Report"}})).dump();
+		out_jsonReturn = Json(Json::object({{"error", caughtError.empty() ? "Empty Report" : caughtError}})).dump();
+	else if (!caughtError.empty())
+		out_jsonReturn = Json(Json::object({{"content", fullReport}, {"warning", caughtError}})).dump();
 	else
 		out_jsonReturn = Json(Json::object({{"content", fullReport}})).dump();
 }
@@ -4106,6 +4299,176 @@ void PluginJsHandler::JS_OBS_REPLAY_BUFFER_SAVE(const json11::Json &params, std:
 	replayBufferRequest("save", out_jsonReturn);
 }
 
+void PluginJsHandler::JS_OBS_REPLAY_BUFFER_GET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[&out_jsonReturn]() {
+			config_t *config = obs_frontend_get_profile_config();
+			const char *section = replayBufferConfigSection(config);
+			OBSOutputAutoRelease output = obs_frontend_get_replay_buffer_output();
+
+			Json::object settings = {
+				{"enabled", config_get_bool(config, section, "RecRB")},
+				{"available", output != nullptr},
+				{"duration", (int)config_get_int(config, section, "RecRBTime")},
+			};
+			out_jsonReturn = Json(settings).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_REPLAY_BUFFER_SET_DURATION(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const double seconds = params["param2"].number_value();
+	const bool valid = params["param2"].is_number() && seconds == std::floor(seconds) && seconds >= kMinReplayBufferSeconds && seconds <= kMaxReplayBufferSeconds;
+
+	if (!valid)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "The duration must be a whole number of seconds from 5 to 21600"}})).dump();
+		return;
+	}
+
+	const int duration = (int)seconds;
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[duration, &out_jsonReturn]() {
+			config_t *config = obs_frontend_get_profile_config();
+			config_set_int(config, replayBufferConfigSection(config), "RecRBTime", duration);
+
+			if (config_save_safe(config, "tmp", nullptr) != CONFIG_SUCCESS)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Failed to save the profile settings"}})).dump();
+				return;
+			}
+
+			out_jsonReturn = Json(Json::object()).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+// With Enhanced Broadcasting obs emits STREAMING_STARTING only after an async setup, so a start is in flight before any event shows it
+static bool s_streamStartInFlight = false;
+static uint64_t s_streamStartId = 0;
+
+// A failed setup raises a modal error and emits nothing, so the start is over once that modal has been dismissed
+static void releaseStreamStartWhenSettled(QMainWindow *mainWindow, uint64_t id, int polls, bool sawModal)
+{
+	QTimer::singleShot(250, mainWindow, [mainWindow, id, polls, sawModal]() {
+		if (id != s_streamStartId)
+			return;
+
+		const bool modal = QApplication::activeModalWidget() != nullptr;
+		const bool begun = ObsEvents::instance().outputState()["streaming"]["state"].string_value() != "stopped" || obs_frontend_streaming_active();
+
+		if (begun || (sawModal && !modal) || polls >= 120)
+			s_streamStartInFlight = false;
+		else
+			releaseStreamStartWhenSettled(mainWindow, id, polls + 1, sawModal || modal);
+	});
+}
+
+// start and stop answer once the request is made; the outcome is the outputStateChanged event
+void PluginJsHandler::frontendOutputRequest(const char *output, const char *what, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+	const std::string name = output;
+	const std::string request = what;
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, name, request, &out_jsonReturn]() {
+			const bool streaming = name == "streaming";
+			const bool active = streaming ? obs_frontend_streaming_active() : obs_frontend_recording_active();
+			const std::string state = ObsEvents::instance().outputState()[name]["state"].string_value();
+			const bool paused = !streaming && obs_frontend_recording_paused();
+			const auto fail = [&out_jsonReturn](const std::string &why) { out_jsonReturn = Json(Json::object({{"error", why}})).dump(); };
+
+			if (request == "start" && (active || state == "starting" || (streaming && s_streamStartInFlight)))
+				fail("Already " + std::string(active ? "running" : "starting") + ": " + name);
+			else if (request != "start" && !active)
+				fail("Not running: " + name);
+			else if (request == "pause" && paused)
+				fail("The recording is already paused");
+			else if (request == "unpause" && !paused)
+				fail("The recording is not paused");
+			else if (request == "pause" || request == "unpause")
+			{
+				// Pausing opens no message box, so it can run here
+				obs_frontend_recording_pause(request == "pause");
+
+				if (obs_frontend_recording_paused() == paused)
+					fail("The recording cannot be paused with this encoder setup");
+			}
+			else
+			{
+				if (streaming && request == "start")
+				{
+					s_streamStartInFlight = true;
+					releaseStreamStartWhenSettled(mainWindow, ++s_streamStartId, 0, false);
+				}
+				else if (streaming)
+				{
+					s_streamStartInFlight = false;
+					++s_streamStartId;
+				}
+
+				// obs may open a message box, and this call must not wait on it
+				QMetaObject::invokeMethod(
+					mainWindow,
+					[request, streaming]() {
+						if (request == "start")
+						{
+							if (streaming)
+								obs_frontend_streaming_start();
+							else
+								obs_frontend_recording_start();
+						}
+						else if (streaming)
+							obs_frontend_streaming_stop();
+						else
+							obs_frontend_recording_stop();
+					},
+					Qt::QueuedConnection);
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_STREAMING_START(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("streaming", "start", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_STREAMING_STOP(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("streaming", "stop", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_RECORDING_START(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("recording", "start", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_RECORDING_STOP(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("recording", "stop", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_RECORDING_PAUSE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("recording", "pause", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_RECORDING_UNPAUSE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("recording", "unpause", out_jsonReturn);
+}
+
 void PluginJsHandler::JS_OBS_HOTKEY_REGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn)
 {
 	const std::string app_key = params["param2"].string_value();
@@ -4677,6 +5040,17 @@ std::wstring PluginJsHandler::utf8_to_ws(const std::string &str)
 	std::wstring out((size_t)needed, L'\0');
 	MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), out.data(), needed);
 	return out;
+}
+
+bool PluginJsHandler::isValidUtf8(const std::string &str)
+{
+	if (str.empty())
+		return true;
+
+	if (str.size() > (size_t)INT_MAX)
+		return false;
+
+	return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, str.data(), (int)str.size(), nullptr, 0) > 0;
 }
 
 bool PluginJsHandler::resolveWithinDownloads(const std::wstring &downloadsDir, const std::string &inputPath, std::filesystem::path &out_resolved, std::string &out_error)
