@@ -216,7 +216,6 @@ namespace WindowsFunctions
 		}
 
 		std::vector<ZipEntryTarget> targets;
-		targets.reserve(globalInfo.number_entry);
 
 		for (uLong i = 0; i < globalInfo.number_entry; ++i)
 		{
