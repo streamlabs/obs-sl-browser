@@ -2600,6 +2600,8 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 	std::string migrationLogPath = appDataPath + "\\StreamlabsOBS_CEF_Cache\\profile-migration.log";
 	std::string streamlabsServiceDir = programDataPath + "\\StreamlabsService";
 
+	std::string caughtError;
+
 	try
 	{
 		std::size_t currentLogDirSize = 0;
@@ -2669,21 +2671,21 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 	}
 	catch (const fs::filesystem_error &e)
 	{
-		std::string err = e.what();
-		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+		caughtError = e.what();
 	}
 	catch (const std::exception &e)
 	{
-		std::string err = e.what();
-		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+		caughtError = e.what();
 	}
 	catch (...)
 	{
-		out_jsonReturn = Json(Json::object({{"error", "Unknown Exception"}})).dump();
+		caughtError = "Unknown Exception";
 	}
 
 	if (fullReport.empty())
-		out_jsonReturn = Json(Json::object({{"error", "Empty Report"}})).dump();
+		out_jsonReturn = Json(Json::object({{"error", caughtError.empty() ? "Empty Report" : caughtError}})).dump();
+	else if (!caughtError.empty())
+		out_jsonReturn = Json(Json::object({{"content", fullReport}, {"warning", caughtError}})).dump();
 	else
 		out_jsonReturn = Json(Json::object({{"content", fullReport}})).dump();
 }

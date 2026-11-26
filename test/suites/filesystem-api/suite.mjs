@@ -493,6 +493,27 @@ export default {
 				if (!res.content.includes("�")) return "no U+FFFD where the stray bytes were";
 			});
 
+			// The logs directory is listed first, so a failure there leaves nothing collected. A partial
+			// report is not reachable here: the stages after it read ProgramData, which is not scratch.
+			await r.step("fs_getLogsReportString reports why nothing could be collected, not 'Empty Report'", async () => {
+				const logsDir = join(process.env.APPDATA, "obs-studio", "logs");
+				const everyone = "*S-1-1-0";
+
+				mkdirSync(logsDir, { recursive: true });
+				execFileSync("icacls", [logsDir, "/deny", `${everyone}:(RD)`], { stdio: "pipe" });
+				try {
+					const res = await cdp.call("fs_getLogsReportString");
+					const bad = diag("fs_getLogsReportString", res);
+					if (bad) return bad;
+					if (res.content !== undefined) return `got content: ${short(res)}`;
+					if (typeof res.error !== "string" || res.error === "Empty Report" || !res.error.includes("directory_iterator")) {
+						return `the error does not carry the exception: ${short(res)}`;
+					}
+				} finally {
+					execFileSync("icacls", [logsDir, "/remove:d", everyone], { stdio: "pipe" });
+				}
+			});
+
 			/* -------------------------------------------------------- fs_sha256 --- */
 
 			// The two published vectors, hardcoded on purpose: computing them here with node
