@@ -267,6 +267,7 @@ export default {
 		const r = results();
 		const launched = []; // pids fs_runSlExe handed back that have not been stopped yet
 		const downloadDirs = []; // the directories fs_downloadZip made, noted as it made them
+		const zipEscapes = []; // where an unguarded unpacker would have put each probe
 		const outsiders = []; // processes node started itself, to try the api on something not its own
 		const seeded = []; // the outermost thing the logs report step added under %APPDATA%\obs-studio
 		let zipServer = null;
@@ -1180,6 +1181,144 @@ export default {
 			});
 
 			/*
+			 * fs_downloadZip's unpacker takes every entry name from the archive, so the names are
+			 * the attack surface: each row below is a good first entry followed by one bad one, and
+			 * the archive has to be refused whole. The good entry is the evidence for that - it
+			 * must not be on disk afterwards, which only holds if every name is checked before any
+			 * file is written.
+			 *
+			 * `lands` is where an unguarded unpacker would put the file. Drive-rooted names are
+			 * not probed: a regression would write at the root of the drive.
+			 */
+			const slip = (nameBytes) => buildZip([
+				{ name: "first.txt", contents: "written before the bad entry\n" },
+				{ nameBytes: Buffer.from(nameBytes, "utf8"), contents: "escaped\n" },
+			]);
+
+			const refusals = [
+				{
+					what: "a '..' traversal out of the download folder",
+					zip: slip(`../../sltest-zipslip-fwd-${STAMP}.txt`),
+					lands: join(ROOT, "..", `sltest-zipslip-fwd-${STAMP}.txt`),
+				},
+				{
+					what: "a backslash traversal out of the download folder",
+					zip: slip(`..\\..\\sltest-zipslip-bs-${STAMP}.txt`),
+					lands: join(ROOT, "..", `sltest-zipslip-bs-${STAMP}.txt`),
+				},
+				{
+					what: "a traversal that stays inside the Streamlabs folder but leaves the download folder",
+					zip: slip(`nested/../../sltest-zipslip-mid-${STAMP}.txt`),
+					lands: join(ROOT, `sltest-zipslip-mid-${STAMP}.txt`),
+				},
+				{
+					what: "an absolute path",
+					zip: slip(join(ROOT, "..", `sltest-zipslip-abs-${STAMP}.txt`).replaceAll("\\", "/")),
+					lands: join(ROOT, "..", `sltest-zipslip-abs-${STAMP}.txt`),
+				},
+				{ what: "an alternate data stream name", zip: slip("ads.txt:evil") },
+				{ what: "a reserved device name with an extension", zip: slip("nul.txt") },
+				{ what: "a reserved device name", zip: slip("CON") },
+				{ what: "a component that is only dots and spaces", zip: slip(".. /x.txt") },
+			];
+
+			zipEscapes.push(...refusals.map((c) => c.lands));
+
+			for (const c of refusals) {
+				await gate(`fs_downloadZip refuses ${c.what}, and unpacks nothing`, async () => {
+					const server = await serveBytes(c.zip);
+					try {
+						const { res, created } = await downloadZip(server.url);
+						const bad = wantError("fs_downloadZip", res);
+						if (bad) return bad;
+
+						if (c.lands && existsSync(c.lands)) return `${c.lands} was written`;
+
+						for (const dir of created) {
+							const extra = readdirSync(dir).filter((n) => n.toLowerCase() !== "download.zip");
+							if (extra.length) return `${dir} also holds ${extra.join(", ")}`;
+						}
+					} finally {
+						await server.close();
+					}
+				});
+			}
+
+			for (const [what, nameBytes, wantRefusal] of [
+				["an entry name too long for the old name buffer", Buffer.from("a".repeat(300)), false],
+				["an entry with an empty name", Buffer.alloc(0), true],
+			]) {
+				await gate(`fs_downloadZip survives ${what}`, async () => {
+					const server = await serveBytes(buildZip([
+						{ name: "first.txt", contents: "first\n" },
+						{ nameBytes, contents: "x\n" },
+					]));
+					try {
+						const { res } = await downloadZip(server.url);
+						const bad = diag("fs_downloadZip", res);
+						if (bad) return bad;
+						if (wantRefusal && !res.error) return `expected an error, got ${short(res)}`;
+
+						const after = await cdp.call("sl_getVersionInfo");
+						if (diag("sl_getVersionInfo", after)) return "the plugin stopped answering after it";
+					} finally {
+						await server.close();
+					}
+				});
+			}
+
+			// The shape of a real Vision archive: a leading directory entry, nested files, and a
+			// './' prefix. Vision installs into dirname(reply[0].path), so the order is part of the contract.
+			await gate("fs_downloadZip still unpacks a nested archive, in archive order", async () => {
+				const files = [
+					{ name: "_internal/", contents: "" },
+					{ name: "licenses.txt", contents: "licenses\n" },
+					{ name: "vision.exe", contents: "MZ-not-really\n" },
+					{ name: "_internal/a/b.txt", contents: "deep\n" },
+					{ name: "./dot.txt", contents: "dot\n" },
+				];
+				const server = await serveBytes(buildZip(files));
+				try {
+					const { res, created } = await downloadZip(server.url);
+					const bad = diag("fs_downloadZip", res);
+					if (bad) return bad;
+					if (!Array.isArray(res)) return `expected an array of paths, got ${short(res)}`;
+					if (created.length !== 1) return `expected one download directory, found ${created.length}`;
+
+					const expected = ["licenses.txt", "vision.exe", "_internal\\a\\b.txt", "dot.txt"];
+					const got = res.map((e) => e?.path);
+					const want = expected.map((n) => join(created[0], n));
+					if (got.length !== want.length || got.some((p, i) => p?.toLowerCase() !== want[i].toLowerCase())) {
+						return `expected ${want.join(", ")}, got ${got.join(", ")}`;
+					}
+
+					for (const [i, p] of want.entries()) {
+						const body = files.find((f) => f.name.replace(/^\.\//, "") === expected[i].replaceAll("\\", "/")).contents;
+						if (!existsSync(p) || readFileSync(p, "utf8") !== body) return `${p} is missing or has other contents`;
+					}
+				} finally {
+					await server.close();
+				}
+			});
+
+			await gate("fs_downloadZip unpacks a utf-8 flagged name outside ascii", async () => {
+				const name = "ünï/日本.txt";
+				const server = await serveBytes(buildZip([
+					{ name, contents: "unicode\n", flags: 0x800 },
+				]));
+				try {
+					const { res, created } = await downloadZip(server.url);
+					const bad = diag("fs_downloadZip", res);
+					if (bad) return bad;
+					if (!Array.isArray(res)) return `expected an array of paths, got ${short(res)}`;
+					if (!res[0]?.path?.endsWith("\\ünï\\日本.txt")) return `reply was ${short(res)}`;
+					if (created.length !== 1 || !existsSync(join(created[0], "ünï", "日本.txt"))) return "the file is not on disk under that name";
+				} finally {
+					await server.close();
+				}
+			});
+
+			/*
 			 * A filename outside the basic multilingual plane is two utf-16 code units, and the
 			 * conversion back to utf-8 for the download call used a codecvt that only speaks
 			 * ucs-2. It had nothing to do with malformed input: a perfectly ordinary emoji in a
@@ -1318,7 +1457,7 @@ export default {
 			 * sandbox, held open by a child that outlived the suite; letting that throw would
 			 * abandon every path after it and leave the rest in the user's real AppData.
 			 */
-			const created = [A(), OUTSIDE_DIR, DOWNLOAD_ESCAPE, ...seeded, ...downloadDirs, ...escapes().map((e) => e.lands)]
+			const created = [A(), OUTSIDE_DIR, DOWNLOAD_ESCAPE, ...seeded, ...downloadDirs, ...zipEscapes, ...escapes().map((e) => e.lands)]
 				.filter(Boolean);
 			const refused = [];
 

@@ -297,8 +297,12 @@ public:
 			*/
 
 			// .(@function(arg1), @url, @sha256_optional)
-			//	Downloads and unpacks the zip, returning a list of full file paths to the files that were in it. If sha256 is provided, the zip must match it.
+			//	Downloads and unpacks the zip into a new folder of its own inside the streamlabs folder, returning
+			//	the full paths of the files in it, in archive order. If sha256 is provided, the zip must match it.
+			//	Every entry must stay inside that folder: an absolute path, a drive, '..', a ':' or a reserved
+			//	device name refuses the whole archive before anything is written.
 			//		Example arg1 = [{ "path": "..." },]
+			//		On failure arg1 = { "error": "..." }
 			{"fs_downloadZip", JS_DOWNLOAD_ZIP},
 
 			// .(@function(arg1), @filename, @bool_hideWindow)

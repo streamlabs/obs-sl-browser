@@ -2277,17 +2277,33 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 			}
 			else
 			{
-				std::vector<std::string> filepaths;
+				std::vector<std::filesystem::path> filepaths;
+				std::string unzipError;
+				bool unzipped = false;
 
-				if (WindowsFunctions::Unzip(ws_to_utf8(zipFilepath), filepaths))
+				try
+				{
+					unzipped = WindowsFunctions::Unzip(ws_to_utf8(zipFilepath), std::filesystem::path(subFolderPath), filepaths, unzipError);
+				}
+				catch (const std::exception &)
+				{
+					unzipError = "Unexpected error while unpacking";
+				}
+
+				if (unzipped)
 				{
 					// Build json string now
 					Json::array json_array;
 
 					for (const auto &filepath : filepaths)
 					{
+						std::wstring native = filepath.wstring();
+
+						// Use '\' for all just because
+						std::replace(native.begin(), native.end(), L'/', L'\\');
+
 						Json::object obj;
-						obj["path"] = filepath;
+						obj["path"] = ws_to_utf8(native);
 						json_array.push_back(obj);
 					}
 
@@ -2295,7 +2311,7 @@ void PluginJsHandler::JS_DOWNLOAD_ZIP(const Json &params, std::string &out_jsonR
 				}
 				else
 				{
-					out_jsonReturn = Json(Json::object({{"error", "Unzip file failed"}})).dump();
+					out_jsonReturn = Json(Json::object({{"error", "Unzip file failed: " + unzipError}})).dump();
 				}
 			}
 		}
