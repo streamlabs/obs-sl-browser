@@ -1,0 +1,266 @@
+/*
+ * Can the main page start, pause and stop the outputs, and set the replay buffer's length?
+ *
+ * The calls answer as soon as the request is made, so every step that starts or stops something
+ * waits for the outputStateChanged events and compares the whole tally, as obs-events does.
+ *
+ * The profile asks for a confirmation before stopping a recording or a stream. The button asks,
+ * these calls must not, so a window that is open after one is a failure.
+ *
+ * Not covered: a stream that connects, and the message boxes obs opens for a start it refuses.
+ * The stream is pointed at a local socket that accepts and never answers, so it stays connecting.
+ */
+
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import net from "node:net";
+import { join } from "node:path";
+
+import { results, until } from "../../harness/suite.mjs";
+import { rundirOf } from "../../harness/obs.mjs";
+import { closeWindow, windowTitles } from "../../harness/windows.mjs";
+
+// Longer than the coalescing windows, so a held-back trailing event has arrived
+const SETTLE_MS = 800;
+
+const COLOR = JSON.stringify({ color: 4278190335, width: 100, height: 100 });
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export default {
+	name: "outputs",
+	description: "obs_recording_*, obs_streaming_* errors, obs_replay_buffer_getSettings and obs_replay_buffer_setDuration",
+	timeoutMs: 240000,
+
+	// A replay buffer to read the settings of, and a recording that is not the stream's encoder, which cannot pause
+	profile: (workDir) => ({
+		Output: { Mode: "Simple" },
+		SimpleOutput: { RecRB: "true", RecRBTime: 10, RecQuality: "Small", RecEncoder: "x264", RecFormat2: "mkv", FilePath: workDir.replaceAll("\\", "/") },
+	}),
+
+	user: () => ({
+		BasicWindow: { WarnBeforeStartingStream: "true", WarnBeforeStoppingStream: "true", WarnBeforeStoppingRecord: "true" },
+	}),
+
+	async run({ cdp, obs, workDir, say }) {
+		const r = results();
+
+		const clear = () => cdp.evaluate("window.__sltInbox.length = 0");
+		const events = async () => (await cdp.inbox()).map((args) => JSON.parse(args[0]));
+		const states = async () => (await events()).filter((e) => e.event === "outputStateChanged").map((e) => `${e.output}:${e.state}`).join();
+		const recordings = () => readdirSync(workDir).filter((f) => f.endsWith(".mkv"));
+
+		// Clears, runs the action, waits, and gives back the output:state sequence of what obs reported
+		const happens = async (action, lastState) => {
+			await clear();
+			await action();
+			// A stop is not over when it is asked for: the file is finished first
+			if (lastState) await until(async () => (await states()).endsWith(lastState), { timeoutMs: 20000, everyMs: 250 });
+			await sleep(SETTLE_MS);
+			return states();
+		};
+
+		const registered = await cdp.listen("slabsGlobal", "events_registerReceiver");
+
+		if (registered.__missing)
+		{
+			r.fail("register the receiver", "events_registerReceiver is not exposed");
+			return r.list;
+		}
+
+		// Events are held until obs has finished loading, which this page has no way to hear about,
+		// so make things until one is heard
+		await r.step("events start flowing once obs has finished loading", async () => {
+			let n = 0;
+
+			const heard = await until(
+				async () => {
+					const name = `OutProbe${n++}`;
+					await clear();
+					await cdp.call("obs_source_create", "color_source_v3", name, COLOR, "{}");
+					await sleep(1000);
+					const got = (await events()).some((e) => e.event === "sourceCreated" && e.name === name);
+					await cdp.call("obs_source_destroy", name);
+					return got;
+				},
+				{ timeoutMs: 90000, everyMs: 500 },
+			);
+
+			if (!heard) return "no event arrived in 90 s";
+			await sleep(SETTLE_MS);
+		});
+
+		await r.step("obs_replay_buffer_getSettings reports the profile", async () => {
+			const settings = await cdp.call("obs_replay_buffer_getSettings");
+
+			if (settings.enabled !== true || settings.available !== true || settings.duration !== 10) return JSON.stringify(settings);
+		});
+
+		await r.step("obs_replay_buffer_setDuration refuses what is not a whole number of seconds from 5 to 21600", async () => {
+			const bad = [
+				["4", await cdp.call("obs_replay_buffer_setDuration", 4)],
+				["21601", await cdp.call("obs_replay_buffer_setDuration", 21601)],
+				["a string", await cdp.call("obs_replay_buffer_setDuration", "x")],
+				["a fraction", await cdp.call("obs_replay_buffer_setDuration", 7.5)],
+				["none", await cdp.call("obs_replay_buffer_setDuration")],
+			].filter(([, reply]) => typeof reply.error !== "string");
+
+			if (bad.length) return `no error for ${bad.map(([what, reply]) => `${what} (${JSON.stringify(reply)})`).join(", ")}`;
+			if ((await cdp.call("obs_replay_buffer_getSettings")).duration !== 10) return "a refused duration was applied";
+		});
+
+		await r.step("obs_replay_buffer_setDuration: the new length is reported and saved to the profile", async () => {
+			const reply = await cdp.call("obs_replay_buffer_setDuration", 7);
+
+			if (reply.error) return reply.error;
+			if ((await cdp.call("obs_replay_buffer_getSettings")).duration !== 7) return "getSettings still has the old duration";
+			if (!obs?.exe) return;
+
+			const ini = join(rundirOf(obs.exe), "config", "obs-studio", "basic", "profiles", "SLTest", "basic.ini");
+
+			if (!existsSync(ini)) return `${ini} does not exist`;
+			if (!/^RecRBTime=7\s*$/m.test(readFileSync(ini, "utf8"))) return `RecRBTime=7 is not in ${ini}`;
+		});
+
+		await r.step("obs_replay_buffer_setDuration while the buffer runs is accepted, and the buffer keeps running", async () => {
+			const started = await happens(() => cdp.call("obs_replay_buffer_start"));
+
+			if (started !== "replayBuffer:starting,replayBuffer:started") return `start: ${started}`;
+
+			const reply = await cdp.call("obs_replay_buffer_setDuration", 8);
+
+			if (reply.error) return reply.error;
+			if ((await cdp.call("obs_replay_buffer_getSettings")).duration !== 8) return "getSettings still has the old duration";
+			if ((await cdp.call("obs_get_output_state")).replayBuffer.state !== "started") return "the buffer stopped";
+
+			const stopped = await happens(() => cdp.call("obs_replay_buffer_stop"), "replayBuffer:stopped");
+
+			if (stopped !== "replayBuffer:stopping,replayBuffer:stopped") return `stop: ${stopped}`;
+		});
+
+		await r.step("recording: start is starting then started, the getter agrees, and no window opens", async () => {
+			const before = windowTitles(workDir);
+			let reply;
+			const got = await happens(async () => (reply = await cdp.call("obs_recording_start")));
+
+			if (reply?.error) return reply.error;
+			if (got !== "recording:starting,recording:started") return `states ${got}`;
+
+			const state = await cdp.call("obs_get_output_state");
+
+			if (state.recording.state !== "started" || state.recording.paused !== false) return JSON.stringify(state.recording);
+			if (typeof (await cdp.call("obs_recording_start")).error !== "string") return "no error for starting twice";
+
+			const after = windowTitles(workDir);
+
+			if (after.length !== before.length) return `windows ${JSON.stringify(before)} then ${JSON.stringify(after)}`;
+		});
+
+		await r.step("recording: pause is one paused event, a second pause is an error", async () => {
+			await sleep(1000);
+
+			let reply;
+			const got = await happens(async () => (reply = await cdp.call("obs_recording_pause")));
+
+			if (reply?.error) return reply.error;
+			if (got !== "recording:paused") return `states ${got}`;
+			if ((await cdp.call("obs_get_output_state")).recording.paused !== true) return "the getter does not say paused";
+			if (typeof (await cdp.call("obs_recording_pause")).error !== "string") return "no error for pausing twice";
+		});
+
+		await r.step("recording: unpause is one started event, a second unpause is an error", async () => {
+			let reply;
+			const got = await happens(async () => (reply = await cdp.call("obs_recording_unpause")));
+
+			if (reply?.error) return reply.error;
+			if (got !== "recording:started") return `states ${got}`;
+			if ((await cdp.call("obs_get_output_state")).recording.paused !== false) return "the getter still says paused";
+			if (typeof (await cdp.call("obs_recording_unpause")).error !== "string") return "no error for unpausing twice";
+		});
+
+		await r.step("recording: stop is stopping then stopped, the file is written, and a second stop is an error", async () => {
+			const before = windowTitles(workDir);
+			let reply;
+			const got = await happens(async () => (reply = await cdp.call("obs_recording_stop")), "recording:stopped");
+
+			if (reply?.error) return reply.error;
+			if (got !== "recording:stopping,recording:stopped") return `states ${got}`;
+			if ((await cdp.call("obs_get_output_state")).recording.state !== "stopped") return "the getter still says running";
+			if (!(await until(() => recordings().length > 0, { timeoutMs: 20000, everyMs: 250 }))) return `no .mkv in ${workDir}`;
+			if (windowTitles(workDir).length !== before.length) return "a window opened";
+			if (typeof (await cdp.call("obs_recording_stop")).error !== "string") return "no error for stopping twice";
+		});
+
+		await r.step("recording: pause and unpause when nothing runs are errors", async () => {
+			const bad = [
+				["pause", await cdp.call("obs_recording_pause")],
+				["unpause", await cdp.call("obs_recording_unpause")],
+			].filter(([, reply]) => typeof reply.error !== "string");
+
+			if (bad.length) return `no error for ${bad.map(([what, reply]) => `${what} (${JSON.stringify(reply)})`).join(", ")}`;
+		});
+
+		// obs shows this when a stream that was connecting fails, which is the only way out of the step below if the stop is refused
+		const CONNECT_FAILED_TITLE = "Failed to connect";
+
+		await r.step("streaming: a start against a server that never answers stays starting, a second start is an error, and the stream ends in stopped", async () => {
+			const sockets = new Set();
+			const server = net.createServer((socket) => {
+				sockets.add(socket);
+				socket.on("error", () => {});
+			});
+
+			await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+			try {
+				const settings = await cdp.call("obs_set_stream_settings", "rtmp_custom", "RTMP", `rtmp://127.0.0.1:${server.address().port}/live`, false, "", "", "slt");
+
+				if (settings.error) return settings.error;
+
+				const before = windowTitles(workDir);
+				let reply;
+				const got = await happens(async () => {
+					reply = await cdp.call("obs_streaming_start");
+					await sleep(700);
+				});
+
+				if (reply?.error) return reply.error;
+				if (got !== "streaming:starting") return `states ${got}`;
+				if ((await cdp.call("obs_get_output_state")).streaming.state !== "starting") return "the getter does not say starting";
+				if (!/Already starting/.test((await cdp.call("obs_streaming_start")).error)) return "no Already starting error for a second start";
+
+				const stop = await cdp.call("obs_streaming_stop");
+
+				if (stop.error)
+				{
+					r.info("obs_streaming_stop while starting", `refused: ${stop.error}`);
+					sockets.forEach((socket) => socket.destroy());
+				}
+
+				if (!(await until(async () => (await states()).includes("streaming:stopped"), { timeoutMs: 30000, everyMs: 250 }))) return `no stopped in 30 s, states ${await states()}`;
+				if ((await cdp.call("obs_get_output_state")).streaming.state !== "stopped") return "the getter does not say stopped";
+
+				await sleep(SETTLE_MS);
+
+				const opened = windowTitles(workDir).filter((title) => !before.includes(title));
+
+				if (opened.includes(CONNECT_FAILED_TITLE)) closeWindow(workDir, CONNECT_FAILED_TITLE);
+				if (opened.length) say(`windows left by the stream: ${JSON.stringify(opened)}`);
+				if (opened.some((title) => title !== CONNECT_FAILED_TITLE)) return `windows ${JSON.stringify(opened)}`;
+			} finally {
+				sockets.forEach((socket) => socket.destroy());
+				server.close();
+			}
+		});
+
+		await r.step("streaming: stop when nothing runs is an error, and starts no event", async () => {
+			const got = await happens(async () => {
+				if (typeof (await cdp.call("obs_streaming_stop")).error !== "string") throw new Error("no error for stopping a stream that is not running");
+			});
+
+			if (got) return `states ${got}`;
+			if ((await cdp.call("obs_get_output_state")).streaming.state !== "stopped") return "the getter does not say stopped";
+		});
+
+		return r.list;
+	},
+};

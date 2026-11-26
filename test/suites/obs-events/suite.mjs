@@ -136,12 +136,56 @@ export default {
 			if (scene.name !== "EvScene2" || !scene.uuid) return `payload ${JSON.stringify(scene)}`;
 		});
 
-		await r.step("obs_add_transition: a private source makes no event", async () => {
-			let reply;
-			const why = await happens(async () => (reply = await cdp.call("obs_add_transition", "fade_transition", "EvTransition")), {});
+		await r.step("obs_get_transitions lists Cut and Fade, one of them current", async () => {
+			const { transitions, duration } = await cdp.call("obs_get_transitions");
 
-			if (reply?.error) return `obs_add_transition: ${reply.error}`;
-			return why;
+			if (!Array.isArray(transitions)) return `transitions ${JSON.stringify(transitions)}`;
+
+			const byId = (id) => transitions.find((t) => t.id === id);
+
+			if (!byId("cut_transition") || !byId("fade_transition")) return `no Cut and Fade in ${JSON.stringify(transitions)}`;
+			if (transitions.filter((t) => t.current).length !== 1) return `current in ${JSON.stringify(transitions)}`;
+			if (transitions.some((t) => !t.name || !t.uuid || typeof t.configurable !== "boolean" || typeof t.fixed !== "boolean")) return `an incomplete entry in ${JSON.stringify(transitions)}`;
+			if (new Set(transitions.map((t) => t.uuid)).size !== transitions.length) return "uuids are not distinct";
+			if (typeof duration !== "number") return `duration ${JSON.stringify(duration)}`;
+		});
+
+		await r.step("obs_set_current_transition moves current in obs_get_transitions", async () => {
+			const { transitions } = await cdp.call("obs_get_transitions");
+			const cut = transitions.find((t) => t.id === "cut_transition");
+			const fade = transitions.find((t) => t.id === "fade_transition");
+
+			await cdp.call("obs_set_current_transition", cut.name);
+			const afterCut = (await cdp.call("obs_get_transitions")).transitions.filter((t) => t.current).map((t) => t.uuid);
+
+			await cdp.call("obs_set_current_transition", fade.name);
+			const afterFade = (await cdp.call("obs_get_transitions")).transitions.filter((t) => t.current).map((t) => t.uuid);
+
+			if (afterCut.join() !== cut.uuid) return `after Cut: ${afterCut}`;
+			if (afterFade.join() !== fade.uuid) return `after Fade: ${afterFade}`;
+		});
+
+		// obs 32 and newer have no api to add or remove a transition, and this suite runs against obs 33
+		await r.step("obs_add_transition and obs_remove_transition: bad ids and unsupported versions are errors, and make no event", async () => {
+			const replies = [];
+			const why = await happens(async () => {
+				replies.push(["a name that is not a type", await cdp.call("obs_add_transition", "not_a_transition", "EvTransition")]);
+				replies.push(["a source type that is not a transition", await cdp.call("obs_add_transition", "color_source_v3", "EvTransition")]);
+				replies.push(["no name", await cdp.call("obs_add_transition", "fade_transition", "")]);
+				replies.push(["a real transition type", await cdp.call("obs_add_transition", "fade_transition", "EvTransition")]);
+				replies.push(["remove", await cdp.call("obs_remove_transition", "Fade")]);
+			}, {});
+
+			const bad = replies.filter(([, reply]) => typeof reply.error !== "string");
+
+			if (bad.length) return `no error for ${bad.map(([what, reply]) => `${what} (${JSON.stringify(reply)})`).join(", ")}`;
+			if (!/not supported/.test(replies.at(-2)[1].error) || !/not supported/.test(replies.at(-1)[1].error)) return `unsupported errors ${JSON.stringify(replies.slice(-2))}`;
+			if (why) return why;
+
+			const { transitions } = await cdp.call("obs_get_transitions");
+
+			if (transitions.some((t) => t.name === "EvTransition")) return "EvTransition was added";
+			if (!transitions.some((t) => t.id === "fade_transition")) return "Fade went missing";
 		});
 
 		let itemId;

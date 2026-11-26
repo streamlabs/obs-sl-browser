@@ -110,6 +110,15 @@ private:
 	void JS_OBS_REPLAY_BUFFER_START(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_REPLAY_BUFFER_STOP(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_REPLAY_BUFFER_SAVE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_REPLAY_BUFFER_GET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_REPLAY_BUFFER_SET_DURATION(const json11::Json &params, std::string &out_jsonReturn);
+	void frontendOutputRequest(const char *output, const char *what, std::string &out_jsonReturn);
+	void JS_OBS_STREAMING_START(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_STREAMING_STOP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_RECORDING_START(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_RECORDING_STOP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_RECORDING_PAUSE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_RECORDING_UNPAUSE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_HOTKEY_REGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_HOTKEY_UNREGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_QT_GET_THEME(const json11::Json &params, std::string &out_jsonReturn);
@@ -122,6 +131,7 @@ private:
 	void JS_GET_CURRENT_SCENE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_BRING_FRONT(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_TOGGLE_HIDE_SELF(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_GET_TRANSITIONS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_ADD_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);

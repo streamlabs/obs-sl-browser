@@ -34,6 +34,7 @@
 // Obs
 #include <obs.hpp>
 #include <obs-frontend-api.h>
+#include <util/dstr.h>
 
 #include "../obs-browser/panel/browser-panel-internal.hpp"
 
@@ -69,6 +70,25 @@ bool sourceMonitoringEnabled(const obs_source_t *source)
 #else
 	return obs_source_get_monitoring_type(source) != OBS_MONITORING_TYPE_NONE;
 #endif
+}
+
+constexpr int kMinReplayBufferSeconds = 5;
+constexpr int kMaxReplayBufferSeconds = 21600;
+
+const char *replayBufferConfigSection(config_t *config)
+{
+	return astrcmpi(config_get_string(config, "Output", "Mode"), "Advanced") == 0 ? "AdvOut" : "SimpleOutput";
+}
+
+bool isTransitionType(const std::string &id)
+{
+	const char *type;
+	for (size_t i = 0; obs_enum_transition_types(i, &type); i++)
+	{
+		if (id == type)
+			return true;
+	}
+	return false;
 }
 } // namespace
 
@@ -330,6 +350,30 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_OBS_REPLAY_BUFFER_SAVE:
 			JS_OBS_REPLAY_BUFFER_SAVE(jsonParams, jsonReturnStr);
 			break;
+		case JavascriptApi::JS_OBS_REPLAY_BUFFER_GET_SETTINGS:
+			JS_OBS_REPLAY_BUFFER_GET_SETTINGS(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_REPLAY_BUFFER_SET_DURATION:
+			JS_OBS_REPLAY_BUFFER_SET_DURATION(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_STREAMING_START:
+			JS_OBS_STREAMING_START(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_STREAMING_STOP:
+			JS_OBS_STREAMING_STOP(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_RECORDING_START:
+			JS_OBS_RECORDING_START(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_RECORDING_STOP:
+			JS_OBS_RECORDING_STOP(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_RECORDING_PAUSE:
+			JS_OBS_RECORDING_PAUSE(jsonParams, jsonReturnStr);
+			break;
+		case JavascriptApi::JS_OBS_RECORDING_UNPAUSE:
+			JS_OBS_RECORDING_UNPAUSE(jsonParams, jsonReturnStr);
+			break;
 		case JavascriptApi::JS_OBS_HOTKEY_REGISTER_FOR_APP:
 			JS_OBS_HOTKEY_REGISTER_FOR_APP(jsonParams, jsonReturnStr);
 			break;
@@ -353,6 +397,9 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 		case JavascriptApi::JS_GET_CURRENT_SCENE: JS_GET_CURRENT_SCENE(jsonParams,jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_BRING_FRONT: JS_OBS_BRING_FRONT(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_TOGGLE_HIDE_SELF: JS_OBS_TOGGLE_HIDE_SELF(jsonParams, jsonReturnStr); break;
+		case JavascriptApi::JS_OBS_GET_TRANSITIONS:
+			JS_OBS_GET_TRANSITIONS(jsonParams, jsonReturnStr);
+			break;
 		case JavascriptApi::JS_OBS_ADD_TRANSITION: JS_OBS_ADD_TRANSITION(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_SET_CURRENT_TRANSITION: JS_OBS_SET_CURRENT_TRANSITION(jsonParams, jsonReturnStr); break;
 		case JavascriptApi::JS_OBS_REMOVE_TRANSITION: JS_OBS_REMOVE_TRANSITION(jsonParams, jsonReturnStr); break;
@@ -1407,6 +1454,9 @@ void PluginJsHandler::JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::s
 
 void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::string &out_jsonReturn)
 {
+#if LIBOBS_API_MAJOR_VER >= 32
+	out_jsonReturn = Json(Json::object({{"error", "obs_remove_transition is not supported on this OBS version"}})).dump();
+#else
 	const auto &param2Value = params["param2"];
 	std::string sourceName = param2Value.string_value();
 
@@ -1459,7 +1509,39 @@ void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::
 				}
 			}
 
-			out_jsonReturn = Json(Json::object({{"error", "Unable to find transitions widget"}})).dump();	
+			out_jsonReturn = Json(Json::object({{"error", "Unable to find transitions widget"}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
+#endif
+}
+
+void PluginJsHandler::JS_OBS_GET_TRANSITIONS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[&out_jsonReturn]() {
+			obs_frontend_source_list list = {};
+			obs_frontend_get_transitions(&list);
+			OBSSourceAutoRelease current = obs_frontend_get_current_transition();
+
+			Json::array transitions;
+			for (size_t i = 0; i < list.sources.num; i++)
+			{
+				obs_source_t *source = list.sources.array[i];
+				transitions.push_back(Json::object({
+					{"name", obs_source_get_name(source)},
+					{"uuid", obs_source_get_uuid(source)},
+					{"id", obs_source_get_id(source)},
+					{"current", source == current.Get()},
+					{"configurable", obs_source_configurable(source)},
+					{"fixed", obs_transition_fixed(source)},
+				}));
+			}
+
+			obs_frontend_source_list_free(&list);
+			out_jsonReturn = Json(Json::object({{"transitions", transitions}, {"duration", obs_frontend_get_transition_duration()}})).dump();
 		},
 		Qt::BlockingQueuedConnection);
 }
@@ -1471,6 +1553,21 @@ void PluginJsHandler::JS_OBS_ADD_TRANSITION(const json11::Json& params, std::str
 	std::string id = param2Value.string_value();
 	std::string sourceName = param3Value.string_value();
 
+	if (!isTransitionType(id))
+	{
+		out_jsonReturn = Json(Json::object({{"error", "Not a transition type: " + id}})).dump();
+		return;
+	}
+
+	if (sourceName.empty())
+	{
+		out_jsonReturn = Json(Json::object({{"error", "The transition needs a name"}})).dump();
+		return;
+	}
+
+#if LIBOBS_API_MAJOR_VER >= 32
+	out_jsonReturn = Json(Json::object({{"error", "obs_add_transition is not supported on this OBS version"}})).dump();
+#else
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
 	// This code is executed in the context of the QMainWindow's thread.
@@ -1539,9 +1636,10 @@ void PluginJsHandler::JS_OBS_ADD_TRANSITION(const json11::Json& params, std::str
 				}
 			}
 
-			out_jsonReturn = Json(Json::object({{"error", "Unable to find transitions widget"}})).dump();	
+			out_jsonReturn = Json(Json::object({{"error", "Unable to find transitions widget"}})).dump();
 		},
 		Qt::BlockingQueuedConnection);
+#endif
 }
 
 void PluginJsHandler::JS_OBS_TOGGLE_HIDE_SELF(const json11::Json& params, std::string& out_jsonReturn)
@@ -4104,6 +4202,144 @@ void PluginJsHandler::JS_OBS_REPLAY_BUFFER_STOP(const json11::Json &params, std:
 void PluginJsHandler::JS_OBS_REPLAY_BUFFER_SAVE(const json11::Json &params, std::string &out_jsonReturn)
 {
 	replayBufferRequest("save", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_REPLAY_BUFFER_GET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[&out_jsonReturn]() {
+			config_t *config = obs_frontend_get_profile_config();
+			const char *section = replayBufferConfigSection(config);
+			OBSOutputAutoRelease output = obs_frontend_get_replay_buffer_output();
+
+			Json::object settings = {
+				{"enabled", config_get_bool(config, section, "RecRB")},
+				{"available", output != nullptr},
+				{"duration", (int)config_get_int(config, section, "RecRBTime")},
+			};
+			out_jsonReturn = Json(settings).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_REPLAY_BUFFER_SET_DURATION(const json11::Json &params, std::string &out_jsonReturn)
+{
+	const double seconds = params["param2"].number_value();
+	const bool valid = params["param2"].is_number() && seconds == std::floor(seconds) && seconds >= kMinReplayBufferSeconds && seconds <= kMaxReplayBufferSeconds;
+
+	if (!valid)
+	{
+		out_jsonReturn = Json(Json::object({{"error", "The duration must be a whole number of seconds from 5 to 21600"}})).dump();
+		return;
+	}
+
+	const int duration = (int)seconds;
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[duration, &out_jsonReturn]() {
+			config_t *config = obs_frontend_get_profile_config();
+			config_set_int(config, replayBufferConfigSection(config), "RecRBTime", duration);
+
+			if (config_save_safe(config, "tmp", nullptr) != CONFIG_SUCCESS)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Failed to save the profile settings"}})).dump();
+				return;
+			}
+
+			out_jsonReturn = Json(Json::object()).dump();
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+// start and stop answer once the request is made; the outcome is the outputStateChanged event
+void PluginJsHandler::frontendOutputRequest(const char *output, const char *what, std::string &out_jsonReturn)
+{
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+	const std::string name = output;
+	const std::string request = what;
+
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[mainWindow, name, request, &out_jsonReturn]() {
+			const bool streaming = name == "streaming";
+			const bool active = streaming ? obs_frontend_streaming_active() : obs_frontend_recording_active();
+			const std::string state = ObsEvents::instance().outputState()[name]["state"].string_value();
+			const bool paused = !streaming && obs_frontend_recording_paused();
+			const auto fail = [&out_jsonReturn](const std::string &why) { out_jsonReturn = Json(Json::object({{"error", why}})).dump(); };
+
+			if (request == "start" && (active || state == "starting"))
+				fail("Already " + std::string(active ? "running" : "starting") + ": " + name);
+			else if (request != "start" && !active)
+				fail("Not running: " + name);
+			else if (request == "pause" && paused)
+				fail("The recording is already paused");
+			else if (request == "unpause" && !paused)
+				fail("The recording is not paused");
+			else if (request == "pause" || request == "unpause")
+			{
+				// Pausing opens no message box, so it can run here
+				obs_frontend_recording_pause(request == "pause");
+
+				if (obs_frontend_recording_paused() == paused)
+					fail("The recording cannot be paused with this encoder setup");
+			}
+			else
+			{
+				// obs may open a message box, and this call must not wait on it
+				QMetaObject::invokeMethod(
+					mainWindow,
+					[request, streaming]() {
+						if (request == "start")
+						{
+							if (streaming)
+								obs_frontend_streaming_start();
+							else
+								obs_frontend_recording_start();
+						}
+						else if (streaming)
+							obs_frontend_streaming_stop();
+						else
+							obs_frontend_recording_stop();
+					},
+					Qt::QueuedConnection);
+			}
+		},
+		Qt::BlockingQueuedConnection);
+}
+
+void PluginJsHandler::JS_OBS_STREAMING_START(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("streaming", "start", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_STREAMING_STOP(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("streaming", "stop", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_RECORDING_START(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("recording", "start", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_RECORDING_STOP(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("recording", "stop", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_RECORDING_PAUSE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("recording", "pause", out_jsonReturn);
+}
+
+void PluginJsHandler::JS_OBS_RECORDING_UNPAUSE(const json11::Json &params, std::string &out_jsonReturn)
+{
+	frontendOutputRequest("recording", "unpause", out_jsonReturn);
 }
 
 void PluginJsHandler::JS_OBS_HOTKEY_REGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn)

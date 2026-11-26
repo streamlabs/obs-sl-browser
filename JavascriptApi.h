@@ -134,6 +134,15 @@ public:
 		JS_OBS_SOURCE_UPDATE,
 		JS_OBS_SOURCE_GET_INFO,
 		JS_OBS_GET_AVAILABLE_SOURCE_TYPES,
+		JS_OBS_STREAMING_START,
+		JS_OBS_STREAMING_STOP,
+		JS_OBS_RECORDING_START,
+		JS_OBS_RECORDING_STOP,
+		JS_OBS_RECORDING_PAUSE,
+		JS_OBS_RECORDING_UNPAUSE,
+		JS_OBS_GET_TRANSITIONS,
+		JS_OBS_REPLAY_BUFFER_GET_SETTINGS,
+		JS_OBS_REPLAY_BUFFER_SET_DURATION,
 	};
 
 public:
@@ -254,6 +263,7 @@ public:
 			//	Note that the "Start Stream" button is always the same button regardless of the stream running, the GUI text changes but it's always the same object even when it swaps to "Stop Streaming"
 			//
 			//	NOTE: the "Start Stream" button in OBS sometimes throws a popup, and this function wont call back that popup is done
+			//	obs_streaming_start and obs_streaming_stop do the same without the button's confirmations
 			{"qt_click_stream_button", JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON},
 
 			// .(@function(arg1), @str_qtClassName, @str_cookieName)
@@ -488,6 +498,49 @@ public:
 			//		Example arg1 = {} or { "error": "." }. An error when it is not running
 			{"obs_replay_buffer_save", JS_OBS_REPLAY_BUFFER_SAVE},
 
+			// .(@function(arg1))
+			//	The replay buffer settings of obs's current profile, in the section of its output mode
+			//	enabled is the setting, available is whether this session has a replay buffer to start, which only follows enabled after obs restarts or the user saves output settings
+			//		Example arg1 = { "enabled": true, "available": true, "duration": 20 }
+			{"obs_replay_buffer_getSettings", JS_OBS_REPLAY_BUFFER_GET_SETTINGS},
+
+			// .(@function(arg1), @int_seconds)
+			//	Sets how many seconds the replay buffer keeps, 5 to 21600. Takes effect the next time it starts, so a running buffer keeps its length until restarted
+			//		Example arg1 = {} or { "error": "." }
+			{"obs_replay_buffer_setDuration", JS_OBS_REPLAY_BUFFER_SET_DURATION},
+
+			// .(@function(arg1))
+			//	Starts streaming with the stream settings obs has, without the confirmations the Start Streaming button asks. The result is an outputStateChanged event for "streaming"
+			//	With RecordWhenStreaming / ReplayBufferWhileStreaming set in obs, recording / the replay buffer start too, each with its own events
+			//	A start obs refuses before it begins (a setup error, a YouTube broadcast not set up) shows obs's own message box and makes no event
+			//		Example arg1 = {} or { "error": "." }. An error when it is running or starting
+			{"obs_streaming_start", JS_OBS_STREAMING_START},
+
+			// .(@function(arg1))
+			//	Stops streaming, without the confirmation the button asks. Calling it again while it is stopping forces the stop, as obs does
+			//		Example arg1 = {} or { "error": "." }. An error when it is not running
+			{"obs_streaming_stop", JS_OBS_STREAMING_STOP},
+
+			// .(@function(arg1))
+			//	Starts recording to the output path in obs's settings. The result is an outputStateChanged event for "recording"
+			//	An invalid output path or a full disk shows obs's own message box and makes no event
+			//		Example arg1 = {} or { "error": "." }. An error when it is running or starting
+			{"obs_recording_start", JS_OBS_RECORDING_START},
+
+			// .(@function(arg1))
+			//		Example arg1 = {} or { "error": "." }. An error when it is not running. Calling it again while it is stopping forces the stop
+			{"obs_recording_stop", JS_OBS_RECORDING_STOP},
+
+			// .(@function(arg1))
+			//	Pauses the running recording. The result is an outputStateChanged event with state "paused"
+			//		Example arg1 = {} or { "error": "." }. An error when it is not running, is already paused, or cannot be paused (it shares the stream's encoder)
+			{"obs_recording_pause", JS_OBS_RECORDING_PAUSE},
+
+			// .(@function(arg1))
+			//	The result is an outputStateChanged event with state "started"
+			//		Example arg1 = {} or { "error": "." }. An error when it is not paused
+			{"obs_recording_unpause", JS_OBS_RECORDING_UNPAUSE},
+
 			// .(@function(arg1), @appKey, @name, @description, @bindings_jsonStr)
 			//	Makes an obs hotkey, listed under Settings > Hotkeys as description, that the user can rebind there. Pressing it is the hotkey event of events_registerReceiver
 			//		Example bindings = [{ "key": "OBS_KEY_A", "shift": false, "control": false, "alt": false, "command": false }]
@@ -624,14 +677,21 @@ public:
 			// .(@function(arg1), @bool_hide)
 			{"obs_toggle_hide_self", JS_OBS_TOGGLE_HIDE_SELF},
 
+			// .(@function(arg1))
+			//	The transitions in obs's Scene Transitions dock. duration is the dock's, in ms, shared by every transition that is not fixed
+			//		Example arg1 = { "transitions": [ { "name": "Fade", "uuid": ".", "id": "fade_transition", "current": true, "configurable": false, "fixed": false } ], "duration": 300 }
+			{"obs_get_transitions", JS_OBS_GET_TRANSITIONS},
+
 			// .(@function(arg1), @id, @sourceName)
-			//	@id must be correct or application will crash, ie "swipe_transition" is one example
+			//	An @id that is not a registered transition type, ie "swipe_transition" is one example, is an error
+			//	Not supported on obs 32 and newer, where it is always an error: obs has no api to add a transition. See obs_get_transitions
 			{"obs_add_transition", JS_OBS_ADD_TRANSITION},
 
 			// .(@function(arg1), @sourceName)
 			{"obs_set_current_transition", JS_OBS_SET_CURRENT_TRANSITION},
 
 			// .(@function(arg1), @sourceName)
+			//	Not supported on obs 32 and newer, where it is always an error: obs has no api to remove a transition
 			{"obs_remove_transition", JS_OBS_REMOVE_TRANSITION},
 
 			// .(@function(arg1), @sourceName)
