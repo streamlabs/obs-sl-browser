@@ -8,7 +8,8 @@
  * these calls must not, so a window that is open after one is a failure.
  *
  * Windows are compared for obs's own process only: the harness starts it minimized to the tray, so a
- * failed connection raises a toast from another process rather than a message box.
+ * failed connection raises a toast from another process rather than a message box. obs only asks the
+ * confirmations while its window is visible, so the recording stop is made with the window shown.
  *
  * Not covered: a stream that connects, and the message boxes obs opens for a start it refuses.
  * The stream is pointed at a local socket that accepts and never answers, so it stays connecting.
@@ -20,7 +21,7 @@ import { join } from "node:path";
 
 import { results, until } from "../../harness/suite.mjs";
 import { rundirOf } from "../../harness/obs.mjs";
-import { describeWindow, windowList } from "../../harness/windows.mjs";
+import { describeWindow, clickTrayIcon, windowList, windowState } from "../../harness/windows.mjs";
 
 // Longer than the coalescing windows, so a held-back trailing event has arrived
 const SETTLE_MS = 800;
@@ -181,7 +182,7 @@ export default {
 			if (typeof (await cdp.call("obs_recording_unpause")).error !== "string") return "no error for unpausing twice";
 		});
 
-		await r.step("recording: stop is stopping then stopped, the file is written, and a second stop is an error", async () => {
+		const stopRecording = async () => {
 			const before = windows().map((w) => w.title);
 			let reply;
 			const got = await happens(async () => (reply = await cdp.call("obs_recording_stop")), "recording:stopped");
@@ -195,6 +196,24 @@ export default {
 
 			if (opened.length) return `windows opened: ${opened.map(describeWindow).join(", ")}`;
 			if (typeof (await cdp.call("obs_recording_stop")).error !== "string") return "no error for stopping twice";
+		};
+
+		await r.step("recording: stop is stopping then stopped, the file is written, and a second stop is an error", async () => {
+			const main = windows().find((w) => w.process === "obs64" && w.title.startsWith("OBS "))?.title;
+
+			if (!main) return "obs's main window was not found";
+
+			// The same click a user makes on the tray icon, so obs's own idea of visible changes too
+			if (!clickTrayIcon(workDir, obs.pid)) return "obs has no tray icon";
+
+			try {
+				if (!(await until(() => windowState(workDir, main).visible, { timeoutMs: 5000, everyMs: 100 }))) return "obs's window did not become visible";
+
+				return await stopRecording();
+			} finally {
+				clickTrayIcon(workDir, obs.pid);
+				await until(() => !windowState(workDir, main).visible, { timeoutMs: 5000, everyMs: 100 });
+			}
 		});
 
 		await r.step("recording: pause and unpause when nothing runs are errors", async () => {
@@ -206,7 +225,7 @@ export default {
 			if (bad.length) return `no error for ${bad.map(([what, reply]) => `${what} (${JSON.stringify(reply)})`).join(", ")}`;
 		});
 
-		await r.step("streaming: a start against a server that never answers stays starting, a second start is an error, and the stream ends in stopped", async () => {
+		await r.step("streaming: a start against a server that never answers stays starting, a second start and a stop are errors, and the stream ends in stopped", async () => {
 			const sockets = new Set();
 			let refusing = false;
 			const server = net.createServer((socket) => {
@@ -234,11 +253,13 @@ export default {
 				const before = windows().map((w) => w.title);
 				let connected;
 				const got = await happens(async () => {
-					seen.start = await cdp.call("obs_streaming_start");
+					// The second goes out before any event could have reported the first, as with Enhanced Broadcasting's async setup
+					[seen.start, seen.immediateStart] = await Promise.all([cdp.call("obs_streaming_start"), cdp.call("obs_streaming_start")]);
 					connected = await until(() => sockets.size > 0, { timeoutMs: 10000, everyMs: 100 });
 				});
 
 				if (seen.start?.error) return evidence(`start refused: ${seen.start.error}`);
+				if (!/Already starting/.test(seen.immediateStart?.error)) return evidence("no Already starting error for a start issued right after the first");
 				if (!connected) return evidence("obs never connected");
 				if (got !== "streaming:starting") return evidence(`states ${got}`);
 				if ((await cdp.call("obs_get_output_state")).streaming.state !== "starting") return evidence("the getter does not say starting");
@@ -249,7 +270,7 @@ export default {
 
 				seen.stop = await cdp.call("obs_streaming_stop");
 
-				if (seen.stop.error) r.info("obs_streaming_stop while starting", `refused: ${seen.stop.error}`);
+				if (!/Not running/.test(seen.stop.error)) return evidence("no Not running error for stopping a stream that is still connecting");
 
 				// Ending the connection fails the handshake at once, rather than after librtmp's own timeout
 				refusing = true;

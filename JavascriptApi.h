@@ -521,7 +521,7 @@ public:
 
 			// .(@function(arg1))
 			//	Stops streaming, without the confirmation the button asks. Calling it again while it is stopping forces the stop, as obs does
-			//		Example arg1 = {} or { "error": "." }. An error when it is not running
+			//		Example arg1 = {} or { "error": "." }. An error when it is not running, which includes a stream still connecting
 			{"obs_streaming_stop", JS_OBS_STREAMING_STOP},
 
 			// .(@function(arg1))

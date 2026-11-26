@@ -4327,6 +4327,27 @@ void PluginJsHandler::JS_OBS_REPLAY_BUFFER_SET_DURATION(const json11::Json &para
 		Qt::BlockingQueuedConnection);
 }
 
+// With Enhanced Broadcasting obs emits STREAMING_STARTING only after an async setup, so a start is in flight before any event shows it
+static bool s_streamStartInFlight = false;
+static uint64_t s_streamStartId = 0;
+
+// A failed setup raises a modal error and emits nothing, so the start is over once that modal has been dismissed
+static void releaseStreamStartWhenSettled(QMainWindow *mainWindow, uint64_t id, int polls, bool sawModal)
+{
+	QTimer::singleShot(250, mainWindow, [mainWindow, id, polls, sawModal]() {
+		if (id != s_streamStartId)
+			return;
+
+		const bool modal = QApplication::activeModalWidget() != nullptr;
+		const bool begun = ObsEvents::instance().outputState()["streaming"]["state"].string_value() != "stopped" || obs_frontend_streaming_active();
+
+		if (begun || (sawModal && !modal) || polls >= 120)
+			s_streamStartInFlight = false;
+		else
+			releaseStreamStartWhenSettled(mainWindow, id, polls + 1, sawModal || modal);
+	});
+}
+
 // start and stop answer once the request is made; the outcome is the outputStateChanged event
 void PluginJsHandler::frontendOutputRequest(const char *output, const char *what, std::string &out_jsonReturn)
 {
@@ -4343,7 +4364,7 @@ void PluginJsHandler::frontendOutputRequest(const char *output, const char *what
 			const bool paused = !streaming && obs_frontend_recording_paused();
 			const auto fail = [&out_jsonReturn](const std::string &why) { out_jsonReturn = Json(Json::object({{"error", why}})).dump(); };
 
-			if (request == "start" && (active || state == "starting"))
+			if (request == "start" && (active || state == "starting" || (streaming && s_streamStartInFlight)))
 				fail("Already " + std::string(active ? "running" : "starting") + ": " + name);
 			else if (request != "start" && !active)
 				fail("Not running: " + name);
@@ -4361,6 +4382,17 @@ void PluginJsHandler::frontendOutputRequest(const char *output, const char *what
 			}
 			else
 			{
+				if (streaming && request == "start")
+				{
+					s_streamStartInFlight = true;
+					releaseStreamStartWhenSettled(mainWindow, ++s_streamStartId, 0, false);
+				}
+				else if (streaming)
+				{
+					s_streamStartInFlight = false;
+					++s_streamStartId;
+				}
+
 				// obs may open a message box, and this call must not wait on it
 				QMetaObject::invokeMethod(
 					mainWindow,
