@@ -435,10 +435,30 @@ void PluginJsHandler::executeApiRequest(const std::string &funcName, const std::
 	// We're done, send callback
 	if (param1Value.int_value() > 0)
 	{
-		if (auto *client = GrpcPlugin::instance().getClient())
-			client->send_executeCallback(param1Value.int_value(), jsonReturnStr);
-		else
+		auto *client = GrpcPlugin::instance().getClient();
+
+		if (!client)
+		{
 			blog(LOG_ERROR, "PluginJsHandler::executeApiRequest no channel to answer %s on", funcName.c_str());
+			return;
+		}
+
+		if (jsonReturnStr.size() > JavascriptApi::kMaxReplyBytes)
+		{
+			blog(LOG_ERROR, "PluginJsHandler::executeApiRequest reply to %s is too large (%zu bytes)", funcName.c_str(), jsonReturnStr.size());
+			jsonReturnStr = Json(Json::object{{"error", "The reply was too large to deliver (" + std::to_string(jsonReturnStr.size()) + " bytes)"}}).dump();
+		}
+		else if (!isValidUtf8(jsonReturnStr))
+		{
+			blog(LOG_ERROR, "PluginJsHandler::executeApiRequest reply to %s is not valid UTF-8", funcName.c_str());
+			jsonReturnStr = Json(Json::object{{"error", "The reply was not valid UTF-8"}}).dump();
+		}
+
+		if (!client->send_executeCallback(param1Value.int_value(), jsonReturnStr))
+		{
+			blog(LOG_ERROR, "PluginJsHandler::executeApiRequest could not deliver the reply to %s", funcName.c_str());
+			client->send_executeCallback(param1Value.int_value(), Json(Json::object{{"error", "The reply could not be delivered"}}).dump());
+		}
 	}
 }
 
@@ -1348,8 +1368,7 @@ void PluginJsHandler::JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, 
 	// This code is executed in the context of the QMainWindow's thread.
 	QMetaObject::invokeMethod(
 		mainWindow,
-		[mainWindow, sourceName, &out_jsonReturn]() {
-
+		[sourceName, &out_jsonReturn]() {
 			obs_frontend_source_list transitions = {};
 			obs_frontend_get_transitions(&transitions);
 
@@ -1373,8 +1392,9 @@ void PluginJsHandler::JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, 
 			}
 
 			obs_frontend_set_current_transition(transition);
+			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
 		},
-		Qt::BlockingQueuedConnection);	
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::JS_SAVE_SL_BROWSER_DOCKS(const json11::Json& params, std::string& out_jsonReturn)
@@ -1398,26 +1418,48 @@ void PluginJsHandler::JS_SOURCE_FILTER_ADD(const json11::Json &params, std::stri
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
 	// This code is executed in the context of the QMainWindow's thread.
-	QMetaObject::invokeMethod(mainWindow, [mainWindow, sourceName, filterName, &out_jsonReturn]() {
-		OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[sourceName, filterName, &out_jsonReturn]() {
+			OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
 
-		if (!source)
-		{
-			out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
-			return;
-		}
+			if (!source)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
+				return;
+			}
 
-		OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
+			OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
 
-		if (!filter)
-		{
-			out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
-			return;
-		}
+			if (!filter)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
+				return;
+			}
 
-		obs_source_filter_add(source, filter);
-		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
-	});
+			if (obs_source_get_type(filter) != OBS_SOURCE_TYPE_FILTER)
+			{
+				out_jsonReturn = Json(Json::object({{"error", filterName + " is not a filter"}})).dump();
+				return;
+			}
+
+			if (obs_source_t *parent = obs_filter_get_parent(filter))
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Filter is already attached to " + std::string(obs_source_get_name(parent))}})).dump();
+				return;
+			}
+
+			obs_source_filter_add(source, filter);
+
+			if (obs_filter_get_parent(filter) != source.Get())
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Filter is not compatible with the source"}})).dump();
+				return;
+			}
+
+			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::string &out_jsonReturn)
@@ -1430,26 +1472,35 @@ void PluginJsHandler::JS_SOURCE_FILTER_REMOVE(const json11::Json &params, std::s
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 
 	// This code is executed in the context of the QMainWindow's thread.
-	QMetaObject::invokeMethod(mainWindow, [mainWindow, sourceName, filterName, &out_jsonReturn]() {
-		OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
+	QMetaObject::invokeMethod(
+		mainWindow,
+		[sourceName, filterName, &out_jsonReturn]() {
+			OBSSourceAutoRelease source = obs_get_source_by_name(sourceName.c_str());
 
-		if (!source)
-		{
-			out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
-			return;
-		}
+			if (!source)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find source named " + sourceName}})).dump();
+				return;
+			}
 
-		OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
+			OBSSourceAutoRelease filter = obs_get_source_by_name(filterName.c_str());
 
-		if (!filter)
-		{
-			out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
-			return;
-		}
+			if (!filter)
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Did not find filter named " + filterName}})).dump();
+				return;
+			}
 
-		obs_source_filter_remove(source, filter);
-		out_jsonReturn = Json(Json::object({{"success", true}})).dump();
-	});
+			if (obs_filter_get_parent(filter) != source.Get())
+			{
+				out_jsonReturn = Json(Json::object({{"error", "Filter is not attached to " + sourceName}})).dump();
+				return;
+			}
+
+			obs_source_filter_remove(source, filter);
+			out_jsonReturn = Json(Json::object({{"success", true}})).dump();
+		},
+		Qt::BlockingQueuedConnection);
 }
 
 void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::string &out_jsonReturn)
@@ -1499,7 +1550,7 @@ void PluginJsHandler::JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::
 
 					if (idx == -1)
 					{
-						out_jsonReturn = Json(Json::object({{"Transition not found in Qt widget", true}})).dump();
+						out_jsonReturn = Json(Json::object({{"error", "Transition not found in the transitions widget"}})).dump();
 						return;
 					}
 
@@ -2383,7 +2434,7 @@ void PluginJsHandler::JS_READ_FILE(const Json &params, std::string &out_jsonRetu
 	std::string filepath = param2Value.string_value();
 	std::string filecontents;
 
-	std::ifstream file(filepath, std::ios::binary | std::ios::ate);
+	std::ifstream file(std::filesystem::path(utf8_to_ws(filepath)), std::ios::binary | std::ios::ate);
 
 	Json ret;
 
@@ -2405,7 +2456,11 @@ void PluginJsHandler::JS_READ_FILE(const Json &params, std::string &out_jsonRetu
 				std::stringstream buffer;
 				buffer << file.rdbuf();
 				filecontents = buffer.str();
-				ret = Json::object({{"contents", filecontents}});
+
+				if (isValidUtf8(filecontents))
+					ret = Json::object({{"contents", filecontents}});
+				else
+					ret = Json::object({{"error", "File is not valid UTF-8 text"}});
 			}
 		}
 		catch (...)
@@ -2533,8 +2588,8 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 
 		// Read the file content
 		std::vector<char> buffer(std::istreambuf_iterator<char>(file), {});
-		fullReport += "-- " + filePath.filename().string() + " --\n\n";
-		fullReport.append(buffer.begin(), buffer.end());
+		fullReport += "-- " + ws_to_utf8(filePath.filename().wstring()) + " --\n\n";
+		fullReport += ws_to_utf8(utf8_to_ws(std::string(buffer.begin(), buffer.end())));
 		fullReport += "\n\n-- END OF FILE --\n\n";
 	};
 
@@ -2544,6 +2599,8 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 	std::string cefLogPath = appDataPath + "\\StreamlabsOBS_CEF_Cache\\cef.log";
 	std::string migrationLogPath = appDataPath + "\\StreamlabsOBS_CEF_Cache\\profile-migration.log";
 	std::string streamlabsServiceDir = programDataPath + "\\StreamlabsService";
+
+	std::string caughtError;
 
 	try
 	{
@@ -2565,7 +2622,7 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 
 					if (currentLogDirSize + fileSize > maxLogFileSize)
 					{
-						fullReport += "-- " + path.filename().string() + " --\n\n";
+						fullReport += "-- " + ws_to_utf8(path.filename().wstring()) + " --\n\n";
 						fullReport += "File too large to fit in report.\n\n";
 						continue;
 					}
@@ -2589,32 +2646,54 @@ void PluginJsHandler::JS_GET_LOGS_REPORT_STRING(const json11::Json& params, std:
 		// Process Streamlabs Service log and text files with size check
 		if (fs::exists(streamlabsServiceDir) && fs::is_directory(streamlabsServiceDir))
 		{
+			std::size_t serviceLogSize = 0;
+
 			for (const auto &entry : fs::directory_iterator(streamlabsServiceDir))
 			{
 				const auto &path = entry.path();
 
 				if (path.extension() == ".log" || path.extension() == ".txt")
+				{
+					const std::size_t contribution = std::min<std::size_t>(entry.file_size(), maxLogFileSize);
+
+					if (serviceLogSize + contribution > maxLogFileSize)
+					{
+						fullReport += "-- " + ws_to_utf8(path.filename().wstring()) + " --\n\n";
+						fullReport += "File too large to fit in report.\n\n";
+						continue;
+					}
+
 					processLogFile(path, fullReport);
+					serviceLogSize += contribution;
+				}
 			}
 		}
 	}
-	catch (const fs::filesystem_error &e)
-	{
-		std::string err = e.what();
-		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
-	}
 	catch (const std::exception &e)
 	{
-		std::string err = e.what();
-		out_jsonReturn = Json(Json::object({{"error", err}})).dump();
+		// MSVC builds what() from the path in the ANSI code page, which the reply guard rejects as a whole.
+		caughtError = e.what();
+
+		if (!isValidUtf8(caughtError))
+		{
+			const int needed = MultiByteToWideChar(CP_ACP, 0, caughtError.data(), (int)caughtError.size(), nullptr, 0);
+			std::wstring wide((size_t)(needed > 0 ? needed : 0), L'\0');
+
+			if (needed > 0)
+				MultiByteToWideChar(CP_ACP, 0, caughtError.data(), (int)caughtError.size(), wide.data(), needed);
+
+			caughtError = ws_to_utf8(wide);
+		}
 	}
 	catch (...)
 	{
-		out_jsonReturn = Json(Json::object({{"error", "Unknown Exception"}})).dump();
+		caughtError = "Unknown Exception";
 	}
 
 	if (fullReport.empty())
-		out_jsonReturn = Json(Json::object({{"error", "Empty Report"}})).dump();
+		out_jsonReturn = Json(Json::object({{"error", caughtError.empty() ? "Empty Report" : caughtError}})).dump();
+	else if (!caughtError.empty())
+		out_jsonReturn = Json(Json::object({{"content", fullReport}, {"warning", caughtError}})).dump();
 	else
 		out_jsonReturn = Json(Json::object({{"content", fullReport}})).dump();
 }
@@ -4945,6 +5024,17 @@ std::wstring PluginJsHandler::utf8_to_ws(const std::string &str)
 	std::wstring out((size_t)needed, L'\0');
 	MultiByteToWideChar(CP_UTF8, 0, str.data(), (int)str.size(), out.data(), needed);
 	return out;
+}
+
+bool PluginJsHandler::isValidUtf8(const std::string &str)
+{
+	if (str.empty())
+		return true;
+
+	if (str.size() > (size_t)INT_MAX)
+		return false;
+
+	return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, str.data(), (int)str.size(), nullptr, 0) > 0;
 }
 
 bool PluginJsHandler::resolveWithinDownloads(const std::wstring &downloadsDir, const std::string &inputPath, std::filesystem::path &out_resolved, std::string &out_error)

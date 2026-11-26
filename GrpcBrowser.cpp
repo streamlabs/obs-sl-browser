@@ -1,4 +1,5 @@
 #include "GrpcBrowser.h"
+#include "JavascriptApi.h"
 #include "SlBrowser.h"
 #include "WindowsFunctions.h"
 
@@ -133,6 +134,7 @@ bool GrpcBrowser::startServer(int32_t listenPort)
 
 	m_builder = std::make_unique<grpc::ServerBuilder>();
 	m_builder->AddListeningPort(std::string("localhost:") + std::to_string(m_listenPort), grpc::InsecureServerCredentials());
+	m_builder->SetMaxReceiveMessageSize((int)JavascriptApi::kMaxReplyBytes + 64 * 1024);
 
 	m_serverObj = std::make_unique<grpc_proxy_objImpl>();
 	m_builder->RegisterService(m_serverObj.get());
