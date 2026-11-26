@@ -102,12 +102,36 @@ private:
 	void JS_GET_SCENEITEM_BLENDING_METHOD(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_SCENE_GET_SOURCES(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_QUERY_ALL_SOURCES(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_SCENE_GET_ITEMS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_SCENEITEM_REMOVE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_SCENEITEM_UPDATE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_GET_OUTPUT_STATE(const json11::Json &params, std::string &out_jsonReturn);
+	void replayBufferRequest(const char *what, std::string &out_jsonReturn);
+	void JS_OBS_REPLAY_BUFFER_START(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_REPLAY_BUFFER_STOP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_REPLAY_BUFFER_SAVE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_REPLAY_BUFFER_GET_SETTINGS(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_REPLAY_BUFFER_SET_DURATION(const json11::Json &params, std::string &out_jsonReturn);
+	void frontendOutputRequest(const char *output, const char *what, std::string &out_jsonReturn);
+	void JS_OBS_STREAMING_START(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_STREAMING_STOP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_RECORDING_START(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_RECORDING_STOP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_RECORDING_PAUSE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_RECORDING_UNPAUSE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_HOTKEY_REGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_HOTKEY_UNREGISTER_FOR_APP(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_QT_GET_THEME(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_SOURCE_UPDATE(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_SOURCE_GET_INFO(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_GET_AVAILABLE_SOURCE_TYPES(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_SOURCE_DIMENSIONS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_CANVAS_DIMENSIONS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_CLEAR_AUTH_TOKEN(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_GET_CURRENT_SCENE(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_BRING_FRONT(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_TOGGLE_HIDE_SELF(const json11::Json &params, std::string &out_jsonReturn);
+	void JS_OBS_GET_TRANSITIONS(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_ADD_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_SET_CURRENT_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);
 	void JS_OBS_REMOVE_TRANSITION(const json11::Json &params, std::string &out_jsonReturn);
@@ -139,6 +163,7 @@ private:
 	// that has not captured 'this' needs to be able to call them.
 	static std::string ws_to_utf8(const std::wstring &str);
 	static std::wstring utf8_to_ws(const std::string &str);
+	static bool isValidUtf8(const std::string &str);
 	bool resolveWithinDownloads(const std::wstring &downloadsDir, const std::string &inputPath, std::filesystem::path &out_resolved, std::string &out_error);
 	bool sha256File(const std::filesystem::path &filePath, std::string &out_hexDigest, std::string &out_error);
 

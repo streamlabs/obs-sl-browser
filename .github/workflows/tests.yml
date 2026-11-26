@@ -176,6 +176,7 @@ jobs:
         run: ./obs-sl-browser/CI/workflows/install_rundir.ps1
 
       - name: Run the suites
+        timeout-minutes: 30
         run: >
           node obs-sl-browser/test/run.mjs
           --obs "$pwd\obs-studio\build_x64\rundir\RelWithDebInfo\bin\64bit\obs64.exe"
@@ -195,3 +196,4 @@ jobs:
             obs-studio/build_x64/rundir/RelWithDebInfo/config/obs-studio/logs/
             obs-studio/build_x64/rundir/RelWithDebInfo/config/obs-studio/crashes/
           if-no-files-found: warn
+          include-hidden-files: true

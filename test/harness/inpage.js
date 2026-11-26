@@ -18,15 +18,17 @@
 	/*
 	 * Resolves to the parsed reply, or to one of the diagnostic shapes below - never rejects,
 	 * so a suite decides what counts as a failure:
-	 *   {__missing: name}  the function is not on slabsGlobal
+	 *   {__missing: name}  the function is not on the global
 	 *   {__timeout: name}  the callback never fired
 	 *   {__raw: string}    the reply was not JSON
 	 * Setters answer with an empty string on success, which parses to {}.
+	 *
+	 * globalName is slabsGlobal on the main window and slabsTab on a tab window.
 	 */
-	function call(fn) {
-		var args = Array.prototype.slice.call(arguments, 1);
+	function callOn(globalName, fn) {
+		var args = Array.prototype.slice.call(arguments, 2);
 		return new Promise(function (resolve) {
-			var g = window.slabsGlobal;
+			var g = window[globalName];
 			if (!g || typeof g[fn] !== "function") {
 				resolve({ __missing: fn });
 				return;
@@ -49,6 +51,23 @@
 		});
 	}
 
+	function call(fn) {
+		return callOn.apply(null, ["slabsGlobal", fn].concat(Array.prototype.slice.call(arguments, 1)));
+	}
+
+	/*
+	 * Registers a receiver that stays registered, unlike the callback of call(), which settles
+	 * once. Every invocation's arguments land in window.__sltInbox, in order.
+	 */
+	window.__sltInbox = [];
+
+	function listen(globalName, registerFn) {
+		var g = window[globalName];
+		if (!g || typeof g[registerFn] !== "function") return { __missing: registerFn };
+		g[registerFn](function () { window.__sltInbox.push(Array.prototype.slice.call(arguments)); });
+		return { ok: true };
+	}
+
 	/*
 	 * GrpcBrowser::com_grpc_run_javascriptOnBrowser pushes to
 	 * BrowserClient::GetMostRecentRenderKnown(), which - despite the name - is only ever
@@ -66,6 +85,9 @@
 
 	window.__slt = {
 		call: call,
+		callOn: callOn,
+		listen: listen,
+		inbox: function () { return window.__sltInbox.slice(); },
 		prime: prime,
 		names: names,
 		available: function () { return !!window.slabsGlobal; },

@@ -33,10 +33,12 @@ const ini = (sections) =>
  * @param {object} [replace]   {NAME: value} substituted for {{NAME}} in the collection, which
  *                             is how a browser source in it reaches the harness server without
  *                             the collection having to hardcode a port
+ * @param {object} [basic]    ini sections added to the profile's basic.ini, such as a replay buffer to start with
+ * @param {object} [user]     ini sections added to user.ini, such as the confirmations obs asks before stopping
  * @param {boolean} [force]    overwrite a config tree the harness does not own
  * @returns {{configDir: string, logsDir: string, collectionName: string, collectionFile: string}}
  */
-export function seedProfile({ rundir, collection, replace = {}, force = false }) {
+export function seedProfile({ rundir, collection, replace = {}, basic = {}, user: extraUser = {}, force = false }) {
 	const configDir = join(rundir, "config", "obs-studio");
 
 	if (existsSync(configDir) && !existsSync(join(configDir, MARKER)) && !force) {
@@ -102,6 +104,7 @@ export function seedProfile({ rundir, collection, replace = {}, force = false })
 			SceneCollection: collectionName,   // the document's "name"
 			SceneCollectionFile: collectionFile, // the file stem
 		},
+		...extraUser,
 	});
 	// OBS 30+ reads user.ini; older builds read global.ini. Writing both costs nothing.
 	for (const f of ["user.ini", "global.ini"]) writeFileSync(join(configDir, f), user, "utf8");
@@ -110,6 +113,7 @@ export function seedProfile({ rundir, collection, replace = {}, force = false })
 	writeFileSync(join(profile, "basic.ini"), ini({
 		General: { Name: PROFILE },
 		Video: { BaseCX: 1280, BaseCY: 720, OutputCX: 1280, OutputCY: 720, FPSCommon: 30 },
+		...basic,
 	}), "utf8");
 
 	return { configDir, logsDir, collectionName, collectionFile };
