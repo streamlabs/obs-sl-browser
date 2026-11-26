@@ -268,6 +268,7 @@ export default {
 		const launched = []; // pids fs_runSlExe handed back that have not been stopped yet
 		const downloadDirs = []; // the directories fs_downloadZip made, noted as it made them
 		const outsiders = []; // processes node started itself, to try the api on something not its own
+		const seeded = []; // the outermost thing the logs report step added under %APPDATA%\obs-studio
 		let zipServer = null;
 
 		if (!ROOT) {
@@ -417,6 +418,80 @@ export default {
 
 			await r.step("fs_writeFile onto a directory is an error", async () =>
 				wantError("fs_writeFile", await cdp.call("fs_writeFile", P("a"), "x", false)));
+
+			/* ------------------------------------------------------- fs_readFile --- */
+
+			// Deliberately not confined to the folder, so there is no escape row for it above. What it
+			// owes the page is a reply for every file: contents, or an error - never a callback that
+			// does not fire.
+			await r.step("fs_readFile returns the exact contents of a file", async () => {
+				const res = await cdp.call("fs_readFile", A("exact.txt"));
+				const bad = diag("fs_readFile", res);
+				if (bad) return bad;
+				if (res.contents !== EXACT) return `got ${JSON.stringify(res.contents)}`;
+			});
+
+			await r.step("fs_readFile opens a path outside ascii", async () => {
+				writeFileSync(A("ünïcödé.txt"), EXACT);
+				const res = await cdp.call("fs_readFile", A("ünïcödé.txt"));
+				const bad = diag("fs_readFile", res);
+				if (bad) return bad;
+				if (res.contents !== EXACT) return `got ${short(res)}`;
+			});
+
+			await r.step("fs_readFile on a missing file is an error", async () =>
+				wantError("fs_readFile", await cdp.call("fs_readFile", A("not-there.txt"))));
+
+			await r.step("fs_readFile on a file that is not utf-8 is an error, not a dead callback", async () => {
+				writeFileSync(A("not-utf8.bin"), Buffer.from([0xff, 0xfe, 0x41]));
+				const res = await cdp.call("fs_readFile", A("not-utf8.bin"));
+				const bad = wantError("fs_readFile", res);
+				if (bad) return bad;
+				if (!/UTF-8/.test(res.error)) return `the error does not say why: ${res.error}`;
+			});
+
+			await r.step("fs_readFile refuses a file of 1 MiB and reads one a byte under", async () => {
+				writeFileSync(A("at-cap.bin"), Buffer.alloc(1048576, 0x61));
+				const bad = wantError("fs_readFile", await cdp.call("fs_readFile", A("at-cap.bin")));
+				if (bad) return bad;
+
+				writeFileSync(A("under-cap.bin"), Buffer.alloc(1048575, 0x61));
+				const res = await cdp.call("fs_readFile", A("under-cap.bin"));
+				const badUnder = diag("fs_readFile", res);
+				if (badUnder) return badUnder;
+				if (res.contents?.length !== 1048575) return `got ${short(res)}`;
+			});
+
+			// json escapes each of these as six bytes, so the reply is about 6 MB, over grpc's default 4 MiB limit
+			await r.step("fs_readFile delivers a reply that json expands past 4 MiB", async () => {
+				writeFileSync(A("ctl.bin"), Buffer.alloc(1000000, 0x01));
+				const res = await cdp.call("fs_readFile", A("ctl.bin"));
+				const bad = diag("fs_readFile", res);
+				if (bad) return bad;
+				if (res.contents?.length !== 1000000) return `got ${short(res)}`;
+			});
+
+			/* ------------------------------------------- fs_getLogsReportString --- */
+
+			await r.step("fs_getLogsReportString replaces bytes that are not utf-8 and still delivers the report", async () => {
+				const obsDir = join(process.env.APPDATA, "obs-studio");
+				const logsDir = join(obsDir, "logs");
+				const file = join(logsDir, `sltest-big-${STAMP}.txt`);
+
+				seeded.push(!existsSync(obsDir) ? obsDir : !existsSync(logsDir) ? logsDir : file);
+				mkdirSync(logsDir, { recursive: true });
+
+				const body = Buffer.alloc(2000000, 0x01);
+				for (const at of [1000, 500000, 1999990]) body[at] = 0xc3;
+				writeFileSync(file, body);
+
+				const res = await cdp.call("fs_getLogsReportString");
+				const bad = diag("fs_getLogsReportString", res);
+				if (bad) return bad;
+				if (res.error) return res.error;
+				if (typeof res.content !== "string" || !res.content.includes(`sltest-big-${STAMP}.txt`)) return `the seeded log is not in the report: ${short(res)}`;
+				if (!res.content.includes("�")) return "no U+FFFD where the stray bytes were";
+			});
 
 			/* -------------------------------------------------------- fs_sha256 --- */
 
@@ -1222,7 +1297,7 @@ export default {
 			 * sandbox, held open by a child that outlived the suite; letting that throw would
 			 * abandon every path after it and leave the rest in the user's real AppData.
 			 */
-			const created = [A(), OUTSIDE_DIR, DOWNLOAD_ESCAPE, ...downloadDirs, ...escapes().map((e) => e.lands)]
+			const created = [A(), OUTSIDE_DIR, DOWNLOAD_ESCAPE, ...seeded, ...downloadDirs, ...escapes().map((e) => e.lands)]
 				.filter(Boolean);
 			const refused = [];
 

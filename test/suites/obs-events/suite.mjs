@@ -155,14 +155,24 @@ export default {
 			const cut = transitions.find((t) => t.id === "cut_transition");
 			const fade = transitions.find((t) => t.id === "fade_transition");
 
-			await cdp.call("obs_set_current_transition", cut.name);
+			const setCut = await cdp.call("obs_set_current_transition", cut.name);
 			const afterCut = (await cdp.call("obs_get_transitions")).transitions.filter((t) => t.current).map((t) => t.uuid);
 
-			await cdp.call("obs_set_current_transition", fade.name);
+			const setFade = await cdp.call("obs_set_current_transition", fade.name);
 			const afterFade = (await cdp.call("obs_get_transitions")).transitions.filter((t) => t.current).map((t) => t.uuid);
 
+			if (setCut.success !== true || setFade.success !== true) return `replies ${JSON.stringify([setCut, setFade])}`;
 			if (afterCut.join() !== cut.uuid) return `after Cut: ${afterCut}`;
 			if (afterFade.join() !== fade.uuid) return `after Fade: ${afterFade}`;
+		});
+
+		await r.step("obs_set_current_transition with an unknown name is an error and changes nothing", async () => {
+			const before = (await cdp.call("obs_get_transitions")).transitions.filter((t) => t.current).map((t) => t.uuid);
+			const reply = await cdp.call("obs_set_current_transition", "NoSuchTransition");
+			const after = (await cdp.call("obs_get_transitions")).transitions.filter((t) => t.current).map((t) => t.uuid);
+
+			if (typeof reply.error !== "string") return `reply ${JSON.stringify(reply)}`;
+			if (before.join() !== after.join()) return `current went from ${before} to ${after}`;
 		});
 
 		// obs 32 and newer have no api to add or remove a transition, and this suite runs against obs 33

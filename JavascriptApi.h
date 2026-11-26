@@ -6,6 +6,9 @@
 class JavascriptApi
 {
 public:
+	// The largest json reply the plugin sends the browser; the browser server accepts this plus framing.
+	static constexpr size_t kMaxReplyBytes = 32 * 1024 * 1024;
+
 	enum JSFuncs
 	{
 		JS_INVALID = 0,
@@ -317,7 +320,7 @@ public:
 			{"fs_installFont", JS_INSTALL_FONT},
 			
 			// .(@function(arg1), @filepath)
-			//	Returns the contents of a file as a string. If the filesize is over 1mb this will return an error
+			//	Returns the contents of a file as a string. Contents must be UTF-8 text; a file that is not, or is 1mb or larger, returns an error
 			//		Example arg1 = { "contents": "..." }
 			{"fs_readFile", JS_READ_FILE},
 
@@ -335,8 +338,8 @@ public:
 			{"fs_queryDownloadsFolder", JS_QUERY_DOWNLOADS_FOLDER},
 
 			// .(@function(arg1))
-			//	Returns a string that is a combination of log files
-			//		Example arg1 = { "content": "about 1-5mb of text" }
+			//	Returns a string that is a combination of log files. Bytes that are not valid UTF-8 are replaced with U+FFFD
+			//		Example arg1 = { "content": "up to ~8mb of text" }
 			{"fs_getLogsReportString", JS_GET_LOGS_REPORT_STRING},
 
 			// .(@function(arg1), @pathA, @pathB)
@@ -688,6 +691,8 @@ public:
 			{"obs_add_transition", JS_OBS_ADD_TRANSITION},
 
 			// .(@function(arg1), @sourceName)
+			//		Example arg1 = { "success": true }
+			//	A name that is not one of obs_get_transitions is an error
 			{"obs_set_current_transition", JS_OBS_SET_CURRENT_TRANSITION},
 
 			// .(@function(arg1), @sourceName)
@@ -710,10 +715,14 @@ public:
 
 			// .(@function(arg1), @sourceName_target, @sourceName_filter)
 			//	Attaches the filter to a source.
+			//		Example arg1 = { "success": true }
+			//	An error if either name is unknown, the filter is not a filter source, is already attached to a source, or is not compatible with the target
 			{"obs_source_filter_add", JS_SOURCE_FILTER_ADD},
 
 			// .(@function(arg1), @sourceName_target, @sourceName_filter)
 			//	Removes a filter from a source.
+			//		Example arg1 = { "success": true }
+			//	An error if either name is unknown, or the filter is not attached to that source
 			{"obs_source_filter_remove", JS_SOURCE_FILTER_REMOVE},
 
 			/***
