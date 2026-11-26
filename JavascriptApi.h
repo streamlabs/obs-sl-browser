@@ -6,6 +6,9 @@
 class JavascriptApi
 {
 public:
+	// The largest json reply the plugin sends the browser; the browser server accepts this plus framing.
+	static constexpr size_t kMaxReplyBytes = 32 * 1024 * 1024;
+
 	enum JSFuncs
 	{
 		JS_INVALID = 0,
@@ -134,6 +137,15 @@ public:
 		JS_OBS_SOURCE_UPDATE,
 		JS_OBS_SOURCE_GET_INFO,
 		JS_OBS_GET_AVAILABLE_SOURCE_TYPES,
+		JS_OBS_STREAMING_START,
+		JS_OBS_STREAMING_STOP,
+		JS_OBS_RECORDING_START,
+		JS_OBS_RECORDING_STOP,
+		JS_OBS_RECORDING_PAUSE,
+		JS_OBS_RECORDING_UNPAUSE,
+		JS_OBS_GET_TRANSITIONS,
+		JS_OBS_REPLAY_BUFFER_GET_SETTINGS,
+		JS_OBS_REPLAY_BUFFER_SET_DURATION,
 	};
 
 public:
@@ -254,6 +266,7 @@ public:
 			//	Note that the "Start Stream" button is always the same button regardless of the stream running, the GUI text changes but it's always the same object even when it swaps to "Stop Streaming"
 			//
 			//	NOTE: the "Start Stream" button in OBS sometimes throws a popup, and this function wont call back that popup is done
+			//	obs_streaming_start and obs_streaming_stop do the same without the button's confirmations
 			{"qt_click_stream_button", JS_QT_INVOKE_CLICK_ON_STREAM_BUTTON},
 
 			// .(@function(arg1), @str_qtClassName, @str_cookieName)
@@ -284,8 +297,12 @@ public:
 			*/
 
 			// .(@function(arg1), @url, @sha256_optional)
-			//	Downloads and unpacks the zip, returning a list of full file paths to the files that were in it. If sha256 is provided, the zip must match it.
+			//	Downloads and unpacks the zip into a new folder of its own inside the streamlabs folder, returning
+			//	the full paths of the files in it, in archive order. If sha256 is provided, the zip must match it.
+			//	Every entry must stay inside that folder: an absolute path, a drive, '..', a ':' or a reserved
+			//	device name refuses the whole archive before anything is written.
 			//		Example arg1 = [{ "path": "..." },]
+			//		On failure arg1 = { "error": "..." }
 			{"fs_downloadZip", JS_DOWNLOAD_ZIP},
 
 			// .(@function(arg1), @filename, @bool_hideWindow)
@@ -307,7 +324,7 @@ public:
 			{"fs_installFont", JS_INSTALL_FONT},
 			
 			// .(@function(arg1), @filepath)
-			//	Returns the contents of a file as a string. If the filesize is over 1mb this will return an error
+			//	Returns the contents of a file as a string. Contents must be UTF-8 text; a file that is not, or is 1mb or larger, returns an error
 			//		Example arg1 = { "contents": "..." }
 			{"fs_readFile", JS_READ_FILE},
 
@@ -325,8 +342,8 @@ public:
 			{"fs_queryDownloadsFolder", JS_QUERY_DOWNLOADS_FOLDER},
 
 			// .(@function(arg1))
-			//	Returns a string that is a combination of log files
-			//		Example arg1 = { "content": "about 1-5mb of text" }
+			//	Returns a string that is a combination of log files. Bytes that are not valid UTF-8 are replaced with U+FFFD
+			//		Example arg1 = { "content": "up to ~8mb of text", "warning": "set when a log could not be read; content is partial" }
 			{"fs_getLogsReportString", JS_GET_LOGS_REPORT_STRING},
 
 			// .(@function(arg1), @pathA, @pathB)
@@ -488,6 +505,49 @@ public:
 			//		Example arg1 = {} or { "error": "." }. An error when it is not running
 			{"obs_replay_buffer_save", JS_OBS_REPLAY_BUFFER_SAVE},
 
+			// .(@function(arg1))
+			//	The replay buffer settings of obs's current profile, in the section of its output mode
+			//	enabled is the setting, available is whether this session has a replay buffer to start, which only follows enabled after obs restarts or the user saves output settings
+			//		Example arg1 = { "enabled": true, "available": true, "duration": 20 }
+			{"obs_replay_buffer_getSettings", JS_OBS_REPLAY_BUFFER_GET_SETTINGS},
+
+			// .(@function(arg1), @int_seconds)
+			//	Sets how many seconds the replay buffer keeps, 5 to 21600. Takes effect the next time it starts, so a running buffer keeps its length until restarted
+			//		Example arg1 = {} or { "error": "." }
+			{"obs_replay_buffer_setDuration", JS_OBS_REPLAY_BUFFER_SET_DURATION},
+
+			// .(@function(arg1))
+			//	Starts streaming with the stream settings obs has, without the confirmations the Start Streaming button asks. The result is an outputStateChanged event for "streaming"
+			//	With RecordWhenStreaming / ReplayBufferWhileStreaming set in obs, recording / the replay buffer start too, each with its own events
+			//	A start obs refuses before it begins (a setup error, a YouTube broadcast not set up) shows obs's own message box and makes no event
+			//		Example arg1 = {} or { "error": "." }. An error when it is running or starting
+			{"obs_streaming_start", JS_OBS_STREAMING_START},
+
+			// .(@function(arg1))
+			//	Stops streaming, without the confirmation the button asks. Calling it again while it is stopping forces the stop, as obs does
+			//		Example arg1 = {} or { "error": "." }. An error when it is not running, which includes a stream still connecting
+			{"obs_streaming_stop", JS_OBS_STREAMING_STOP},
+
+			// .(@function(arg1))
+			//	Starts recording to the output path in obs's settings. The result is an outputStateChanged event for "recording"
+			//	An invalid output path or a full disk shows obs's own message box and makes no event
+			//		Example arg1 = {} or { "error": "." }. An error when it is running or starting
+			{"obs_recording_start", JS_OBS_RECORDING_START},
+
+			// .(@function(arg1))
+			//		Example arg1 = {} or { "error": "." }. An error when it is not running. Calling it again while it is stopping forces the stop
+			{"obs_recording_stop", JS_OBS_RECORDING_STOP},
+
+			// .(@function(arg1))
+			//	Pauses the running recording. The result is an outputStateChanged event with state "paused"
+			//		Example arg1 = {} or { "error": "." }. An error when it is not running, is already paused, or cannot be paused (it shares the stream's encoder)
+			{"obs_recording_pause", JS_OBS_RECORDING_PAUSE},
+
+			// .(@function(arg1))
+			//	The result is an outputStateChanged event with state "started"
+			//		Example arg1 = {} or { "error": "." }. An error when it is not paused
+			{"obs_recording_unpause", JS_OBS_RECORDING_UNPAUSE},
+
 			// .(@function(arg1), @appKey, @name, @description, @bindings_jsonStr)
 			//	Makes an obs hotkey, listed under Settings > Hotkeys as description, that the user can rebind there. Pressing it is the hotkey event of events_registerReceiver
 			//		Example bindings = [{ "key": "OBS_KEY_A", "shift": false, "control": false, "alt": false, "command": false }]
@@ -624,14 +684,23 @@ public:
 			// .(@function(arg1), @bool_hide)
 			{"obs_toggle_hide_self", JS_OBS_TOGGLE_HIDE_SELF},
 
+			// .(@function(arg1))
+			//	The transitions in obs's Scene Transitions dock. duration is the dock's, in ms, shared by every transition that is not fixed
+			//		Example arg1 = { "transitions": [ { "name": "Fade", "uuid": ".", "id": "fade_transition", "current": true, "configurable": false, "fixed": false } ], "duration": 300 }
+			{"obs_get_transitions", JS_OBS_GET_TRANSITIONS},
+
 			// .(@function(arg1), @id, @sourceName)
-			//	@id must be correct or application will crash, ie "swipe_transition" is one example
+			//	An @id that is not a registered transition type, ie "swipe_transition" is one example, is an error
+			//	Not supported on obs 32 and newer, where it is always an error: obs has no api to add a transition. See obs_get_transitions
 			{"obs_add_transition", JS_OBS_ADD_TRANSITION},
 
 			// .(@function(arg1), @sourceName)
+			//		Example arg1 = { "success": true }
+			//	A name that is not one of obs_get_transitions is an error
 			{"obs_set_current_transition", JS_OBS_SET_CURRENT_TRANSITION},
 
 			// .(@function(arg1), @sourceName)
+			//	Not supported on obs 32 and newer, where it is always an error: obs has no api to remove a transition
 			{"obs_remove_transition", JS_OBS_REMOVE_TRANSITION},
 
 			// .(@function(arg1), @sourceName)
@@ -650,10 +719,14 @@ public:
 
 			// .(@function(arg1), @sourceName_target, @sourceName_filter)
 			//	Attaches the filter to a source.
+			//		Example arg1 = { "success": true }
+			//	An error if either name is unknown, the filter is not a filter source, is already attached to a source, or is not compatible with the target
 			{"obs_source_filter_add", JS_SOURCE_FILTER_ADD},
 
 			// .(@function(arg1), @sourceName_target, @sourceName_filter)
 			//	Removes a filter from a source.
+			//		Example arg1 = { "success": true }
+			//	An error if either name is unknown, or the filter is not attached to that source
 			{"obs_source_filter_remove", JS_SOURCE_FILTER_REMOVE},
 
 			/***
